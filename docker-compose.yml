@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  nginx:
+    build: ./services/nginx
+    ports:
+      - 80:80
+    depends_on:
+      - chatbot
+    networks:
+      default:
+        aliases: 
+          - chatbot_proxy
+  chatbot:
+    build: ./services/app
+    command: gunicorn --bind 0.0.0.0:5001 app:app
+    expose: 
+      - 5001

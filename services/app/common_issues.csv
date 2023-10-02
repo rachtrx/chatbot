@@ -1,0 +1,643 @@
+﻿Intent,Input,Random sort
+Others,The iPad screen is frozen in landscape or portrait mode.,0.356475183
+Others,OneDrive not syncing files or folders.,0.021772546
+Others,Keyboard backlight not working as expected.,0.135815415
+Others,My Apple Pencil isn't responding.,0.820330678
+MC,Can I request a 3-day medical certificate starting today?,0.057260071
+MC,"I must secure a 15-day MC due to a cellulitis infection, with my skin resembling a topographical map of red, swollen, and tender areas.",0.038079887
+MC,"hi, I would like to take an MC today for 3 days",0.199859924
+Others,"Hi, I won't be in class today due to a doctor's visit.",0.426092811
+Others,Google Classroom app not compatible with the iPad's operating system.,0.782566957
+Non MC,"I'm locked out of my house, and I'm waiting for a locksmith, so I won't be able to make it to work on time.",0.110566038
+Others,The screen is frozen on the lock screen.,0.837924704
+Others,I'm having technical issues with my Apple Pencil.,0.565901074
+Others,Mouse cursor not appearing on the screen when using Bluetooth.,0.561681281
+Others,MAC address filtering on the router blocking the iPad's connection.,0.930452591
+Others,"Hi, I won't be in class today.",0.604163221
+Others,"Connected to Wi-Fi, but no internet access on the laptop.",0.435034261
+MC,I require a 44-day MC because of a chronic respiratory system disorder.,0.756362313
+Others,OneDrive not responding or freezing during sync.,0.763345956
+Others,"Hi, I'm not up for school today.",0.838314704
+Others,Touchpad not recognized in the Windows Device Manager.,0.722807473
+Others,Bluetooth mouse lag or delay in cursor movement.,0.118668784
+MC,I need a 20-day MC because of pneumonia.,0.036325506
+Non MC,"My roof is leaking, and I need to arrange for repairs, so I won't be in today.",0.094677659
+Others,"Keyboard key combinations (e.g., Ctrl + Alt + Delete) not working.",0.695466762
+Non MC,"My pet ran away, and I need to search for them, so I won't be in today.",0.820458157
+Others,The touchpad not working after a Windows update.,0.851024897
+Others,"""Authentication Required"" error when connecting to public Wi-Fi networks on the laptop.",0.242614012
+Others,"Hi, my son just fell sick",0.521657637
+MC,May I request a medical certificate for today and the next two days?,0.460015885
+MC,"I'd like to obtain a medical certificate for today, tomorrow, and the day after tomorrow.",0.823097821
+Others,"Hi, I'm feeling too unwell for school, and I have a doctor's appointment.",0.407624284
+Others,The screen is frozen while attempting to unlock the iPad.,0.498232882
+Others,Google Classroom app consuming excessive battery life.,0.377579638
+Others,My Apple Pencil is acting up.,0.586319749
+Others,Visible screen burn-in from prolonged display of static images.,0.672460285
+Others,I can't get my Apple Pencil to work.,0.268849946
+Others,"Stuck pixels, where individual pixels are always lit or always dark.",0.712130147
+Others,Bluetooth mouse not pairing with the computer.,0.84661092
+MC,"I must garner a 30-day MC as I navigate through the challenges posed by lupus, with my immune system mistakenly attacking my tissues.",0.426611539
+MC,I need a 22-day MC because of recovery from gallbladder surgery.,0.013815919
+MC,"I want to apply for a medical certificate for today, tomorrow, and the day after.",0.88416651
+Others,Random characters or symbols appearing when typing.,0.483046425
+Non MC,"My basement flooded overnight, and I need to deal with the cleanup, so I won't be in today.",0.706183232
+Others,Unable to join a known Wi-Fi network on the laptop.,0.388145919
+MC,May I have a 3-day medical certificate starting today?,0.753745998
+Others,The touchpad not working in a specific application or program.,0.013137394
+Others,Laptop speakers producing a popping noise when powering on or off.,0.617120961
+Others,Delayed or out-of-sync audio from the laptop speakers.,0.26975783
+Others,Unable to attach files or assignments in Google Classroom.,0.659747039
+Others,Laptop keyboard not recognized by the operating system.,0.07515637
+Others,Laptop keyboard not working after a hard reset or power cycle.,0.653627985
+Others,Laptop speakers not working after waking from sleep or hibernation.,0.934447262
+MC,I have to obtain a 10-day MC because of bronchitis.,0.252118367
+Others,"Multitouch gestures (e.g., pinch-to-zoom) not functioning on the touchpad.",0.213984251
+Others,Laptop screen frozen after waking from sleep or hibernation.,0.466947161
+Others,"Hi, I'll be absent from school for a medical reason, specifically a doctor's appointment.",0.216258132
+Others,My laptop screen is frozen,0.891739982
+Others,iPad screen is stuck on the Apple logo during startup.,0.569362963
+MC,I require a 29-day MC due to a severe nervous system disorder.,0.042009566
+Others,The screen being overly sensitive to touch or not responding at all.,0.230454569
+Non MC,"Unfortunately, my pet is sick, and I need to take them to the vet, so I won't be able to come to work.",0.730113131
+Others,OneDrive not starting automatically with Windows.,0.232596508
+Others,Keyboard settings not adjustable in Windows settings.,0.321522957
+Others,OneDrive shared links not working.,0.032290794
+MC,"I have a doctor's appointment that I can't reschedule, so I won't be at work today.",0.950775368
+Others,Touchpad buttons not responding to clicks.,0.416333517
+MC,I'm in need of a 3-day MC starting today.,0.06433073
+MC,I need a 13-day MC due to undergoing a dental extraction procedure for an impacted molar wreaking havoc in my oral cavity.,0.484569723
+Others,Weak or fluctuating Wi-Fi signal strength on the laptop.,0.357876962
+Others,Left-click or right-click functions not working on the touchpad.,0.544067632
+Others,"Hi, I'll be absent from school for a medical reason.",0.60717441
+Others,"Hello, I'll be at the doctor's office instead of being at school.",0.331872011
+Others,Router firmware needs an update to work with the laptop.,0.193856549
+Others,Cursor speed on the touchpad is too slow or too fast.,0.171860347
+Others,Mouse pointer moving erratically or unpredictably.,0.324928713
+Others,Wi-Fi network password forgotten on the laptop.,0.167792173
+Others,The touchpad not working after waking the laptop from sleep.,0.629873228
+Others,Laptop speakers producing a buzzing or humming noise.,0.80899748
+Others,Bright spots or areas on the screen.,0.789837169
+MC,I require a 39-day MC due to a severe urinary system disorder.,0.327646775
+Others,OneDrive web interface not loading.,0.643835883
+Others,"Hi, I won't be in class today due to a scheduled doctor's visit.",0.619606968
+MC,I need to see the doctor for a 15-day MC due to a skin infection.,0.196710205
+Others,The screen is frozen after entering a passcode.,0.422147418
+MC,I need to obtain a 4-day MC because of acute back pain.,0.147099495
+MC,"I'd like to be issued a 3-day medical certificate, effective today.",0.571117974
+MC,I need an 11-day MC due to recovery from a minor accident.,0.662628099
+Others,Missing features or functionality in the Schoolwork app.,0.822107582
+Others,Google Classroom app missing from the App Store on your iPad.,0.691583587
+MC,"I’m compelled to obtain a 17-day MC due to sinusitis, with my sinuses behaving like overstuffed luggage, heavy and painful.",0.933950694
+Others,Laptop keyboard not working in BIOS or during startup.,0.080581852
+MC,I'd appreciate it if I could get a 3-day MC starting today.,0.222917316
+Others,My OneDrive is having issues,0.996390655
+MC,"Hi, my son is unwell so I will be taking a 1 day leave",0.552158121
+Others,Weak or fluctuating Wi-Fi signal strength on the iPad.,0.267126604
+Non MC,"My child's school has a water main break, and they need to be picked up early, so I can't come to work.",0.018238514
+Others,Laptop keyboard not working in a specific application or program.,0.08730977
+Others,My iPad screen has lines,0.285221315
+Others,Wi-Fi interference from nearby devices affecting the laptop.,0.081972906
+Others,Audio playback skipping or stuttering from the laptop speakers.,0.201943506
+Others,"Hi, I'll be visiting the doctor during school hours.",0.289588997
+Others,"Hi, I'll be seeing the doctor, so I can't make it to school.",0.297041803
+Others,The screen is stuck on a loading spinner or progress indicator.,0.070493682
+Others,Keyboard shortcuts not functioning on the laptop.,0.546424945
+Others,Google Classroom app freezing or becoming unresponsive.,0.997760943
+MC,"I had an allergic reaction to something I ate, and I need to see a doctor, so I won't be in today.",0.344016414
+Non MC,"There's a major traffic accident on my route to work, and I'm stuck in gridlock, so I won't be in on time.",0.601338075
+MC,I require a medical certificate for a 3-day leave starting today.,0.703481435
+Others,Water damage causing screen malfunction.,0.369689509
+MC,I’m necessitated to procure a 1-day MC due to an excruciating episode of tension headaches impeding my cognitive functions.,0.100759692
+Others,"Hey, I have a medical check-up scheduled, which means I won't be in school.",0.681874004
+Others,Laptop keyboard not responding to key presses.,0.671470615
+Others,"Hey, I'm taking a sick day from school because of a doctor's appointment.",0.464058338
+Non MC,"I had a sudden allergic reaction to medication, and I need to seek medical attention, so I won't be at work.",0.748674191
+MC,I need a 22-day MC as I’m in the healing phase post a cholecystectomy to address gallstones obstructing my biliary ducts.,0.526564862
+Others,Mouse pointer not moving smoothly with the Bluetooth connection.,0.058617148
+Others,"Hi there, I won't be at school today because I'll be visiting the doctor.",0.956475618
+Others,Sticky or physically damaged keys on the laptop keyboard.,0.621216551
+Others,Wi-Fi connection drops when the laptop goes to sleep.,0.949664694
+Others,DNS server issues affecting browsing on the laptop.,0.443620817
+Others,Firewall or security software blocking internet access on the laptop.,0.64459106
+MC,"I’m necessitated to acquire a 14-day MC as I navigate the aftermath of a wrist fracture due to a fall, with a cast hindering my mobility.",0.985331371
+Others,iPad screen is frozen in a specific orientation.,0.932154418
+Others,Problems with syncing assignments and due dates in Schoolwork.,0.492366897
+Others,Freeze happening after resuming from hibernation.,0.804923208
+Non MC,"I have a family emergency that I need to attend to, so I won't be at work today.",0.302435887
+Others,Keyboard input lag or delay when typing.,0.738032885
+MC,Can I have a 3-day medical certificate starting from today?,0.005039527
+Others,Laptop keyboard layout suddenly changed.,0.726385481
+MC,"I need a 7-day MC due to succumbing to a particularly nasty variant of salmonella, necessitating a period of recuperation and hydration.",0.57147236
+Others,Problems with customizing or personalizing the Proloquo2Go vocabulary.,0.101190923
+Others,Freeze happening after a recent hardware upgrade or driver update.,0.397305192
+Others,"Hi there, I'm under the weather.",0.606488506
+Others,Issues with the Proloquo2Go app crashing during communication.,0.56150321
+Others,Laptop keyboard not working after a Windows update.,0.013435732
+Others,Bluetooth mouse not connecting after a system update.,0.670823422
+Others,"Hi there, I'm feeling too sick to attend school, especially with a doctor's visit.",0.205529051
+Others,The Apple Pencil isn't doing what it's supposed to do.,0.791948854
+Others,The entire iPad screen is unresponsive to touch.,0.599115711
+Non MC,"My house was broken into last night, and I need to deal with the police and insurance, so I won't be in today.",0.627249193
+MC,I require a 49-day MC due to a severe skeletal system disorder.,0.258567814
+Others,Unable to enroll in classes or access assignments through Schoolwork.,0.825598165
+MC,I have to get a 31-day MC due to recovery from a major surgical procedure.,0.474370789
+Others,My mousepad isnt working,0.916775217
+Others,Firewall or security software on the iPad blocking internet access.,0.519349662
+Others,Multiple applications freezing simultaneously.,0.991329395
+Others,I'm facing difficulties with my Apple Pencil.,0.958904436
+MC,"I must garner a 12-day MC as I’m grappling with pharyngitis, with my throat feeling like a battlefield, raw and inflamed.",0.694901912
+MC,I need a 13-day MC due to recovery from a dental surgery.,0.260187067
+Others,Gestures like two-finger scrolling not working on the touchpad.,0.254171242
+Non MC,"My dog is lost, and I'm searching for them, so I can't come to work today.",0.575717357
+MC,I require a 3-day MC due to a persistent cough and cold.,0.306588425
+Others,The Apple Pencil is failing to respond.,0.389889061
+Others,"Hello, I think I'm coming down with something.",0.652854615
+MC,"I need a 10-day MC as I’m besieged by a persistent and hacking cough indicative of acute bronchitis, necessitating rest and medication.",0.61703164
+MC,"I must obtain a 9-day MC due to an acute otitis media episode, with pain radiating through my auditory canal, impairing my hearing temporarily.",0.943615451
+Others,"Hi, I won't be able to make it to school due to a conflicting medical appointment.",0.828501998
+Non MC,"I'm stuck in a long line at the DMV, and I won't be able to make it to work on time.",0.649298267
+MC,I need a 6-day MC because of a severe allergic reaction.,0.925049678
+Others,Laptop screen freezing while browsing the internet.,0.131633943
+Others,Difficulty in turning the Bluetooth mouse on or off.,0.939665533
+Others,OneDrive constantly syncing without progress.,0.12784793
+Others,Sound is echoing or reverberating from the laptop speakers.,0.57622638
+Others,Audio balance shifting to one side randomly while in use.,0.246888321
+MC,I'd like to request a 3-day medical certificate starting today.,0.708343645
+MC,I'd like to apply for a 3-day MC today.,0.798652861
+Others,"Hey, I'll be seeing the doctor while school is in session.",0.430270727
+Others,"OneDrive error code (e.g., error code 0x8004de40).",0.193850276
+Non MC,"My child's daycare center is closed unexpectedly, and I need to care for them, so I won't be at work.",0.15249664
+MC,I have to get a 41-day MC due to a chronic sensory system disorder.,0.987200948
+Others,"Hey, I have a medical check-up scheduled today.",0.178904252
+MC,"I’m necessitated to secure an 8-day MC as I undergo a minor, yet essential, surgical intervention to address a burgeoning cyst.",0.057811416
+Others,iPad screen is frozen after a drop or physical impact.,0.428578049
+Non MC,"My neighbor's house is on fire, and I'm assisting them until the firefighters arrive, so I can't come to work.",0.793418653
+Others,"Hello, I'm feeling too ill to attend school.",0.691189939
+MC,I'd like to go on a 3-day medical leave starting today.,0.670389801
+Others,"Hello, I'm feeling too under the weather for school.",0.779601715
+Non MC,"I had a severe allergic reaction to a bug bite, and I need medical attention, so I won't be in today.",0.05768823
+Others,The iPad screen is frozen and won't respond to any gestures.,0.191379536
+Others,"The touchscreen is unresponsive, but physical buttons work.",0.296190559
+Others,"Hello, I have a doctor's appointment.",0.885700599
+Others,"Hi, I'll be seeking medical advice instead of attending school.",0.270723944
+MC,I have to get a 46-day MC because of recovery from a major organ transplant.,0.691970225
+Others,Unexpectedly high data usage on the iPad.,0.845428225
+Others,My Apple Pencil seems to be broken.,0.295393139
+Others,Laptop keyboard not working on a specific brand or model of laptop.,0.45338079
+Others,Issues with mouse buttons not responding via Bluetooth.,0.941820307
+Others,"Hi, I need to take a day off from school because of a doctor's appointment.",0.321676044
+Others,"Connected to Wi-Fi, but web pages won't load on the laptop.",0.222016433
+Others,The iPad screen is frozen while using a specific app.,0.299754996
+Others,Mouse constantly disconnecting and reconnecting via Bluetooth.,0.185661015
+Others,"Hello, I'm feeling sick and won't be in today.",0.287189711
+Others,Cursor moving erratically or jumping around on the screen.,0.456858098
+Others,"Hello, I'll be resting at home instead of going to school because of a medical appointment.",0.019157527
+Others,Sound issues persisting after reinstalling audio drivers.,0.84454588
+Others,Laptop keyboard keys producing unusual noises.,0.484737409
+Others,Incorrect date and time settings impacting internet access on the laptop.,0.818139691
+Others,Cellular data not working on the laptop despite having a data plan.,0.873201599
+Non MC,"Unfortunately, I won't be able to come in today because my car broke down, and I'm stranded.",0.435862168
+Others,"Hi there, I won't be at school today because I'll be visiting the doctor.",0.193499735
+Others,"Hello, I have to skip school today for a doctor's visit.",0.896875228
+MC,"I want to request a medical certificate for three days, effective today.",0.741614605
+Others,My iPad is lagging,0.870521732
+Others,"Hey, I'm going to see the doctor about my condition.",0.523831604
+Others,"The screen showing a ""Connect to iTunes"" logo.",0.419804281
+Others,"Hey, I have a medical check-up scheduled, which means I won't be in school today.",0.237606197
+MC,"I’m compelled to obtain a 29-day MC due to multiple sclerosis, with my nervous system sending mixed signals, affecting my motor functions.",0.361707723
+Others,OneDrive not recognizing external drives.,0.830158996
+Others,"Hey, I'll be seeing the doctor during school time.",0.775232663
+Others,"Hi there, I have a doctor's appointment.",0.833055242
+MC,I need a 40-day MC because of a severe lymphatic system disorder.,0.975302582
+Others,The laptop keyboard is not working on a specific user account.,0.168965977
+Others,The iPad screen is stuck on a specific app or page.,0.816635581
+Others,The screen is unresponsive to multitouch gestures.,0.488063783
+Others,VPN connection problems preventing internet access on the iPad.,0.116534288
+Others,OneDrive files showing as placeholders.,0.8250858
+MC,I have to get a 21-day MC due to a severe kidney infection.,0.254208053
+Others,Google Classroom app not syncing with your Google account.,0.233081085
+Others,"Hello, I'll be at the doctor's office rather than attending school.",0.17820348
+MC,"I twisted my ankle while walking my dog this morning, and I can't come to work.",0.433543189
+Others,Files stuck in the OneDrive Recycle Bin.,0.214708487
+Others,"Hi, I have a medical check-up scheduled.",0.182008606
+Others,I'm having issues with my Apple Pencil.,0.01381545
+MC,Can I be granted a medical certificate for today and the next two days?,0.807800271
+Others,"Hi, I have a doctor's appointment that prevents me from attending school today.",0.091896979
+Others,The Apple Pencil is not behaving as expected.,0.342814576
+Others,"Hi, I have a medical issue to address, so I won't be at school today.",0.130229515
+Others,"Hi, I need to take a day off from school.",0.112683409
+Others,"Hey, I'll be seeing the doctor while school is in session.",0.146850165
+Others,"Hi, I'll be visiting the doctor.",0.664872286
+Others,"Hi, I won't be able to make it to school today due to a conflicting medical appointment.",0.451194306
+Others,My Apple Pencil is unresponsive.,0.847323549
+Others,Accidentally turned on Airplane Mode on the laptop.,0.247670189
+Others,"Hey, I have to stay home from school.",0.9263686
+MC,"Can I get a medical certificate for the next three days, starting today?",0.211025111
+Others,"Hey, I'm feeling too ill to go to school, and I have a doctor's appointment.",0.581283096
+Others,Accidental activation of Airplane Mode on the iPad.,0.928617048
+MC,I need a 47-day MC due to a severe integumentary system disorder.,0.205163702
+Others,The touchpad not working after resuming from hibernation.,0.111577777
+Others,Horizontal or vertical lines on the screen.,0.40542909
+Others,The touchpad not working on a specific user account.,0.88400533
+Others,MAC address filtering on the router blocking the laptop's connection.,0.810673305
+MC,"I woke up with a severe migraine, and I can't function properly, so I won't be at work.",0.660670109
+Others,"Hi, I have a medical issue to address, so I won't be at school today.",0.417425216
+Others,An unexplained blue tint on the screen.,0.139435124
+Others,iPad screen is stuck on the notification center or control center.,0.861043051
+Others,Touchpad settings not accessible in Windows settings.,0.217983004
+MC,I need to take medical leave for three days starting today.,0.593232137
+Others,Sound cutting in and out intermittently.,0.007182768
+Others,"Hi, I'll be seeing the doctor, so I can't make it to school.",0.131986789
+Others,The Apple Pencil isn't functioning properly.,0.429038193
+Non MC,"I accidentally locked my keys inside my house, and I'm waiting for a locksmith, so I won't be in today.",0.495949347
+Others,"Hi there, I have a doctor's appointment during school time.",0.31234854
+Others,Sync errors with specific files or file types.,0.917879561
+Others,"Hello, I need to take a sick day.",0.985944201
+Others,"Connected to Wi-Fi, but apps won't update on the iPad.",0.899423881
+MC,I need a 42-day MC because of recovery from a cardiovascular surgery.,0.723495469
+Others,Bluetooth mouse not working during system startup.,0.53424185
+Others,Screen freeze during a software update or installation.,0.772488209
+Others,OneDrive not working on a specific network.,0.98938316
+Others,My Apple pencil is not working,0.005921534
+Others,Difficulty in re-pairing the mouse after it's been disconnected.,0.179073349
+Others,Bluetooth mouse not recognized by the computer at all.,0.742712973
+Others,Laptop speakers not working after plugging in headphones.,0.297431656
+Non MC,"My partner had a car accident, and I need to be with them at the hospital, so I can't come to work.",0.214228167
+Others,Trouble with accessing and switching between communication modes in Proloquo2Go.,0.649154612
+Others,iPad screen is stuck on a black screen.,0.185700573
+Non MC,"My childcare provider unexpectedly closed for the day, and I have to stay home with my kids.",0.665480224
+Others,Laptop speakers producing static or white noise.,0.662148041
+Others,Touchpad not working after a battery or power-related issue.,0.602281629
+Others,Screen flickering uncontrollably.,0.553001182
+Others,"Hi, I'm feeling too unwell for school and have a doctor's appointment.",0.255385934
+Others,"Hello, I'll be at the doctor's office during school hours.",0.184866365
+Non MC,"My home security alarm went off, and I need to wait for the technician, so I won't be in today.",0.473321296
+Others,Laptop becoming unresponsive during a gaming session.,0.816658557
+Others,Keyboard drivers not installed or outdated.,0.619710073
+Others,Screen freezing or becoming unresponsive intermittently.,0.622543118
+Others,Sound quality deteriorating after a recent software update.,0.493855408
+Others,"Encounter ""Authentication Required"" error when connecting to public Wi-Fi networks on the iPad.",0.026407749
+MC,I need a 27-day MC due to a chronic digestive disorder.,0.550192261
+Non MC,"I received some distressing news, and I'm too upset to be productive at work today.",0.152577371
+Others,OneDrive not working on mobile devices.,0.684036998
+Others,OneDrive not showing recent changes.,0.551111906
+MC,I must get a 12-day MC because of a severe throat infection.,0.602789748
+Others,"Hello, I'll be resting at home instead of going to school because of a medical appointment.",0.138173767
+Others,"Hi, I need to see a healthcare professional, so I can't come to school.",0.25983298
+Others,Forgot the Wi-Fi network password on the iPad.,0.415631951
+Non MC,"There's been a water leak in my apartment, and I have to be there for the repairs, so I can't come to work.",0.578084793
+Others,"Hey, I won't be able to make it to work today due to illness.",0.39368608
+Non MC,I regret to inform you that I won't be able to make it to work today due to unexpected family matters.,0.117222485
+Others,Laptop screen displaying a static image with no updates.,0.579780414
+MC,I'm requesting a 3-day MC starting today.,0.113506029
+Others,"Hello, I'll be at the doctor's office during school hours.",0.786789065
+Others,Slow response time when interacting with the screen.,0.894635761
+Others,Sound disappearing when unplugging headphones from the laptop.,0.465949234
+Others,Mouse battery status not displayed accurately over Bluetooth.,0.571271483
+MC,I’m compelled to get a 5-day MC due to an unfortunate misstep leading to a severely twisted ankle accompanied by swelling and bruising.,0.644498211
+MC,I need a 35-day MC due to a severe musculoskeletal disorder.,0.830507451
+Others,"Hi, I'll be seeking medical advice during school hours.",0.567871394
+Others,My Apple Pencil is out of order.,0.205950441
+Others,Laptop speakers not working in certain applications or games.,0.457539791
+Others,No sound coming from the laptop speakers.,0.906217444
+Others,"Hey, I'm feeling too ill to go to school, and I have a doctor's appointment.",0.570917029
+Non MC,"I have a court summons that I can't reschedule, so I won't be at work today.",0.817033781
+MC,I need a 25-day MC due to recovery from a hernia operation.,0.372239539
+Non MC,"I have a personal crisis that requires my immediate attention, so I won't be at work today.",0.229238697
+Others,Bluetooth mouse not working in a specific application or program.,0.6051815
+Non MC,"I got locked out of my car, and I'm waiting for a locksmith, so I won't be able to come to work on time.",0.093147315
+MC,"I must secure a 27-day MC due to irritable bowel syndrome flare-up, with my digestive tract in a state of rebellion and discomfort.",0.451414724
+Others,"Hi there, I think I caught a bug.",0.366721793
+Others,Laptop keyboard not working in safe mode.,0.071975427
+Non MC,"I had a flat tire on my way to work, and I'm waiting for roadside assistance, so I won't be in on time.",0.174503261
+Others,Cellular data settings on the iPad need to be configured correctly.,0.830176982
+Others,"Touchscreen gestures work, but there's no response from the apps.",0.676952809
+Others,"Connected to Wi-Fi, but apps won't update on the laptop.",0.554079595
+Others,Difficulty in accessing class materials or documents within Schoolwork.,0.912833821
+MC,"I must garner an 18-day MC as I convalesce from a leg fracture, with my limb ensconced in plaster, limiting my movements.",0.715396742
+Others,DNS server issues affecting browsing on the iPad.,0.498879919
+Others,Difficulty in finding the mouse in the Bluetooth device list.,0.261427538
+Others,I'm encountering problems with my Apple Pencil.,0.304052603
+Others,Mouse cursor not responding to movements despite being paired.,0.931731927
+Others,Unable to upload files to OneDrive.,0.741377666
+Others,"Hi, I'll be absent from school due to a doctor's appointment on my schedule.",0.179783769
+Non MC,"My childcare arrangements fell through, and I have to stay home with my kids, so I won't be at work.",0.531609282
+Non MC,"My car was stolen, and I need to report it to the police, so I won't be in today.",0.853403513
+MC,I need a 30-day MC because of a severe autoimmune disease.,0.031735586
+Others,OneDrive folder not appearing in File Explorer.,0.616044958
+Others,Router or modem malfunction affecting only the laptop's connectivity.,0.19781946
+Non MC,"My elderly parent had a medical emergency, and I need to be at the hospital with them, so I can't come to work.",0.357548397
+Others,Interference from nearby devices affecting the iPad's Wi-Fi connectivity.,0.762558326
+Others,Cellular data not working on the iPad despite having a data plan.,0.915581582
+Non MC,"My refrigerator broke down, and I need to salvage the food, so I won't be at work.",0.082547151
+Others,"Screen displaying a blank, white screen.",0.436765717
+Others,Unexpectedly high data usage on the laptop.,0.635968974
+Others,Half of the screen not displaying anything.,0.953035803
+Others,Schoolwork app not available or not supported on your iPad.,0.597726191
+Others,Mousepad not responding to touch or gestures.,0.725379589
+Others,The touchpad not working with certain third-party software.,0.610493507
+MC,I must obtain a 48-day MC because of a chronic nervous system disorder.,0.638598655
+Others,Laptop keyboard not working after a malware or virus infection.,0.227838447
+Others,Laptop not recognizing Wi-Fi hardware.,0.645117141
+Others,System becoming unresponsive when attempting to open a file or program.,0.909424647
+Others,Bluetooth driver issues causing problems with the mouse.,0.150402914
+Others,The Apple Pencil is not working as it should.,0.490912595
+Others,Error message when trying to join a Google Classroom class.,0.901384561
+Non MC,"My power went out, and I can't get ready for work, so I won't be coming in.",0.144406768
+Others,"Hi, I'll be seeing a doctor today.",0.368560251
+Others,"Hey, I'm feeling unwell today.",0.910254044
+MC,I'm planning to take a 3-day medical leave starting today.,0.009429992
+Others,"Hello, I need to skip school due to illness.",0.83560879
+Others,My iPad cannot connect to the internet,0.945390783
+Others,My Apple Pencil is not performing well.,0.515895387
+Others,My keyboard isn't working,0.699239205
+MC,I have to get a 26-day MC because of a severe respiratory condition.,0.263659952
+Others,Cursor disappearing from the screen while using the touchpad.,0.120601207
+Others,Cursor frozen and unmovable on the screen.,0.064303693
+Others,Dead pixels on the screen.,0.278215521
+Non MC,"I lost my wallet, and I'm dealing with the necessary authorities to report it, so I won't be in today.",0.347708496
+Non MC,"I have a family member visiting unexpectedly, and I need to spend time with them, so I won't be at work.",0.660012821
+Others,The mouse is detected but not functioning correctly.,0.514468963
+Others,Bluetooth interference from other nearby devices.,0.312528783
+Others,The touchpad not working after spilling liquid on the laptop.,0.710299616
+Others,Error messages when attempting to collaborate or share documents in Schoolwork.,0.270469237
+Non MC,"I received a call from the school, and my child is not feeling well, so I need to pick them up, and I won't be at work.",0.3844536
+Others,"Hello, I have to skip school today for a doctor's visit.",0.849940794
+Others,"Hi, I have a medical issue to address, so I can't attend school.",0.960716735
+Others,Audio is muffled or lacks clarity from the laptop speakers.,0.949215911
+Others,Touchpad gestures not customizable in the touchpad settings.,0.937981637
+Others,Mouse pointer jumping to corners of the screen unintentionally.,0.687970926
+Others,My iPad screen is cracked,0.071988943
+Others,IP address conflict on the Wi-Fi network specific to the iPad.,0.406156513
+Others,The iPad not recognizing the Wi-Fi hardware.,0.828002019
+Others,"Hi, I won't be able to make it to school due to a medical appointment.",0.854792828
+Others,Mouse occasionally freezing during use.,0.890257295
+Others,Router or modem issues affecting only the iPad's connectivity.,0.983484986
+Others,"Hi there, I have a doctor's appointment during school time.",0.033553067
+Others,Unresponsive touch screen.,0.12290709
+Non MC,"I was rear-ended in a car accident on my way to work, and I need to deal with the aftermath, so I won't be in today.",0.899719039
+Others,"Hi there, I'm feeling too sick to attend school, and I have a doctor's appointment.",0.841335925
+Others,Laptop screen freezing in safe mode.,0.531593755
+Others,Wi-Fi network password not accepted on the laptop.,0.044009742
+MC,I have to get a 36-day MC because of a severe reproductive system disorder.,0.434823412
+Non MC,"My significant other is stranded at the airport, and I need to pick them up, so I can't come to work.",0.058340941
+Others,Bluetooth mouse not working after a computer restart.,0.013979516
+Others,Laptop speakers producing audio that's too soft even at maximum volume.,0.474850794
+Others,Screen brightness fluctuating on its own.,0.851202998
+MC,"I need a 28-day MC as I recover from hip replacement surgery, with my mobility temporarily compromised during the healing process.",0.377952935
+Others,My mouse cannot connect to my computer,0.192384198
+Others,My laptop cannot connect to the internet,0.446178987
+Others,Error messages during OneDrive sync.,0.292213336
+Others,Laptop screen frozen in a blue screen (BSOD) error state.,0.032473502
+Others,Difficulty signing in to Google Classroom due to authentication problems.,0.992930133
+Others,Cursor stuck in a spinning/loading state.,0.86490655
+Others,Freeze occurring after plugging in or removing the power adapter.,0.787810698
+Others,"Hi, I won't be able to make it to class today due to a doctor's visit.",0.204427334
+MC,I’m obliged to obtain a 3-day MC due to a relentless bout of rhinitis accompanied by a cacophony of sneezes and a river of nasal discharge.,0.746940002
+Others,I've got issues with my Apple Pencil's performance.,0.272110095
+Others,"Hello, I'll be at the doctor's office while school is in session.",0.798162204
+MC,I need a 32-day MC because of a severe endocrine disorder.,0.573692584
+Others,"Keyboard input working, but the screen remains frozen.",0.487944476
+MC,I'd like to secure a medical certificate for the next three days.,0.297114868
+Others,Freeze when accessing certain folders or files.,0.275778609
+Others,White lines running across the screen.,0.039622949
+Non MC,"There's been a power outage in my neighborhood, and I can't work from home without electricity.",0.243630621
+Others,Distorted audio playback on the laptop speakers.,0.595477714
+MC,I wish to take a 3-day medical leave starting today.,0.042875869
+Others,The Apple Pencil isn't working right.,0.03553181
+Others,My iPad does not have Google Classroom,0.949141752
+Others,Screen not turning on after pressing the power button.,0.955492802
+MC,"I need a 25-day MC due to recuperation from hernia repair surgery, with my abdominal wall requiring time to heal and strengthen.",0.297272817
+Non MC,"My elderly neighbor needs urgent assistance, and I'm the only one available to help them right now.",0.585160795
+MC,I need a 50-day MC because of recovery from a major orthopedic surgery.,0.509337726
+Others,High-pitched or squealing noises from the laptop speakers.,0.87965135
+MC,"I need to acquire a 4-day MC as a result of a sudden onset of lumbago, rendering me practically immobile and in agonizing pain.",0.242103863
+Others,Issues with Google Classroom app updates not installing correctly.,0.88836688
+Others,My mouse is having bluetooth issues,0.032022728
+Others,Inconsistent performance of the Bluetooth mouse.,0.126050519
+MC,I need a 37-day MC due to a chronic mental health condition.,0.576970423
+Others,Mouse scroll wheel not functioning properly over Bluetooth.,0.570253779
+Others,The screen flickering only in certain apps or situations.,0.641074189
+MC,I'd like to claim a 3-day medical certificate starting today.,0.159860519
+Others,Cursor not moving when using the mousepad.,0.780829941
+Others,The iPad screen is frozen during a software reset or restore.,0.451116747
+MC,"I’m necessitated to procure a 20-day MC as I battle pneumonia, with my lungs protesting each breath with raspy and labored efforts.",0.752373579
+Others,Freeze occurring during startup or before the operating system loads.,0.752924974
+Others,"Hi, I need to take a day off from school because of a doctor's appointment.",0.674956934
+Others,iPad screen is frozen after installing a new app.,0.290749424
+Others,"Error message on the laptop, such as ""No Internet Access.""",0.669979525
+Others,"Hi there, I have a doctor's appointment that conflicts with school.",0.893955028
+Others,iPad screen is frozen when rotating the device.,0.672489825
+Others,"Hi, I'm not up for work today.",0.413666495
+Others,"Hi, I'll be seeking medical advice instead of attending school today.",0.176069984
+Others,Problems with Schoolwork assignments not loading or opening.,0.755936351
+Non MC,"My computer crashed, and I need to take it to the repair shop, so I won't be able to work remotely today.",0.686226751
+Non MC,"I have a court appearance that I can't reschedule, so I won't be at work today.",0.04864143
+Others,Problems with notifications not working in the Google Classroom app.,0.665236759
+Others,Crackling or popping noises from the laptop speakers.,0.781739482
+Others,The Apple Pencil is giving me trouble.,0.479137958
+Others,"Hi, my son fell sick and I will not be coming to school to take care of him",0.245348618
+Others,A black screen with no display.,0.981198394
+Others,"Hi there, I'm feeling too sick to go to school.",0.35278261
+Others,iPad screen is frozen during a FaceTime call.,0.872071833
+Others,There is an issue with my laptop speaker,0.132043957
+Others,"Hi there, I'm off to the clinic.",0.436440209
+Others,Ghost touches where the screen registers touches without actual contact.,0.644434079
+Non MC,"There's a gas leak in my neighborhood, and I need to evacuate my home, so I can't come to work.",0.410325275
+Others,"Hi, I need to see a healthcare professional, so I won't be coming to school today.",0.488108845
+Others,System freeze triggered by a specific key or key combination.,0.372519853
+Others,Freeze during a system restore or recovery process.,0.79526251
+Others,A cracked or shattered screen.,0.609939941
+Others,System freezing with no error messages or warnings.,0.974201377
+Others,Laptop screen stuck on a login or lock screen.,0.581458883
+MC,I require a 24-day MC because of a heart-related issue.,0.24056107
+MC,I'm interested in obtaining a 3-day MC starting today.,0.68207365
+Others,The touchpad not working after a Windows reinstall.,0.912599888
+Others,Files missing from the OneDrive folder.,0.759781472
+MC,I need to visit the doctor for a 1-day MC due to severe migraines.,0.077476818
+Non MC,"I had a major plumbing issue in my home, and I need to wait for the plumber, so I won't be in today.",0.973786003
+Others,Touchpad not working after a driver update.,0.054933592
+Others,My Apple Pencil is on the fritz.,0.047875157
+Others,Network settings on the iPad need to be reset to default.,0.600498922
+Non MC,"I have a severe toothache, and I need to see a dentist immediately, so I can't come to work.",0.601509039
+Others,I'm experiencing problems with my Apple Pencil.,0.951018544
+Others,Difficulty in downloading or updating the Schoolwork app.,0.840567858
+Others,IP address conflict on the Wi-Fi network specific to the laptop.,0.885049414
+MC,I need a 17-day MC due to a severe sinus infection.,0.788135871
+Others,"Hi, I'm feeling too unwell for school.",0.844025387
+Non MC,"I have a family event that I can't miss, so I won't be at work today.",0.798883132
+Others,My Apple Pencil is inoperative.,0.99742355
+Others,Frequent signal interference causing mouse disconnects.,0.080800015
+Others,Laptop keyboard not working after a drop or physical impact.,0.468466235
+Others,VPN connection issues preventing internet access on the laptop.,0.874331375
+Others,OneDrive taking up excessive CPU or memory.,0.83354961
+Others,Laptop keyboard not working after a liquid spill.,0.492740881
+MC,I must obtain a 33-day MC due to a severe blood disorder.,0.274713623
+Others,Difficulty in downloading or reinstalling Proloquo2Go.,0.914173928
+Others,Laptop keyboard not working after resuming from sleep or hibernation.,0.721760285
+Others,Incorrect date and time settings impacting internet access on the iPad.,0.948586599
+Others,Frequent disconnection from Wi-Fi networks on the iPad.,0.97472714
+Others,Color distortion or unusual coloration on the display.,0.017279372
+Others,Freeze occurring when connecting or disconnecting external devices.,0.146551795
+Others,The screen is stuck on a zoomed-in view.,0.648795961
+Others,OneDrive not updating shared files.,0.986247473
+Others,Screen not rotating when the device is turned.,0.805607486
+Others,Screen frozen in a distorted or garbled state.,0.092201931
+Others,The touchscreen works intermittently.,0.134983386
+Others,OneDrive storage quota exceeded.,0.210674822
+Others,Audio playback stops when connecting external devices.,0.40451731
+MC,I must get a 7-day MC due to recovery from food poisoning.,0.764425525
+Others,Screen flickering when the device is under load.,0.338051649
+Others,Freeze happening while running a specific application or software.,0.878114968
+MC,I wish to apply for a medical certificate for the next three days.,0.272206395
+Others,Difficulty in navigating the Google Classroom interface.,0.973298171
+MC,I’m compelled to procure an 11-day MC due to recuperation from a minor vehicular mishap causing contusions and mild concussions.,0.83346383
+MC,I must obtain a 28-day MC because of recovery from a hip replacement surgery.,0.721470572
+Others,"Hey, I'm feeling under the weather.",0.961735626
+Others,OneDrive not syncing on a slow or unstable connection.,0.198224368
+Others,"Hi, I'm not feeling well today.",0.098139736
+Non MC,"I have a jury duty summons that I can't postpone, so I won't be at work today.",0.700189746
+MC,I have to get a 2-day MC from the doctor because of a stomach flu.,0.920995923
+MC,"I must secure a 21-day MC due to a kidney infection, with my renal function compromised, necessitating medical intervention and rest.",0.156327045
+Others,Bluetooth mouse not working after a system crash or error.,0.02190701
+MC,I must obtain a 23-day MC due to a severe liver condition.,0.594199031
+Others,"Hi, I'll be absent from school due to a scheduled doctor's appointment.",0.425613193
+Others,"Screen displaying a ""jailbreak"" message if the device has been modified.",0.329717955
+Others,"Connected to Wi-Fi, but email won't sync on the iPad.",0.939742937
+MC,I need an 8-day MC from the doctor for a minor surgical procedure.,0.525742051
+Others,My iPad screen is frozen,0.447396111
+Others,I have a malfunctioning Apple Pencil.,0.023164366
+Others,Bluetooth mouse not working on a specific computer or device.,0.800944124
+Others,Proloquo2Go app not launching properly on your iPad.,0.196635953
+Others,Certain areas of the screen do not respond to touch.,0.749398398
+Others,Laptop speakers not working in a specific user account.,0.734764692
+Others,"Hello, I'll be seeking medical attention.",0.781111127
+Others,"Hi, I'm not feeling my best today.",0.276239938
+Others,Mouse sensitivity settings not adjusting correctly.,0.674685237
+Others,iPad cannot connect to a specific known Wi-Fi network.,0.993048249
+Others,OneDrive files not accessible offline.,0.138215113
+Others,OneDrive not uploading photos from mobile.,0.411765359
+MC,"I'm really sorry, but I can't come to work today due to a sudden illness.",0.237732209
+MC,"I must garner a 6-day MC as I’m suffering from a dramatic manifestation of urticaria, with welts and hives compromising my physical comfort.",0.237036926
+Others,The touchscreen is slow to respond to touch input.,0.765736707
+Others,The router firmware needs an update to work with the iPad.,0.872354906
+Others,I've got a non-functional Apple Pencil.,0.814257118
+Others,"Hi there, I won't be able to attend school today.",0.634464235
+Others,Mouse tracking inaccuracies via Bluetooth.,0.088473182
+Others,Laptop not detecting any available Wi-Fi networks.,0.407195485
+MC,I require a 9-day MC due to a severe ear infection.,0.540849724
+Others,The Apple Pencil is not up to par.,0.994466095
+MC,"Hi, I'm not feeling well today and will be taking an MC for 3 days",0.329722958
+Others,Low or very faint audio from the laptop speakers.,0.110113999
+Others,iPad screen is frozen after a software update.,0.546098119
+MC,I must garner a 24-day MC as I grapple with a cardiac anomaly necessitating medical supervision and lifestyle modifications.,0.484772354
+Others,Unable to create or edit assignments in the Schoolwork app.,0.960255378
+Others,Software update required to resolve internet connectivity issues on the iPad.,0.451138319
+MC,I have to see the doctor for a 5-day MC due to a sprained ankle.,0.044032238
+Others,Laptop constantly disconnecting from Wi-Fi networks.,0.508745867
+MC,"I need a 19-day MC due to recuperating from an appendectomy, with my abdomen bearing the brunt of surgical intervention.",0.613490254
+Others,The touchpad not working when an external mouse is connected.,0.169970335
+Others,iPad screen is unresponsive after a water spill.,0.048535225
+MC,I require a 34-day MC because of recovery from a mastectomy.,0.695238934
+Others,No internet connectivity on the laptop.,0.462791651
+Others,The touchpad not working in safe mode.,0.645041939
+Others,Problems with the Google Classroom app not displaying class materials.,0.454380363
+Others,Uneven volume balance between the laptop speakers.,0.456612744
+Others,Laptop screen frozen after a software crash or error message.,0.279506195
+Others,OneDrive not syncing on macOS.,0.439976752
+Others,My Apple Pencil is not operating correctly.,0.619989723
+Others,The Apple Pencil is defective.,0.861347581
+MC,I must obtain a 38-day MC because of recovery from a neurological surgery.,0.588365194
+Others,"Hi, I won't be able to make it to class today due to a doctor's visit.",0.856107303
+Others,Unable to sign in to OneDrive.,0.049363107
+Others,Laptop keyboard producing beeping sounds when keys are pressed.,0.995679041
+Others,"Hello, I'll be at the doctor's office.",0.717381151
+Others,"Hi, I'll be seeking medical advice.",0.289696264
+Others,Wi-Fi connection drops when the iPad goes to sleep.,0.888256015
+Others,Scrolling on the touchpad not working or working in the wrong direction.,0.499847029
+Others,Audio is too loud and distorted even at low volume settings.,0.854149441
+Others,The laptop keyboard is typing the wrong characters.,0.389692388
+Others,"Hi, I'll be absent from school today.",0.154284494
+Others,Laptop freezing while playing video or during a video call.,0.801517526
+MC,"I'm looking to get a medical certificate for three days, starting today.",0.718304927
+Others,"Hi, I'll be resting at home instead of going to school.",0.68683896
+Others,Issues with OneDrive for Business.,0.717383536
+Others,"Hi, I won't be able to make it to class today.",0.578219189
+Others,Taskbar and desktop icons unresponsive.,0.118334106
+Others,"Hey, I have a medical appointment today.",0.007355912
+MC,I need an MC for today and the following two days.,0.159671964
+Others,Slow internet connection speed on the laptop.,0.648727826
+Others,"Connected to Wi-Fi, but web pages won't load on the iPad.",0.172913723
+Others,Laptop speakers not responding to volume adjustments.,0.608508493
+Others,OneDrive not syncing with SharePoint.,0.292234251
+Others,Slow internet speed on the iPad.,0.950913266
+Others,Mouse buttons performing unintended actions via Bluetooth.,0.050021683
+MC,"My child's school called, and they're sick, so I need to pick them up, and I won't be at work today.",0.383732678
+MC,"I had an unexpected dental emergency and need to see the dentist, so I won't be in today.",0.80509841
+Others,The touchpad not working after a recent software installation.,0.43320528
+Others,I'm dealing with a faulty Apple Pencil.,0.330555154
+MC,I need a 16-day MC as I’m in the recovery phase post a corrective eye surgery aimed at rectifying a vision impairment issue.,0.792703705
+Others,"Error message on the iPad, such as ""Unable to Join Network.""",0.845621391
+MC,I require a 14-day MC because of a fractured wrist.,0.687976755
+Non MC,"I had a sudden and severe allergic reaction to a food I ate, and I need to go to the hospital, so I won't be at work.",0.380827895
+Others,Files being deleted from OneDrive unexpectedly.,0.528633871
+Others,Num Lock or Caps Lock key LEDs not indicating their status.,0.355566526
+MC,"I’m necessitated to acquire a 26-day MC as I deal with chronic obstructive pulmonary disease exacerbation, impairing my respiratory function.",0.073176436
+MC,"My child is unwell, and I need to take care of them, so I won't be able to make it to work.",0.476473507
+Others,Google Classroom app crashes immediately upon opening.,0.098314221
+MC,I need a 45-day MC due to a severe digestive system disorder.,0.410918121
+Others,The screen going completely dim even when the brightness is set high.,0.148189543
+Others,Sound problems occurring only when using specific media players or software.,0.790869775
+Others,Issues with submitting assignments or receiving feedback.,0.352911037
+Others,One speaker not working (left or right channel).,0.573273716
+Others,The laptop keyboard is typing multiple characters with a single keypress.,0.697008405
+Others,"Hi, I need to see a healthcare professional.",0.375821792
+Others,OneDrive icon missing from the system tray.,0.844491517
+Others,"Hey, I'm taking a sick day from school.",0.176374329
+MC,I require a 19-day MC due to recovery from appendicitis surgery.,0.903537213
+Others,Laptop speakers not detected in the audio playback devices.,0.252127216
+Others,The Apple Pencil seems to be malfunctioning.,0.294047074
+Others,"Screen displaying a ""no signal"" message.",0.274628519
+Others,My iPad screen is faulty,0.007356276
+Others,"Connected to Wi-Fi, but email won't sync on the laptop.",0.447749442
+Others,"Connected to Wi-Fi, but no internet access on the iPad.",0.330010626
+Non MC,"My elderly relative needs urgent assistance, and I'm the only one available to help, so I can't come to work.",0.278127169
+MC,I must secure a 2-day MC as I am afflicted with a virulent strain of gastroenteritis causing debilitating abdominal cramps and nausea.,0.347752484
+MC,I want to take a 3-day MC starting today.,0.925388015
+Others,Screen displaying random patterns or characters.,0.582866899
+Others,"Mouse cursor moving, but clicks have no effect.",0.220779836
+Others,iPad unable to detect any available Wi-Fi networks.,0.142780898
+Others,"The screen is stuck on the ""Connect to iTunes"" message.",0.450047789
+Others,Certain keys on the laptop keyboard not working.,0.484830623
+MC,I have to get a 16-day MC because of recovery from eye surgery.,0.311950149
+Others,Issues with uploading assignments or files to Google Classroom.,0.147026087
+Others,The touchpad not working on a specific brand or model of laptop.,0.314015546
+Others,Keyboard keycaps falling off or missing.,0.329116665
+MC,I'd like to secure a 3-day medical leave starting today.,0.166313629
+Others,Network settings on the laptop need to be reset to default.,0.658483715
+MC,"I intend to take a 3-day medical leave, starting today.",0.434652687
+Others,System becoming unresponsive while multitasking.,0.719310092
+Others,Some laptop keyboard keys feel mushy or unresponsive.,0.803615889
+Others,The iPad screen is frozen after connecting to a specific accessory.,0.43320643
+Others,The screen is frozen during a software download.,0.09044775
+Others,The screen showing a distorted image.,0.218341784
+Others,"Hi, I have a doctor's appointment that prevents me from attending school.",0.592696954
+Others,Complete screen freeze with no response to keyboard or mouse input.,0.521858704
+MC,I must obtain a 43-day MC due to a severe immune system disorder.,0.154551835
+Others,Touchpad freezing or becoming unresponsive intermittently.,0.541384021
+Others,Sound problems arising after a Windows update.,0.700361342
+MC,"I slipped and fell on the ice this morning, and I'm in too much pain to come to work.",0.699502159
+Others,Unable to find Google Classroom after installing it from the App Store.,0.437461043
+MC,I must obtain an 18-day MC because of a broken leg.,0.51740041
+Others,"Hi, I need to call in sick.",0.292456319
+Others,"Hi, I need to see a healthcare professional, so I won't be coming to school.",0.786481615
+Others,The touchpad is overly sensitive and registers unintended movements.,0.412833235
+MC,"I’m compelled to obtain a 23-day MC due to liver cirrhosis, requiring careful monitoring and medication to stabilize my condition.",0.76132342
+Non MC,"My internet is down, and I can't work from home without it, so I won't be at work.",0.247817761
+MC,I'd like to take medical leave for today and the next two days.,0.86287545
+Others,"Hey, I'm taking a sick day from school because of a doctor's appointment.",0.811353466
+Others,Right-click context menu not appearing when tapping the touchpad.,0.479299215
+Others,My Apple Pencil is not in working condition.,0.604403415
+Others,Software update needed to fix internet connectivity issues on the laptop.,0.936501599
+Others,Incorrect Wi-Fi password entered on the iPad.,0.83333542
