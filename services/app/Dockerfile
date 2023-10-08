@@ -30,6 +30,8 @@ ENV PATH /opt/conda/envs/chatbot/bin:$PATH
 # Copy application code from builder stage
 COPY . $APP_HOME
 
+RUN python -m spacy download en_core_web_sm
+
 # Set user, permissions, and other necessary steps...
 
 # chown all the files to the app user
@@ -38,6 +40,4 @@ RUN chown -R app:app $APP_HOME
 # change to the app user
 USER app
 
-
-
-
+RUN python database_conn.py

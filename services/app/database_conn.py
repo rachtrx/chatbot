@@ -1,8 +1,23 @@
+# This file is used for any interactions with the database
+
 import openpyxl
 import pandas as pd
 import sqlite3
+from datetime import datetime, timedelta
+import json
+import uuid
+
+SUCCESS = 1
+PENDING_USER_REPLY = 2
+FAILED = 3
+
+intents = {
+    "TAKE_MC": 1,
+    "OTHERS": 2
+}
 
 def connect_to_db(func):
+    '''This decorator returns a wrapper that will start and stop the connection after running the database queries'''
     def wrapper(*args, **kwargs):
         conn = sqlite3.connect('users.db')
         cursor = conn.cursor()
@@ -10,17 +25,48 @@ def connect_to_db(func):
         conn.commit()
         conn.close()
         return result
-    return wrapper   
+    return wrapper
 
 @connect_to_db
 def main(cursor):
-    # Create a users table
-    cursor.execute('''CREATE TABLE users (name TEXT UNIQUE, number INTEGER UNIQUE, email TEXT UNIQUE, reporting_officer TEXT, hod TEXT)''')
+    # Create a users and messages table
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users (name TEXT UNIQUE, number INTEGER UNIQUE, email TEXT UNIQUE, reporting_officer TEXT, hod TEXT)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS messages (id TEXT UNIQUE, number INTEGER, name TEXT, message TEXT, intent INTEGER, status TEXT, timestamp DATETIME)''')
 
 @connect_to_db
-def get_name(cursor, phone):
-    cursor.execute('SELECT name FROM users WHERE number = ?', (phone,))
-    return None if name is None else name[0]
+def get_old_message(cursor, number):
+    '''Returns any pending message from the user within 1 hour'''
+    cursor.execute('SELECT * FROM messages WHERE number = ? AND status = ? AND intent = ? ORDER BY timestamp DESC LIMIT 1', (number, PENDING_USER_REPLY, intents["TAKE_MC"]))
+
+    row = cursor.fetchall()
+    print(row)
+    
+    if row:
+        print(row)
+        uuid, number, name, message, intent, status, timestamp = row[0]
+        timestamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f")
+        current_time = datetime.now()
+        time_difference = current_time - timestamp
+        if time_difference < timedelta(hours=1):
+            cursor.execute('UPDATE messages SET status = ? WHERE id = ?', (SUCCESS, uuid))
+            return message
+        
+    return False
+
+@connect_to_db
+def add_message(cursor, user_info, message): 
+    message_id = uuid.uuid4()
+    name, number = user_info[:2] # jus need the first 2 elements
+
+    cursor.execute("INSERT INTO messages (id, number, name, message, intent, status, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)", (str(message_id), number, name, message, intents["TAKE_MC"], PENDING_USER_REPLY, datetime.now()))
+    
+    return True
+    
+
+# @connect_to_db
+# def get_name(cursor, phone):
+#     cursor.execute('SELECT name FROM users WHERE number = ?', (phone,))
+#     return None if name is None else name[0]
     
 @connect_to_db
 def sync(cursor, file):

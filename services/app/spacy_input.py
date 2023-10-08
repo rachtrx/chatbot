@@ -6,9 +6,9 @@ from word2number import w2n
 import os
 from twilio.rest import Client
 
-account_sid = os.environ['TWILIO_ACCOUNT_SID']
-auth_token = os.environ['TWILIO_AUTH_TOKEN']
-client = Client(account_sid, auth_token)
+# account_sid = os.environ['TWILIO_ACCOUNT_SID']
+# auth_token = os.environ['TWILIO_AUTH_TOKEN']
+# client = Client(account_sid, auth_token)
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -38,6 +38,7 @@ def check_date_ent(substring):
     return False
 
 def check_for_intent(user_str):
+    '''Function takes in a user input and if intent is not MC, it returns False. Else, it will return a list with the number of days, today's date and end date'''
     full_absent_pattern = re.compile(r'\b(on|taking|take) (.*?((\d\d?\d?|a) (day|days)|today) .*?(leave|mc|appointment)|.*?(leave|mc|appointment) .*?((\d\d?\d?|a) (day|days)|today))\b', re.IGNORECASE)
     matches_list = list(full_absent_pattern.finditer(user_str))
     
@@ -47,21 +48,17 @@ def check_for_intent(user_str):
     
     print("1. match found")
     match = matches_list[0]
-    details = check_date_ent(match.group())
-    return details
+    mc_details = check_date_ent(match.group())
+    return mc_details
+
+def check_response(message):
+    confirmation_pattern = re.compile(r'^(yes|no)$', re.IGNORECASE)
+    
+    if confirmation_pattern.match(message):
+        return True
+    return False
 
 # SECTION sync with the excel file
-
-
-
-text = ["I will be on leave from Monday to Friday",
-"I will be on medical leave from Monday to Friday",
-"I will be on a 3 day mc from tomorrow",
-"I will be on mc tomorrow",
-"I will be taking a 3 day mc tomorrow",
-"I will be taking mc for 3 days",
-"I will be on mc for 3 days",
-"I will be on leave for 3 days"]
 
 def main():
     user_str = input("Hi what would you like to do? ")
