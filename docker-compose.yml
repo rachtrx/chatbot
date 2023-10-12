@@ -18,3 +18,4 @@ services:
       - 5001
     environment:
       - DATABASE=sqlite
+      - LIVE=1

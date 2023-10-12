@@ -157,6 +157,7 @@ def calc_start_end_date(duration):
     end_date = (start_date + timedelta(days=int(duration) - 1))
     return (start_date.strftime('%d/%m/%Y'), end_date.strftime('%d/%m/%Y'))
 
+# IMPT MOVED
 def generate_mc_details(user_str):
     duration_e = duration_extraction(user_str)
     dates = get_start_end_date(user_str)
@@ -183,6 +184,7 @@ def generate_mc_details(user_str):
         except:
             return False
 
+#IMPT MOVED
 def check_for_intent(user_str):
     '''Function takes in a user input and if intent is not MC, it returns False. Else, it will return a list with the number of days, today's date and end date'''
 

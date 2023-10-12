@@ -2,14 +2,12 @@ from flask import Flask, request, jsonify
 from twilio.twiml.messaging_response import MessagingResponse
 import os
 from twilio.rest import Client
-
-from regex_pattern_extraction import check_for_intent, check_response
-from database_conn import get_cfm_mc_details, add_message, get_user_info
-
 from config import Config
 from extensions import db
-from models import User, McDetails
+from models import User, Message, McDetails, DurationMismatchError, ReplyError
 from dotenv import load_dotenv
+
+from constants import PENDING_USER_REPLY, SUCCESS, DURATION_CONFLICT
 
 env_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(dotenv_path=env_path)
@@ -42,91 +40,69 @@ account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
 auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
 client = Client(account_sid, auth_token)
 
+
 def general_workflow(request):
 
-    message, from_number = get_message_details(request)
+    message = Message.get_message(request)
+    user = User.get_user(Message.get_number(request))
 
-    if check_response(str(message)):
-        cfm_mc_details = get_cfm_mc_details(from_number) # goes to database to get old number
-        if cfm_mc_details:
-            send_message(cfm_mc_details)
-            return False
+    if not user:
+        return False
 
-    print(message)
-    mc_details = check_for_intent(message)
-    if mc_details and get_user_info(from_number): # check that user exists and it is an mc message
-        user, r, h = get_user_info(from_number)
-        print("retrieved user details!")
-        draft_mc_details = add_message(mc_details, user)
-        return generate_reply(draft_mc_details, user, r, h)
+    # CHECK if user reply to confirm MC
+    if Message.check_response(str(message)): # user replied with yes/no
+        mc_message = McDetails.get_recent_message(user.number, PENDING_USER_REPLY) # goes to database to get old number
+        if mc_message:
+            if os.environ.get('LIVE') == "1":
+                mc_message.send_message(client)
+                mc_message.commit_message(SUCCESS)
+                return False # nothing to reply, maybe acknowledgement TODO
+            else:
+                mc_message.commit_message(SUCCESS)
+                reply = mc_message.send_message()
+        else:
+            raise ReplyError("I'm sorry, we could not find any messages from you in the past 5 minutes, could you send it again?")
+            
+            
+    # CHECK if user wants to take MC
     else:
-        return "Sorry I did not get what you mean, or you have exceeded the 10 min timeout. Please let me know how many days of leave you are planning to take"
+        mc_intent = Message.check_for_intent(message)
+        if mc_intent:
+            mc_message = McDetails(user.number, message) # initialise
 
-def send_message(cfm_mc_details):
-    '''This function sets up the details of the forward to HOD and reporting officer message'''
+            try:
+                dates_found = mc_message.generate_base()
+            except DurationMismatchError as de:
+                mc_message.commit_message(DURATION_CONFLICT)
+                return de.message
 
-    user, r, h, mc = cfm_mc_details
-    print(cfm_mc_details)
+            if not dates_found: # check that it is an mc message
+                raise ReplyError("The chatbot is still in development, we could not determine your intent, really sorry!")
+                
+            reply = mc_message.generate_reply()
+            if reply is None: # if no relations
+                raise ReplyError("Really sorry, there doesn't seem to anyone to inform about your MC. Please contact the school HR")
+            else:    
+                mc_message.commit_message(PENDING_USER_REPLY) # save to database TODO probably only after callback
+            
+    # return reply for both cases
+    return reply
 
-    to_numbers = [(r.name, r.number), (h.name, h.number)]
-
-    # Define the message parameters
-    for to_name, number in to_numbers:
-        
-        to_number = str(number)  # Original number
-        from_number = '+18155730824'  # Your Twilio number
-        body = f'Hi {to_name}! This is to inform you that {user.name} will be taking {mc.duration} days MC from {mc.start_date} to {mc.end_date}'
-
-        # Send the message
-        message = client.messages.create(
-            to='+65' + to_number,
-            from_=from_number,
-            body=body
-        )
-
-    print(message.sid)
-    return True
-
-def get_message_details(request):
-
-    print(request.form)
-
-    user_str = request.form.get("Body")
-    from_number = int(request.form.get("From")[-8:])
-
-    print(from_number)
-    print(f"Received {user_str}")
-
-    return (user_str, from_number)
-
-
-def generate_reply(draft_mc_details, user, r, h):
-    '''This function gets a mc_details object and returns a confirmation message'''
-
-    statement = f"Hi {user.name}, Kindly confirm that you are on MC for {draft_mc_details.duration} days from {draft_mc_details.start_date} to {draft_mc_details.end_date}. I will help you to inform "
-
-    if not (r or h):
-        statement = "Really sorry, there doesn't seem to anyone to inform about your MC. Please contact the school HR"
-
-    elif r and h:
-        statement += f"{r.name} ({r.number}) and {h.name} ({h.number})"
-
-    elif r:
-        statement += f"{r.name} ({r.number})"
-
-    else:
-        statement += f"{h.name} ({h.number})"
-
-    statement += " (Yes/No)"
-
-    return statement
+            # TODO REMOVE TEMPS
+                
 
 
 @app.route("/chatbot/sms/test/", methods=['GET', 'POST'])
 def sms_reply_test():
     """Respond to incoming calls with a simple text message."""
 
-    response = general_workflow(request)
+    try:
+        response = general_workflow(request) # callback to user
+        if not response: # message forwarded successfully
+            return True
+        
+    except ReplyError as re: # problem
+        response = re.message
 
     return response
 
@@ -134,20 +110,23 @@ def sms_reply_test():
 def sms_reply():
     """Respond to incoming calls with a simple text message."""
 
-    response = general_workflow(request)
+    try:
+        response = general_workflow(request) # callback to user
+        if not response: # message forwarded successfully
+            return True
+        
+    except ReplyError as re: # problem
+        response = re.message
 
-    if response:
-        # Start our TwiML response
-        resp = MessagingResponse()
+    # Start our TwiML response
+    resp = MessagingResponse()
 
-        # Add a message
-        resp.message(response)
+    # Add a message
+    resp.message(response)
 
-        print(str(resp))
+    print(str(resp))
 
-        return str(resp)
-    else:
-        return "Message was a confirmation, now waiting for callback"
+    return str(resp)
 
 
 @app.route("/chatbot/sms/callback/", methods=['POST'])

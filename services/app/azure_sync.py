@@ -120,49 +120,49 @@ def main():
         old_users = pd.merge(az_users, db_users, how="outer", indicator=True).query('_merge == "right_only"').drop(columns='_merge')
         new_users = pd.merge(az_users, db_users, how="outer", indicator=True).query('_merge == "left_only"').drop(columns='_merge')
 
+        update_users = new_users[new_users.name.isin(old_users.name)]
+
+        old_users = old_users[~old_users.name.isin(update_users.name)]
+        new_users = new_users[~new_users.name.isin(update_users.name)]
+
+        update_users_tuples = [tuple(update_user) for update_user in update_users.values]
         old_users_tuples = [tuple(old_user) for old_user in old_users.values]
         new_users_tuples = [tuple(new_user) for new_user in new_users.values]
         print(old_users_tuples)
         print(new_users_tuples)
 
 
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        for name, number, email, reporting_officer, hod in old_users_tuples:
-            cursor.execute('DELETE FROM user WHERE name = ?', (name, ))
-
-        conn.commit()
-        conn.close()
-
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-            
-        for name, number, email, reporting_officer, hod in new_users_tuples:
-            cursor.execute('INSERT INTO user (name, number, email) VALUES (?, ?, ?)', (name, number, email))
-
-        conn.commit()
-        conn.close()
-
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect('chatbot.db')
         cursor = conn.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
-            
+
         try:
+            for name, number, email, reporting_officer, hod in old_users_tuples:
+                cursor.execute('DELETE FROM user WHERE name = ?', (name, ))
+
             for name, number, email, reporting_officer, hod in new_users_tuples:
-                cursor.execute('UPDATE user SET reporting_officer_name = ?, hod_name = ? WHERE name = ?', (reporting_officer, hod, name))
+                cursor.execute('INSERT INTO user (name, number, email) VALUES (?, ?, ?)', (name, number, email))
 
             conn.commit()
             conn.close()
+
+            conn = sqlite3.connect('chatbot.db')
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+                
+            for name, number, email, reporting_officer, hod in update_users_tuples:
+                cursor.execute('UPDATE user SET number = ?, email = ?, reporting_officer_name = ?, hod_name = ? WHERE name = ?', (number, email, reporting_officer, hod, name))
+
+            for name, number, email, reporting_officer, hod in new_users_tuples:
+                cursor.execute('UPDATE user SET reporting_officer_name = ?, hod_name = ? WHERE name = ?', (reporting_officer, hod, name))
             
         except Exception as e:
+            conn.commit()
+            conn.close()
             send_error_msg()
             tb = traceback.format_exc()
             print(f"Error: {e}")
             print(tb)
-
-            conn.commit()
-            conn.close()
 
 if __name__ == "__main__":
     main()
