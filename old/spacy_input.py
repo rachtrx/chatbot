@@ -39,6 +39,8 @@ def check_date_ent(substring):
 
 def check_for_intent(user_str):
     '''Function takes in a user input and if intent is not MC, it returns False. Else, it will return a list with the number of days, today's date and end date'''
+
+    # 2 kinds of inputs: "I will be taking 2 days leave due to a medical appointment  mc vs I will be on medical leave for 2 days"
     full_absent_pattern = re.compile(r'\b(on|taking|take) (.*?((\d\d?\d?|a) (day|days)|today) .*?(leave|mc|appointment)|.*?(leave|mc|appointment) .*?((\d\d?\d?|a) (day|days)|today))\b', re.IGNORECASE)
     matches_list = list(full_absent_pattern.finditer(user_str))
     

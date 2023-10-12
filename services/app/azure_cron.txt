@@ -1,0 +1,1 @@
+* * * * * /opt/conda/envs/chatbot/bin/python /home/app/web/azure_sync.py >> /var/log/cron.log 2>&1

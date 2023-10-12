@@ -16,3 +16,5 @@ services:
     command: gunicorn --bind 0.0.0.0:5001 app:app
     expose: 
       - 5001
+    environment:
+      - DATABASE=sqlite
