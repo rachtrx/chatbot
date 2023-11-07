@@ -17,5 +17,8 @@ services:
     expose: 
       - 5001
     environment:
-      - DATABASE=sqlite
       - LIVE=1
+      - DATABASE=sqlite
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - ./services/app/.env

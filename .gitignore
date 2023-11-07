@@ -1,2 +1,5 @@
 .env
 notes
+services/app/token.txt
+services/app/.env
+token.txt

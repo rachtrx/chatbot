@@ -14,7 +14,7 @@ then
     echo "PostgreSQL started"
 fi
 
-if [ "$DATABASE" = "sqlite" ]
+if [ "$DATABASE" = "sqlite" ] && [ "$LIVE" = "1" ]
 then
     echo "Creating the database tables..."
     flask create_db

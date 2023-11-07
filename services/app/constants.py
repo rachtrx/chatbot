@@ -1,8 +1,17 @@
-TEMP = 0
-SUCCESS = 1
-PENDING_USER_REPLY = 2
-FAILED = 3
-DURATION_CONFLICT = 4
+import datetime
+
+TEMP = 1
+SUCCESS = 200
+PENDING_USER_REPLY = 300
+PENDING_CALLBACK = 301
+DURATION_CONFLICT = 400
+FAILED = 500
+
+intents = {
+    "TAKE_MC": 1,
+    "OTHERS": 2
+}
+
 
 # SECTION proper months
 month_mapping = {
@@ -32,4 +41,24 @@ month_mapping = {
     'december': 'December'
 }
 
+days_arr = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+day_mapping = {
+    'mon': 'Monday',
+    'monday': 'Monday',
+    'tue': 'Tuesday',
+    'tues': 'Tuesday',
+    'tuesday': 'Tuesday',
+    'wed': 'Wednesday',
+    'wednesday': 'Wednesday',
+    'thu': 'Thursday',
+    'thurs': 'Thursday',
+    'thursday': 'Thursday',
+    'fri': 'Friday',
+    'friday': 'Friday',
+    'sat': 'Saturday',
+    'saturday': 'Saturday',
+    'sun': 'Sunday',
+    'sunday': 'Sunday',
+}
 

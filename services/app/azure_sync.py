@@ -1,6 +1,7 @@
+import os
 from extensions import db
 import msal
-import os
+
 import requests
 from dotenv import load_dotenv
 import pandas as pd
@@ -8,14 +9,10 @@ import numpy as np
 from models import User, McDetails
 import traceback
 import sqlite3
-from app import client
+from app import client, manager
+import datetime
 
 db_path = os.path.join(os.path.dirname(__file__), 'chatbot.db')
-env_path = os.path.join(os.path.dirname(__file__), '.env')
-load_dotenv(dotenv_path=env_path)
-
-USERS_TABLE_URL = f"https://graph.microsoft.com/v1.0/drives/{os.environ.get('DRIVE_ID')}/items/{os.environ.get('USERS_FILE_ID')}/workbook/worksheets/Users/tables/UsersTable/rows"
-LOOKUP_TABLE_URL = f"https://graph.microsoft.com/v1.0/drives/{os.environ.get('DRIVE_ID')}/items/{os.environ.get('USERS_FILE_ID')}/workbook/worksheets/Lookup/tables/LookupTable/rows"
 
 # Enter details of AAD app registration
 
@@ -30,20 +27,10 @@ config = {
 # create an MSAL instance providing the client_id, authority and client_credential params
 msal_instance = msal.ConfidentialClientApplication(config['client_id'], authority=config['authority'], client_credential=config['client_secret'])
 
-def send_error_msg():
-    client.messages.create(
-        from_number='+18155730824',
-        to_number=os.environ.get("TEMP_NO"),
-        body="Something went wrong with the sync"
-    )
-
-    return True
-
-def sync_user_info(scope = config['scope']):
-    '''Returns a 2D list containing the user details within the inner array'''
-
+def acquire_token(scope):
     # First, try to lookup an access token in cache
     token_result = msal_instance.acquire_token_silent(scope, account=None)
+    print("retrieving token")
 
     # If the token is available in cache, save it to a variable
     if token_result:
@@ -51,22 +38,40 @@ def sync_user_info(scope = config['scope']):
 
     # If the token is not available in cache, acquire a new one from Azure AD and save it to a variable
     if not token_result:
-        print(scope)
         token_result = msal_instance.acquire_token_for_client(scopes=scope)
         print(token_result)
         access_token = 'Bearer ' + token_result['access_token']
-        print(f'New access token {access_token} was acquired from Azure AD')
 
+        print(f"Live env: {os.environ.get('LIVE')}")
 
-    # Copy access_toek and specify the MS Graph API endpoint you want to call, e.g. '
-    headers = {
-        'Authorization': access_token
-    }
+        if os.environ.get('LIVE') == '1':
+            # write the token to the file if on live, otherwise just use the token printed for postman
+            print(f"Token path: {os.environ.get('TOKEN_PATH')}")
+            with open(os.environ.get('TOKEN_PATH'), 'w') as file:
+                file.write(access_token)
+
+    return
+
+def send_error_msg():
+    client.messages.create(
+        from_=os.environ.get("TWILIO_NO"),
+        to=os.environ.get("TEMP_NO"),
+        body="Something went wrong with the sync"
+    )
+
+    return True
+
+def sync_user_info():
+    '''Returns a 2D list containing the user details within the inner array'''
+
+    USERS_TABLE_URL = f"https://graph.microsoft.com/v1.0/drives/{os.environ.get('DRIVE_ID')}/items/{os.environ.get('USERS_FILE_ID')}/workbook/worksheets/Users/tables/UsersTable/rows"
+    LOOKUP_TABLE_URL = f"https://graph.microsoft.com/v1.0/drives/{os.environ.get('DRIVE_ID')}/items/{os.environ.get('USERS_FILE_ID')}/workbook/worksheets/Lookup/tables/LookupTable/rows"
+
+    print(manager.headers)
 
     # Make a GET request to the provided url, passing the access token in a header
-    users_request = requests.get(url=USERS_TABLE_URL, headers=headers)
-    lookups_request = requests.get(url=LOOKUP_TABLE_URL, headers=headers)
-
+    users_request = requests.get(url=USERS_TABLE_URL, headers=manager.headers)
+    lookups_request = requests.get(url=LOOKUP_TABLE_URL, headers=manager.headers)
     user_arrs = [tuple(info) for object_info in users_request.json()['value'] for info in object_info['values']]
     lookups_arrs = [tuple(info) for object_info in lookups_request.json()['value'] for info in object_info['values']]
 
@@ -77,12 +82,16 @@ def sync_user_info(scope = config['scope']):
     return (user_arrs, lookups_arrs) # info is already a list so user_info is a 2D list
 
 
+
 def df_replace_spaces(df):
+    '''removes the blank rows in the dataframe'''
     df.replace('', np.nan, inplace=True)
     df = df.dropna(how="all", inplace=True)
     return df
 
 def main():
+
+    acquire_token(config['scope'])
 
     col_order = ['name', 'number', 'email', 'reporting_officer_name', 'hod_name']
 
@@ -132,7 +141,7 @@ def main():
         print(new_users_tuples)
 
 
-        conn = sqlite3.connect('chatbot.db')
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
 
@@ -146,7 +155,7 @@ def main():
             conn.commit()
             conn.close()
 
-            conn = sqlite3.connect('chatbot.db')
+            conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
                 
@@ -155,6 +164,9 @@ def main():
 
             for name, number, email, reporting_officer, hod in new_users_tuples:
                 cursor.execute('UPDATE user SET reporting_officer_name = ?, hod_name = ? WHERE name = ?', (reporting_officer, hod, name))
+
+            conn.commit()
+            conn.close()
             
         except Exception as e:
             conn.commit()
@@ -165,4 +177,7 @@ def main():
             print(tb)
 
 if __name__ == "__main__":
+    print(f" Live: {os.environ.get('LIVE')}")
+    env_path = os.path.join(os.path.dirname(__file__), '.env')
+    load_dotenv(dotenv_path=env_path)
     main()
