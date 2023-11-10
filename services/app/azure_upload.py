@@ -7,6 +7,7 @@ from config import Config
 import time
 from utilities import delay_decorator
 import pandas as pd
+import json
 
 def cur_datetime(dt_type):
     return datetime.now().strftime(dt_type)
@@ -54,8 +55,8 @@ class SpreadsheetManager:
 
         return headers
     
-
-    def get_temp_table_url(self):
+    @property
+    def table_url(self):
         # get the workbook for this year
         # print(self.query_book_url)
         # print(self.headers)
@@ -78,20 +79,18 @@ class SpreadsheetManager:
 
     def upload_data(self, mc_details):
 
-        table_url = self.get_temp_table_url()
-
         body = {
             "values": mc_details.generate_date_data() # this function is from mc_details class
         }
         
-        self.write_to_excel(table_url, body)
+        self.write_to_excel(body)
         print("Data uploaded successfully")
 
    
-    def write_to_excel(self, table_url, json):
+    def write_to_excel(self, json):
 
         # write to file
-        write_to_table_url = f"{table_url}/rows"
+        write_to_table_url = f"{self.table_url}/rows"
 
         @delay_decorator("Failed to upload data.")
         def _write_to_excel():
@@ -107,10 +106,10 @@ class SpreadsheetManager:
         # ADD TABLE HEADERS
         @delay_decorator("Table headers could not be initialised.", retries = 10)
         def _add_table_headers():
-            table_headers_url = f"{worksheet_url}/range(address='A1:B1')"
+            table_headers_url = f"{worksheet_url}/range(address='A1:C1')"
 
             header_values = {
-                "values": [["Date", "Name"]]
+                "values": [["Date", "Name", "Department"]]
             }
 
             response = requests.patch(table_headers_url, headers=self.headers, json=header_values)
@@ -122,7 +121,7 @@ class SpreadsheetManager:
             add_table_url = f"{worksheet_url}/tables/add"
 
             body = {
-                "address": "A1:B1",
+                "address": "A1:C1",
                 "hasHeaders": True,
             }
 
@@ -151,7 +150,6 @@ class SpreadsheetManager:
         print("tables renamed successfully")
 
         # return table
-        
 
         return table_id
 
@@ -273,31 +271,48 @@ class SpreadsheetManager:
         return [worksheets_url, new_book]
 
 
-    # def send_message_to_principal(self, client):
-    #     response = requests.get(url=f"{self.table_url}/rows?", headers=self.headers)
-    #     mc_arrs = [tuple(info) for object_info in response.json()['value'] for info in object_info['values']]
-    #     mc_table = pd.DataFrame(data = mc_arrs, columns=["name", "date"])
-    #     date_today = datetime.datetime.strftime(datetime.datetime.now(), "%d/%m/%Y")
-    #     mc_today = mc_table.loc[mc_table['date'] == date_today]
-    #     mc_tuples = [tuple(new_user) for new_user in mc_today.values]
-    #     message = f"Staff on MC on {date_today}\n:"
-    #     if len(mc_tuples) == 0:
-    #         message += "All staff are present today"
-    #     else:
-    #         for user, date in mc_tuples:
-    #             message += f"{user}\n"
+    def send_message_to_principal(self, client):
+        response = requests.get(url=f"{self.table_url}/rows?", headers=self.headers)
+        mc_arrs = [tuple(info) for object_info in response.json()['value'] for info in object_info['values']]
+        mc_table = pd.DataFrame(data = mc_arrs, columns=["date", "name", "dept"])
+        # filter by today
+        date_today = datetime.strftime(datetime.now(), "%d/%m/%Y")
+        mc_today = mc_table.loc[mc_table['date'] == date_today]
         
-    #     message = client.messages.create(
-    #         to='whatsapp:+65' + str(self.user.number),
-    #         from_=os.environ.get("MESSAGING_SERVICE_SID"),
-    #         content_sid=os.environ.get("MC_CONFIRMATION_CHECK_SID"),
-    #         content_variables=content_variables,
-    #         # status_callback=os.environ.get("CALLBACK_URL")
-    #     )
-
-
+        #groupby
+        mc_today_by_dept = mc_today.groupby("dept", as_index=False).agg(total_by_dept = ("name", "count"), names = ("name", lambda x: '\r'.join(x)))
         
+        # get values
+        dept_aggs = [tuple(dept_agg) for dept_agg in mc_today_by_dept.values]
+        message = ""
+        total = 0
+        if len(mc_today_by_dept) == 0:
+            message += "All staff are present today\r\r"
+        else:
+            for dept, total_by_dept, names in dept_aggs:
+                total += total_by_dept
+                message += f"{dept}: {total_by_dept}\r{names}\r\r"
+            
+        message += f"Total: {str(total)}"
 
+        print(type(message))
+        print(type(date_today))
+
+        content_variables = {
+            '1': 'Bob',
+            '2': date_today,
+            '3': message
+        }
+
+        content_variables = json.dumps(content_variables)
+        
+        message = client.messages.create(
+            to=os.environ.get('TEMP_NO'),
+            from_=os.environ.get("MESSAGING_SERVICE_SID"),
+            content_sid=os.environ.get("MC_DAILY_SID"),
+            content_variables=content_variables,
+            # status_callback=os.environ.get("CALLBACK_URL")
+        )
 
 if __name__ == "__main__":
     from app import client

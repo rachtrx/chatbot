@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, date
 from extensions import db
-from sqlalchemy.orm import Mapped, mapped_column
+# from sqlalchemy.orm import 
 from sqlalchemy import desc
 from typing import List
 import uuid
@@ -17,27 +17,27 @@ class ForwardDetails(Message):
     #TODO other statuses eg. wrong duration
 
     __tablename__ = "forward_details"
-    id: Mapped[int] = mapped_column(db.ForeignKey("message.id"), primary_key=True)
-    ref_id: Mapped[int] = mapped_column(db.String(), db.ForeignKey('message.id', ondelete="CASCADE"), nullable=False)
-    to_name: Mapped[str] = mapped_column(db.String(80), nullable=True)
+    sid = db.Column(db.ForeignKey("message.sid"), primary_key=True)
+    ref_sid = db.Column(db.String(50), db.ForeignKey('message.sid', ondelete="CASCADE"), nullable=False)
+    to_name = db.Column(db.String(80), nullable=True)
 
     __mapper_args__ = {
         "polymorphic_identity": "forward_details",
-        'inherit_condition': id == Message.id
+        'inherit_condition': sid == Message.sid
     }
 
-    def __init__(self, id, ref_id, to_name, name, body, intent=intents['TAKE_MC']):
+    def __init__(self, sid, ref_sid, to_name, name, body, intent=intents['TAKE_MC']):
         timestamp = datetime.now()
-        super().__init__(id, name, body, intent, TEMP, timestamp) # initialise message
-        self.ref_id = ref_id
+        super().__init__(sid, name, body, intent, TEMP, timestamp) # initialise message
+        self.ref_sid = ref_sid
         self.to_name = to_name
         db.session.add(self)
         db.session.commit()
 
     @classmethod
-    def get_all_forwards(cls, ref_id):
+    def get_all_forwards(cls, ref_sid):
         msges = cls.query.filter_by(
-            ref_id = ref_id
+            ref_sid = ref_sid
         )
         return msges
 

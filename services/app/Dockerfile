@@ -55,9 +55,10 @@ RUN crontab /etc/cron.d/azure_cron.txt
  
 # Create the log file to be able to run tail
 RUN touch /var/log/cron.log
+RUN touch /var/log/cron2.log
 
 # Run the command on container startup
-CMD cron && tail -f /var/log/cron.log
+CMD cron && tail -f /var/log/cron.log && tail -f /var/log/cron2.log
 
 # # Switch to the app user
 # USER app

@@ -1,26 +1,32 @@
 name: chatbot
 channels:
   - conda-forge
-  - defaults
 dependencies:
-  - python=3.11.5
-  - pip=23.2.1
-  - spacy=3.6.1
-  - numpy=1.26.0
+  - python=3.10
+  - pip
+  - pip:
+    - PyMuPDF
+  - spacy
+  - numpy
   - keras
-  - matplotlib=3.8.0
-  - pandas=2.1.0
-  - nltk=3.8.1
-  - scikit-learn=1.3.0
-  - jupyter=1.0.0
-  - tensorflow=2.12.1
-  - seaborn=0.12.2
-  - gunicorn=21.2.0
-  - openpyxl=3.1.2
-  - flask=2.3.3
-  - twilio=8.9.0
-  - word2number=1.1
-  - sqlite=3.43.0
-  - msal=1.24.1
-  - python-dotenv=1.0.0
-  - flask-sqlalchemy=3.0.3
+  - matplotlib
+  - pandas
+  - nltk
+  - scikit-learn
+  - jupyter
+  - tensorflow
+  - seaborn
+  - gunicorn
+  - openpyxl
+  - flask
+  - twilio
+  - word2number
+  - sqlite
+  - msal
+  - python-dotenv
+  - flask-sqlalchemy
+  - pytesseract
+  - pytorch
+  - fire
+  - sentencepiece
+  - fairscale

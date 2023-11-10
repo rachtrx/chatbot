@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, date
 from extensions import db
-from sqlalchemy.orm import Mapped, mapped_column
+# from sqlalchemy.orm import 
 from sqlalchemy import desc
 from typing import List
 import uuid
@@ -26,10 +26,10 @@ class McDetails(Message):
     #TODO other statuses eg. wrong duration
 
     __tablename__ = "mc_details"
-    id: Mapped[int] = mapped_column(db.ForeignKey("message.id"), primary_key=True) # TODO on delete cascade?
-    _start_date: Mapped[str] = mapped_column(db.String(20), nullable=True)
-    _end_date: Mapped[str] = mapped_column(db.String(20), nullable=True)
-    duration: Mapped[str] = mapped_column(db.Integer, nullable=True)
+    sid = db.Column(db.ForeignKey("message.sid"), primary_key=True) # TODO on delete cascade?
+    _start_date = db.Column(db.String(20), nullable=True)
+    _end_date = db.Column(db.String(20), nullable=True)
+    duration = db.Column(db.Integer, nullable=True)
     
 
     __mapper_args__ = {
@@ -52,10 +52,10 @@ class McDetails(Message):
     def end_date(self, value):
         self._end_date = datetime.strftime(value, "%d/%m/%Y")
 
-    def __init__(self, id, number, body, intent=intents['TAKE_MC']):
+    def __init__(self, sid, number, body, intent=intents['TAKE_MC']):
         name = User.get_user(number).name
         timestamp = datetime.now()
-        super().__init__(id, name, body, intent, TEMP, timestamp)
+        super().__init__(sid, name, body, intent, TEMP, timestamp)
         db.session.add(self)
         db.session.commit()
     
@@ -395,8 +395,8 @@ class McDetails(Message):
             for n in range(self.duration):
                 yield self.start_date + timedelta(n)
 
-        details = [[f"'{datetime.strftime(date, '%d/%m/%Y')}", self.name] for date in daterange()]
-        for date, name in details:
+        details = [[f"'{datetime.strftime(date, '%d/%m/%Y')}", self.name, self.user.dept] for date in daterange()]
+        for date, name, dept in details:
             print(date)
         
         return details
@@ -432,7 +432,7 @@ class McDetails(Message):
                     # status_callback=os.environ.get("CALLBACK_URL")
                 )
 
-                new_message = ForwardDetails(message.sid, self.id, relation.name, self.user.name, body)
+                new_message = ForwardDetails(message.sid, self.sid, relation.name, self.user.name, body)
                 return new_message
 
             else:
@@ -448,41 +448,53 @@ class McDetails(Message):
 
         print(f"Type of date in confirm: {type(self.start_date)}")
 
-        statement = f"Hi {self.user.name}, Kindly confirm that you are on MC for {self.duration} days from {datetime.strftime(self.start_date, '%d/%m/%Y')} to {datetime.strftime(self.end_date, '%d/%m/%Y')}. I will help you to inform "
+        # statement = f"Hi {self.user.name}, Kindly confirm that you are on MC for {self.duration} days from {datetime.strftime(self.start_date, '%d/%m/%Y')} to {datetime.strftime(self.end_date, '%d/%m/%Y')}. I will help you to inform "
 
         @loop_relations
         def generate_each_relation(relation):
 
-            return f"{relation.name} ({str(relation.number)})"
+            # return [relation.name, str(relation.number)]
+            return [relation.name, str(relation.number)]
         
-        statements_list = generate_each_relation(self.user)
+        data_list = generate_each_relation(self.user)
 
-        if statements_list == None:
+        if data_list == None:
             return None
 
         # list of return statements
-        else:
-            statement = statement + join_with_commas_and(statements_list)
+        # else:
+        #     statement += join_with_commas_and(data_list)
 
-            # content_variables = json.dumps({
-            #     '1': self.user.name,
-            #     '2': self.duration,
-            #     '3': datetime.strftime(self.start_date, '%d/%m/%Y'),
-            #     '4': datetime.strftime(self.end_date, '%d/%m/%Y'),
-            #     '5': statements_list[0][0],
-            #     '6': statements_list[0][1],
-            #     '7': statements_list[1][0],
-            #     '8': statements_list[1][1]
-            # })
+        content_variables = {
+            '1': self.user.name,
+            '2': str(self.duration),
+            '3': datetime.strftime(self.start_date, '%d/%m/%Y'),
+            '4': datetime.strftime(self.end_date, '%d/%m/%Y'),
+        }
 
-            # message = client.messages.create(
-            #         to='whatsapp:+65' + str(self.user.number),
-            #         from_=os.environ.get("MESSAGING_SERVICE_SID"),
-            #         content_sid=os.environ.get("MC_CONFIRMATION_CHECK_SID"),
-            #         content_variables=content_variables,
-            #         # status_callback=os.environ.get("CALLBACK_URL")
-            #     )
+        count = 5
+        if len(data_list) > 0:
+            for name, number in data_list:
+                content_variables[str(count)] = name
+                content_variables[str(count + 1)] = number
+                count += 2
+
+            content_variables = json.dumps(content_variables)
+
+            message = client.messages.create(
+                    to='whatsapp:+65' + str(self.user.number),
+                    from_=os.environ.get("MESSAGING_SERVICE_SID"),
+                    content_sid=os.environ.get("MC_CONFIRMATION_CHECK_SID"),
+                    content_variables=content_variables
+                )
+
+            return message
+
+        return None
+
+        
+        # print(message.body)
 
         # statement = f"Hi, Kindly confirm that you are on MC for {self.duration} days from {datetime.strftime(self.start_date, '%d/%m/%Y')} to {datetime.strftime(self.end_date, '%d/%m/%Y')}. I will help you to inform your RO and HOD"
         
-            return statement
+            # return statement

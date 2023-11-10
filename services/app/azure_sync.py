@@ -93,12 +93,12 @@ def main():
 
     acquire_token(config['scope'])
 
-    col_order = ['name', 'number', 'email', 'reporting_officer_name', 'hod_name']
+    col_order = ['name', 'number', 'dept', 'email', 'reporting_officer_name', 'hod_name']
 
     # SECTION AZURE SIDE
     tables = sync_user_info()
 
-    users = pd.DataFrame(data=tables[0], columns=["name", "number", "email"])
+    users = pd.DataFrame(data=tables[0], columns=["name", "number", "dept", "email"])
     df_replace_spaces(users)
     users['number'] = users["number"].astype(int)
 
@@ -143,14 +143,20 @@ def main():
 
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
 
         try:
-            for name, number, email, reporting_officer, hod in old_users_tuples:
+            for name, number, dept, email, reporting_officer, hod in old_users_tuples:
                 cursor.execute('DELETE FROM user WHERE name = ?', (name, ))
+            
+            conn.commit()
+            conn.close()
+            
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
 
-            for name, number, email, reporting_officer, hod in new_users_tuples:
-                cursor.execute('INSERT INTO user (name, number, email) VALUES (?, ?, ?)', (name, number, email))
+            for name, number, dept, email, reporting_officer, hod in new_users_tuples:
+                cursor.execute('INSERT INTO user (name, number, dept, email) VALUES (?, ?, ?, ?)', (name, number, dept, email))
 
             conn.commit()
             conn.close()
@@ -159,10 +165,10 @@ def main():
             cursor = conn.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
                 
-            for name, number, email, reporting_officer, hod in update_users_tuples:
-                cursor.execute('UPDATE user SET number = ?, email = ?, reporting_officer_name = ?, hod_name = ? WHERE name = ?', (number, email, reporting_officer, hod, name))
+            for name, number, dept, email, reporting_officer, hod in update_users_tuples:
+                cursor.execute('UPDATE user SET number = ?, dept = ?, email = ?, reporting_officer_name = ?, hod_name = ? WHERE name = ?', (number, dept, email, reporting_officer, hod, name))
 
-            for name, number, email, reporting_officer, hod in new_users_tuples:
+            for name, number, dept, email, reporting_officer, hod in new_users_tuples:
                 cursor.execute('UPDATE user SET reporting_officer_name = ?, hod_name = ? WHERE name = ?', (reporting_officer, hod, name))
 
             conn.commit()

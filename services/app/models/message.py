@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, date
 from extensions import db
-from sqlalchemy.orm import Mapped, mapped_column
+# from sqlalchemy.orm import 
 from sqlalchemy import desc
 from typing import List
 import uuid
@@ -18,21 +18,22 @@ from .user import User
 class Message(db.Model):
 
     __tablename__ = "message"
-    id: Mapped[str] = mapped_column(db.String(80), primary_key=True, nullable=False)
-    name: Mapped[str] = mapped_column(db.Integer(), db.ForeignKey('user.name', ondelete="CASCADE"), nullable=False)
-    type: Mapped[str]
-    body: Mapped[str] = mapped_column(db.Integer(), nullable=False)
-    intent: Mapped[int] = mapped_column(db.Integer(), nullable=False)
-    timestamp: Mapped[datetime] = mapped_column(db.DateTime, nullable=False)
-    status: Mapped[int] = mapped_column(db.Integer(), nullable=False)
+    sid = db.Column(db.String(80), primary_key=True, nullable=False)
+    name = db.Column(db.Integer(), db.ForeignKey('user.name', ondelete="CASCADE"), nullable=False)
+    type = db.Column(db.String(50))
+    body = db.Column(db.Integer(), nullable=False)
+    intent = db.Column(db.Integer(), nullable=False)
+    timestamp = db.Column(db.DateTime, nullable=False)
+    status = db.Column(db.Integer(), nullable=False)
+    latest_sid = db.Column(db.String(80), nullable=True)
 
     __mapper_args__ = {
         "polymorphic_identity": "message",
         "polymorphic_on": "type",
     }
 
-    def __init__(self, id, name, body, intent, status, timestamp):
-        self.id = id
+    def __init__(self, sid, name, body, intent, status, timestamp):
+        self.sid = sid
         self.name = name
         self.body = body
         self.intent = intent
@@ -72,9 +73,9 @@ class Message(db.Model):
         return from_number
     
     @staticmethod
-    def get_id(request):
-        id = request.form.get("MessageSid")
-        return id
+    def get_sid(request):
+        sid = request.form.get("MessageSid")
+        return sid
 
     
     def commit_message(self, status):
@@ -86,9 +87,18 @@ class Message(db.Model):
         return True
     
     @classmethod
-    def get_message_by_id(cls, id):
+    def get_message_by_sid(cls, sid):
         msg = cls.query.filter_by(
-            id=id
+            status=PENDING_CALLBACK,
+            sid=sid
+        ).first()
+        return msg
+    
+    @classmethod
+    def get_message_by_latest_sid(cls, sid):
+        msg = cls.query.filter_by(
+            status=PENDING_CALLBACK,
+            latest_sid=sid
         ).first()
         return msg
     
@@ -117,7 +127,10 @@ class Message(db.Model):
                 to= 'whatsapp:+65' + str(self.user.number),
                 body=f"All messages have been sent successfully"
             )
-
+        
+    def update_latest_sid_for_callback(self, sid):
+        self.latest_sid = sid
+        self.commit_message(PENDING_CALLBACK)
 
     
     # @classmethod
