@@ -1,4 +1,6 @@
 import time
+from datetime import datetime
+import pytz
 from models.exceptions import AzureSyncError
 
 def join_with_commas_and(lst):
@@ -50,3 +52,7 @@ def delay_decorator(message, seconds = 1, retries = 5):
             
         return inner_wrapper
     return outer_wrapper
+
+def current_sg_time():
+    current_time_singapore = datetime.now(pytz.timezone('Asia/Singapore'))
+    return current_time_singapore

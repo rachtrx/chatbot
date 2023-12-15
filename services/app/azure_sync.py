@@ -6,11 +6,12 @@ import requests
 from dotenv import load_dotenv
 import pandas as pd
 import numpy as np
-from models import User, McDetails
 import traceback
 import sqlite3
-from app import client, manager
+from config import manager
 import datetime
+
+from models.chatbot import Chatbot
 
 db_path = os.path.join(os.path.dirname(__file__), 'chatbot.db')
 
@@ -27,10 +28,10 @@ config = {
 # create an MSAL instance providing the client_id, authority and client_credential params
 msal_instance = msal.ConfidentialClientApplication(config['client_id'], authority=config['authority'], client_credential=config['client_secret'])
 
-def acquire_token(scope):
+def acquire_token(scope=config['scope']):
     # First, try to lookup an access token in cache
     token_result = msal_instance.acquire_token_silent(scope, account=None)
-    print("retrieving token")
+    # print("retrieving token")
 
     # If the token is available in cache, save it to a variable
     if token_result:
@@ -39,7 +40,7 @@ def acquire_token(scope):
     # If the token is not available in cache, acquire a new one from Azure AD and save it to a variable
     if not token_result:
         token_result = msal_instance.acquire_token_for_client(scopes=scope)
-        print(token_result)
+        # print(token_result)
         access_token = 'Bearer ' + token_result['access_token']
 
         print(f"Live env: {os.environ.get('LIVE')}")
@@ -52,22 +53,13 @@ def acquire_token(scope):
 
     return
 
-def send_error_msg():
-    client.messages.create(
-        from_=os.environ.get("TWILIO_NO"),
-        to=os.environ.get("TEMP_NO"),
-        body="Something went wrong with the sync"
-    )
-
-    return True
-
 def sync_user_info():
     '''Returns a 2D list containing the user details within the inner array'''
 
     USERS_TABLE_URL = f"https://graph.microsoft.com/v1.0/drives/{os.environ.get('DRIVE_ID')}/items/{os.environ.get('USERS_FILE_ID')}/workbook/worksheets/Users/tables/UsersTable/rows"
     LOOKUP_TABLE_URL = f"https://graph.microsoft.com/v1.0/drives/{os.environ.get('DRIVE_ID')}/items/{os.environ.get('USERS_FILE_ID')}/workbook/worksheets/Lookup/tables/LookupTable/rows"
 
-    print(manager.headers)
+    # print(manager.headers)
 
     # Make a GET request to the provided url, passing the access token in a header
     users_request = requests.get(url=USERS_TABLE_URL, headers=manager.headers)
@@ -75,9 +67,9 @@ def sync_user_info():
     user_arrs = [tuple(info) for object_info in users_request.json()['value'] for info in object_info['values']]
     lookups_arrs = [tuple(info) for object_info in lookups_request.json()['value'] for info in object_info['values']]
 
-    print(lookups_arrs)
+    # print(lookups_arrs)
 
-    print(f"user info: {user_arrs}")
+    # print(f"user info: {user_arrs}")
 
     return (user_arrs, lookups_arrs) # info is already a list so user_info is a 2D list
 
@@ -100,7 +92,15 @@ def main():
 
     users = pd.DataFrame(data=tables[0], columns=["name", "number", "dept", "email"])
     df_replace_spaces(users)
-    users['number'] = users["number"].astype(int)
+    # print(users)
+    try:
+        users['number'] = users["number"].astype(int)
+    except:
+        nan_mask = users["number"].isna()
+        nan_names = users.loc[nan_mask, 'name']
+        names_arr = nan_names.values
+        body = f"The phone number is missing for {', '.join(names_arr)}"
+        Chatbot.send_error_msg(body)
 
     lookups = pd.DataFrame(data = tables[1], columns=["name", "reporting_officer_name", "hod_name"])
     df_replace_spaces(lookups)
@@ -137,8 +137,8 @@ def main():
         update_users_tuples = [tuple(update_user) for update_user in update_users.values]
         old_users_tuples = [tuple(old_user) for old_user in old_users.values]
         new_users_tuples = [tuple(new_user) for new_user in new_users.values]
-        print(old_users_tuples)
-        print(new_users_tuples)
+        # print(old_users_tuples)
+        # print(new_users_tuples)
 
 
         conn = sqlite3.connect(db_path)
@@ -177,7 +177,7 @@ def main():
         except Exception as e:
             conn.commit()
             conn.close()
-            send_error_msg()
+            Chatbot.send_error_msg()
             tb = traceback.format_exc()
             print(f"Error: {e}")
             print(tb)

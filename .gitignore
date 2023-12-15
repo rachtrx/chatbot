@@ -5,3 +5,4 @@ services/app/.env
 token.txt
 services/app/notebooks/cc0003.pdf
 services/app/notebooks/output.txt
+services/es/.env

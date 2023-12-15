@@ -4,7 +4,6 @@ from extensions import db
 from sqlalchemy import Column, ForeignKey, Integer, String, desc
 from typing import List
 import uuid
-from constants import intents, month_mapping, day_mapping, TEMP, days_arr, PENDING_CALLBACK, FAILED
 import re
 from dateutil.relativedelta import relativedelta
 from twilio.rest import Client
@@ -16,7 +15,6 @@ class User(db.Model):
     name = db.Column(db.String(80), primary_key=True, nullable=False)
     number = db.Column(db.Integer(), unique=True, nullable=False)
     dept = db.Column(db.String(50), nullable=False)
-    messages = db.relationship('Message', backref=db.backref('user'), post_update=True)
 
     email = db.Column(db.String(120), unique=True, nullable=False)
 
@@ -34,6 +32,10 @@ class User(db.Model):
     # hod_name = Column(db.String(80), db.ForeignKey('user.name', ondelete="SET NULL"), nullable=True)
     # hod = db.relationship('User', backref=db.backref('dept_members'), remote_side=[name], post_update=True, foreign_keys=[hod_name])
 
+    @property
+    def sg_number(self):
+        return 'whatsapp:+65' + str(self.number) 
+
     def __init__(self, name, number, dept, email, reporting_officer=None, hod=None):
         self.name = name
         self.number = number
@@ -47,6 +49,14 @@ class User(db.Model):
         user = cls.query.filter_by(number=from_number).first()
         if user:
             return user
+        else:
+            return None
+        
+    @classmethod
+    def get_principal(cls):
+        principal = cls.query.filter_by(dept="Principal").first()
+        if principal:
+            return principal.name, principal.number
         else:
             return None
         

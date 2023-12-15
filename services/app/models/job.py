@@ -4,37 +4,108 @@ from extensions import db
 from sqlalchemy import desc
 from typing import List
 import uuid
-from constants import intents, month_mapping, day_mapping, TEMP, days_arr, PENDING_CALLBACK, FAILED
+from constants import intents, errors, months_regex, days_regex, ddmm_start_date_pattern, ddmm_end_date_pattern, final_duration_extraction, start_day_pattern, end_day_pattern, month_mapping, day_mapping, days_arr, TEMP, DURATION_CONFLICT, DOUBLE_MESSAGE, PENDING_FORWARD_STATUS, PENDING_USER_REPLY, CONFIRM, CANCEL, COMPLETE, FAILED
 import re
 from dateutil.relativedelta import relativedelta
-from twilio.rest import Client
 import os
-import json
+import uuid
+from utilities import current_sg_time
+from config import manager
 
-
-from .forward_details import ForwardDetails
+from constants import mc_pattern, intents
+from .exceptions import ReplyError, AzureSyncError
 from .message import Message
 from .user import User
-from .exceptions import DatesMismatchError, ReplyError
+from .chatbot import Chatbot
 
-from utilities import loop_relations, join_with_commas_and
+# TODO CHANGE ALL MESSAGE TO USER_STR
 
-#IMPT SECTION possible to create an interface for time?
+class Job(db.Model):
+    __tablename__ = 'job'
+    type = db.Column(db.String(50))
+    job_number = db.Column(db.String, primary_key=True)
 
-class McDetails(Message):
+    name = db.Column(db.String(), db.ForeignKey('user.name', ondelete="CASCADE"), nullable=False)
+    # Other job-specific fields
+    status = db.Column(db.Integer(), nullable=False)
+    created_at = db.Column(db.DateTime, default=current_sg_time())
 
-    #TODO other statuses eg. wrong duration
+    user = db.relationship('User', backref='jobs')
+    
+    __mapper_args__ = {
+        "polymorphic_identity": "job",
+        "polymorphic_on": "type",
+    }
 
-    __tablename__ = "mc_details"
-    sid = db.Column(db.ForeignKey("message.sid"), primary_key=True) # TODO on delete cascade?
+    def __init__(self, name):
+        print(f"current time: {current_sg_time()}")
+        self.job_number = uuid.uuid4().hex
+        self.name = name
+        self.created_at = current_sg_time()
+        self.status = TEMP
+        db.session.add(self)
+        db.session.commit()
+
+    @property
+    def forwarded_messages(self):
+
+        forwarded_msgs = [msg for msg in self.messages if msg.type == "forward_message"]
+        return forwarded_msgs
+
+    @classmethod
+    def create_job(cls, intent, sid, first_msg, *args, **kwargs):
+        if intent == intents['TAKE_MC']:
+            new_job = McJob(*args, **kwargs)
+        # Add conditions for other subclasses
+        elif intent == intents['OTHERS'] or intent == intents['ES_SEARCH']:
+            new_job =  cls(*args, **kwargs)
+        else:
+            raise ValueError(f"Unknown intent ID: {intent}")
+        new_message = Message(new_job.job_number, sid, first_msg)
+        return new_message
+    
+    def commit_status(self, status):
+        '''tries to update status'''
+        self.status = status
+        # db.session.add(self)
+        db.session.commit()
+
+        return True
+    
+    @classmethod
+    def get_recent_message(cls, number):
+        '''Returns the user if they have any pending MC message from the user within 1 hour'''
+        recent_msg = Message.query.join(cls).join(User).filter(
+            User.name == User.get_user(number).name,
+            Message.status != DOUBLE_MESSAGE,
+            Message.status != PENDING_FORWARD_STATUS
+        ).order_by(
+            desc(Message.timestamp)
+        ).first()
+        
+        if recent_msg:
+            timestamp = recent_msg.timestamp
+            current_time = datetime.now()
+            time_difference = current_time - timestamp
+            print(time_difference)
+            if time_difference < timedelta(minutes=5):
+                return recent_msg
+            
+        return None
+
+class McJob(Job):
+    __tablename__ = "mc_job"
+    job_number = db.Column(db.ForeignKey("job.job_number"), primary_key=True) # TODO on delete cascade?
     _start_date = db.Column(db.String(20), nullable=True)
     _end_date = db.Column(db.String(20), nullable=True)
     duration = db.Column(db.Integer, nullable=True)
     
-
     __mapper_args__ = {
-        "polymorphic_identity": "mc_details"
+        "polymorphic_identity": "mc_job"
     }
+
+    def __init__(self, name):
+        super().__init__(name)
 
     @property
     def start_date(self):
@@ -51,19 +122,12 @@ class McDetails(Message):
     @end_date.setter
     def end_date(self, value):
         self._end_date = datetime.strftime(value, "%d/%m/%Y")
-
-    def __init__(self, sid, number, body, intent=intents['TAKE_MC']):
-        name = User.get_user(number).name
-        timestamp = datetime.now()
-        super().__init__(sid, name, body, intent, TEMP, timestamp)
-        db.session.add(self)
-        db.session.commit()
     
-    def generate_base(self):
+    def generate_base(self, message):
         '''Generates the basic details of the MC, including the start, end and duration of MC'''
         # self.duration is extracted duration
-        self.duration = int(self.duration_extraction()) if self.duration_extraction() else None
-        duration_c = self.set_start_end_date() # checks for conflicts and sets the dates
+        self.duration = int(self.duration_extraction(message)) if self.duration_extraction(message) else None
+        duration_c = self.set_start_end_date(message) # checks for conflicts and sets the dates
 
         print("start generate_base")
         
@@ -74,7 +138,10 @@ class McDetails(Message):
                 self.duration = duration_c
             # if there are specified dates and duration is wrong
             elif self.duration and self.duration != duration_c:
-                raise DatesMismatchError(f"The durations do not match! Did you mean {duration_c} days?") #TODO fix this!
+
+                body = f'The duration from {self.start_date} to {self.end_date} ({duration_c}) days) do not match with {self.duration} days. Please send another message in the form "From dd/mm to dd/mm" to indicate the MC dates. Thank you!'
+
+                raise ReplyError(body, intents['TAKE_MC'], status=DURATION_CONFLICT) #TODO fix this!
             
         # if there is only 1 specified date and duration_e
         elif self.duration and self.start_date:
@@ -92,17 +159,21 @@ class McDetails(Message):
             except TypeError: # start, end dates and duration not specified
                 return False
             
+        # TODO if self.start_date is > today 8am, splice out from tomorrow
+        # check if theres overlaps on sharepoint
+
+            
         print("Generate base working")
         
         return True
     
-    def set_start_end_date(self):
+    def set_start_end_date(self, message):
         '''This function takes in a mc_message and returns True or False, at the same time setting start and end dates where possible and resolving possible conflicts. Checks if can do something about start date, end date and duration'''
 
-        named_month_start, named_month_end = self.named_month_extraction()
-        ddmm_start, ddmm_end = self.named_ddmm_extraction()
+        named_month_start, named_month_end = self.named_month_extraction(message)
+        ddmm_start, ddmm_end = self.named_ddmm_extraction(message)
         print(f'ddmm_end: {ddmm_end}')
-        day_start, day_end = self.named_day_extraction()
+        day_start, day_end = self.named_day_extraction(message)
         
         start_dates = [date for date in [named_month_start, ddmm_start, day_start] if date is not None]
         end_dates = [date for date in [named_month_end, ddmm_end, day_end] if date is not None]
@@ -110,9 +181,15 @@ class McDetails(Message):
         print(start_dates, end_dates)
 
         if len(start_dates) > 1:
-            raise DatesMismatchError(f"Conflicting start dates {', '.join(str(date) for date in start_dates)}")
+
+            body = f'Conflicting start dates {", ".join(str(date) for date in start_dates)}. Please send another message in the form "From dd/mm to dd/mm" to indicate the MC dates. Thank you!'
+
+            raise ReplyError(body, intent=intents['TAKE_MC'], status=DURATION_CONFLICT)
         if len(end_dates) > 1:
-            raise DatesMismatchError(f"Conflicting end dates {', '.join(str(date) for date in start_dates)}")
+            
+            body = f'Conflicting end dates {", ".join(str(date) for date in end_dates)}. Please send another message in the form "From dd/mm to dd/mm" to indicate the MC dates. Thank you!'
+
+            raise ReplyError(body, intent=intents['TAKE_MC'], status=DURATION_CONFLICT)
         
         if len(start_dates) == 1:
             self.start_date = start_dates[0]
@@ -141,25 +218,14 @@ class McDetails(Message):
 
 
     #SECTION 
-    def named_ddmm_extraction(self):
+    def named_ddmm_extraction(self, mc_message):
         '''Check for normal date pattern ie. 11/11 or something'''
 
-        date_pattern = r'[12][0-9]|3[01]|0?[1-9]'
-        month_pattern = r'1[0-2]|0?[1-9]'
-        # full_ddmm_pattern = r'(' + date_pattern + r')/(' + month_pattern + r')'
+        compiled_start_date_pattern = re.compile(ddmm_start_date_pattern, re.IGNORECASE)
+        compiled_end_date_pattern = re.compile(ddmm_end_date_pattern, re.IGNORECASE)
 
-        date_pattern = r'(?P<date>' + date_pattern + r')/(?P<month>' + month_pattern + r')'
-
-        normal_start_date_pattern = r'((from|on)\s' + date_pattern + r')' 
-        normal_end_date_pattern = r'((to|until|til(l)?)\s' + date_pattern + r')'
-
-
-        compiled_start_date_pattern = re.compile(normal_start_date_pattern, re.IGNORECASE)
-        compiled_end_date_pattern = re.compile(normal_end_date_pattern, re.IGNORECASE)
-
-
-        match_start_dates = compiled_start_date_pattern.search(self.body)
-        match_end_dates = compiled_end_date_pattern.search(self.body)
+        match_start_dates = compiled_start_date_pattern.search(mc_message)
+        match_end_dates = compiled_end_date_pattern.search(mc_message)
 
         start_date = end_date = None
 
@@ -187,9 +253,9 @@ class McDetails(Message):
         # Return the capitalized full month name from the dictionary
         return month_mapping[month_key]
 
-    def named_month_extraction(self):
+    def named_month_extraction(self, message):
         '''Check for month pattern ie. 11 November or November 11'''
-        user_str = re.sub(r'\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)\b', self.replace_with_full_month, self.body, flags=re.IGNORECASE)
+        user_str = re.sub(months_regex, self.replace_with_full_month, message, flags=re.IGNORECASE)
 
         #SECTION proper dates
         months = r'January|February|March|April|May|June|July|August|September|October|November|December'
@@ -231,21 +297,13 @@ class McDetails(Message):
 
 
     # SECTION the functions after these check for dates
-    def duration_extraction(self):
+    def duration_extraction(self, message):
         '''ran always to check if user gave any duration'''
-        duration_pattern = r'(?P<duration1>\d\d?\d?|a)'
-        alternative_duration_pattern = r'(?P<duration2>\d\d?\d?|a)'
-        day_pattern = r'(day|days)'
-        action_pattern = r'(leave|mc|appointment)'
-
-        # Combine the basic patterns into two main alternatives
-        alternative1 = duration_pattern + r'\s.*?' + day_pattern + r'\s.*?' + action_pattern
-        alternative2 = action_pattern + r'\s.*?' + alternative_duration_pattern + r'\s.*?' + day_pattern
 
         # Combine the two main alternatives into the final pattern
-        urgent_absent_pattern = re.compile(r'\b(?:on|taking|take) (' + alternative1 + r'|' + alternative2 + r')\b', re.IGNORECASE)
+        urgent_absent_pattern = re.compile(final_duration_extraction, re.IGNORECASE)
 
-        match_duration = urgent_absent_pattern.search(self.body)
+        match_duration = urgent_absent_pattern.search(message)
         if match_duration:
             duration = match_duration.group("duration1") or match_duration.group("duration2")
             print(f'duration: {duration}')
@@ -300,22 +358,11 @@ class McDetails(Message):
         # Return the capitalized full month name from the dictionary
         return prefix + ' ' + day_mapping[day_key]
 
-    def named_day_extraction(self):
+    def named_day_extraction(self, message):
         '''checks the body for days, returns (start_date, end_date)'''
 
-        start_prefixes = r'from|on|for|mc|starting|doctor'
-        end_prefixes = r'to|until|til(l)?|ending'
-
-
         # ignore all the "this", it will be handled later
-        user_str = re.sub(r'\b(?P<prefix>' + start_prefixes + r'|' + end_prefixes + r')\s*(this)?\s*(?P<offset>next|nx)?\s(?P<days>mon(day)?|tue(s(day)?)?|wed(nesday)?|thu(rs(day)?)?|fri(day)?|sat(urday)?|sun(day)?|today|tomorrow|tmr|tdy)\b', self.replace_with_full_day, self.body, flags=re.IGNORECASE)
-
-        print(user_str)
-
-        # done fixing the day names
-        days_pattern = r'Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday'
-        start_day_pattern = r'(' + start_prefixes + r')\s*(?P<start_buffer>next|nx)?\s(?P<start_day>' + days_pattern + r')'
-        end_day_pattern = r'(' + end_prefixes + r')\s*(?P<end_buffer>next|nx)?\s(?P<end_day>' + days_pattern + r')'
+        user_str = re.sub(days_regex, self.replace_with_full_day, message, flags=re.IGNORECASE)
 
         compiled_start_day_pattern = re.compile(start_day_pattern, re.IGNORECASE)
         compiled_end_day_pattern = re.compile(end_day_pattern, re.IGNORECASE)
@@ -401,100 +448,40 @@ class McDetails(Message):
         
         return details
     
-    def send_message(self, client=None):
+    def validate_mc_replied_message(self, decision, new_message):
 
-        @loop_relations
-        def generate_each_message(relation):
-            '''This function sets up the details of the forward to HOD and reporting officer message'''
+        if self.status == PENDING_USER_REPLY:
+            if decision == CONFIRM:
+                self.forward_and_update_azure(new_message)
+                return
             
-            body = f'Hi {relation.name}! This is to inform you that {self.user.name} will be taking {self.duration} days MC from {self.start_date} to {self.end_date}'
+            elif decision == CANCEL:
+                raise ReplyError(errors['WRONG_DATE'], intent=intents['TAKE_MC'], new_message=new_message)
+            
+        elif self.status == COMPLETE and decision == CANCEL:
+            # TODO CANCEL THE MC
+            print("CANCEL THE MC")
+            raise ReplyError("This feature hasn't been immplemented yet, sorry!", job_status=CANCEL, new_message=new_message)
 
-            print(f"Type of date in notify: {type(self.start_date)}")
+        elif self.status == FAILED and decision == CONFIRM:
+            raise ReplyError(errors['CONFIRMING_CANCELLED_MSG'], new_message=new_message)
 
-            if client:
-
-                content_variables = json.dumps({
-                    '1': relation.name,
-                    '2': self.user.name,
-                    '3': str(self.duration),
-                    '4': datetime.strftime(self.start_date, "%d/%m/%Y"),
-                    '5': datetime.strftime(self.end_date, "%d/%m/%Y")
-                })
-
-                print(content_variables)
-
-                # Send the message
-                message = client.messages.create(
-                    to='whatsapp:+65' + str(relation.number),
-                    from_=os.environ.get("MESSAGING_SERVICE_SID"),
-                    content_sid=os.environ.get("MC_NOTIFY_SID"),
-                    content_variables=content_variables,
-                    # status_callback=os.environ.get("CALLBACK_URL")
-                )
-
-                new_message = ForwardDetails(message.sid, self.sid, relation.name, self.user.name, body)
-                return new_message
-
-            else:
-                return body # local
+        else: # TODO IMPT need to wait awhile first!
+            raise ReplyError(errors['UNKNOWN_ERROR'], new_message=new_message)
         
-        messages_list = generate_each_message(self.user)
-        print(f'Messages List: {messages_list}')
-        return messages_list
-    
-    
-    def generate_reply(self, client):
-        '''This function gets a mc_details object and returns a confirmation message'''
 
-        print(f"Type of date in confirm: {type(self.start_date)}")
+    def forward_and_update_azure(self, new_message):
 
-        # statement = f"Hi {self.user.name}, Kindly confirm that you are on MC for {self.duration} days from {datetime.strftime(self.start_date, '%d/%m/%Y')} to {datetime.strftime(self.end_date, '%d/%m/%Y')}. I will help you to inform "
+        content_variables_and_users_list = Chatbot.send_mc_message(self)
+        Chatbot.forward_template_msg(content_variables_and_users_list, self, os.environ.get("MC_NOTIFY_SID"), new_message)
+            
+        # upload to azure
+        try:
+            manager.upload_data(self)
+            return None # nothing to reply, maybe acknowledgement TODO
+        except AzureSyncError as e:
+            print(e.message)
+            raise ReplyError(errors['AZURE_SYNC_ERROR'], intent=intents['TAKE_MC'], new_message=new_message)
 
-        @loop_relations
-        def generate_each_relation(relation):
-
-            # return [relation.name, str(relation.number)]
-            return [relation.name, str(relation.number)]
-        
-        data_list = generate_each_relation(self.user)
-
-        if data_list == None:
-            return None
-
-        # list of return statements
-        # else:
-        #     statement += join_with_commas_and(data_list)
-
-        content_variables = {
-            '1': self.user.name,
-            '2': str(self.duration),
-            '3': datetime.strftime(self.start_date, '%d/%m/%Y'),
-            '4': datetime.strftime(self.end_date, '%d/%m/%Y'),
-        }
-
-        count = 5
-        if len(data_list) > 0:
-            for name, number in data_list:
-                content_variables[str(count)] = name
-                content_variables[str(count + 1)] = number
-                count += 2
-
-            content_variables = json.dumps(content_variables)
-
-            message = client.messages.create(
-                    to='whatsapp:+65' + str(self.user.number),
-                    from_=os.environ.get("MESSAGING_SERVICE_SID"),
-                    content_sid=os.environ.get("MC_CONFIRMATION_CHECK_SID"),
-                    content_variables=content_variables
-                )
-
-            return message
-
-        return None
-
-        
-        # print(message.body)
-
-        # statement = f"Hi, Kindly confirm that you are on MC for {self.duration} days from {datetime.strftime(self.start_date, '%d/%m/%Y')} to {datetime.strftime(self.end_date, '%d/%m/%Y')}. I will help you to inform your RO and HOD"
-        
-            # return statement
+    def cancel_mc_base():
+        return

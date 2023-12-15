@@ -4,13 +4,12 @@ from extensions import db
 from sqlalchemy import desc
 from typing import List
 import uuid
-from constants import intents, month_mapping, day_mapping, TEMP, days_arr, PENDING_CALLBACK, FAILED
+from constants import intents, month_mapping, day_mapping, TEMP, days_arr, DOUBLE_MESSAGE, mc_pattern
 import re
 from dateutil.relativedelta import relativedelta
-from twilio.rest import Client
 import os
+from utilities import current_sg_time
 
-from .user import User
 
 # SECTION PROBLEM: If i ondelete=CASCADE, if a hod no longer references a user the user gets deleted
 # delete-orphan means that if a user's HOD or RO is no longer associated, it gets deleted
@@ -19,47 +18,61 @@ class Message(db.Model):
 
     __tablename__ = "message"
     sid = db.Column(db.String(80), primary_key=True, nullable=False)
-    name = db.Column(db.Integer(), db.ForeignKey('user.name', ondelete="CASCADE"), nullable=False)
     type = db.Column(db.String(50))
-    body = db.Column(db.Integer(), nullable=False)
-    intent = db.Column(db.Integer(), nullable=False)
+    body = db.Column(db.String(), nullable=True)
     timestamp = db.Column(db.DateTime, nullable=False)
     status = db.Column(db.Integer(), nullable=False)
-    latest_sid = db.Column(db.String(80), nullable=True)
+    seq_no = db.Column(db.Integer(), nullable=False)
+    reply = db.Column(db.String(), nullable=True)
+    reply_sid = db.Column(db.String(80), nullable=True)
+    # latest_sid = db.Column(db.String(80), nullable=True)
+
+    job_number = db.Column(db.String, db.ForeignKey('job.job_number'), nullable=True)
+    job = db.relationship('Job', backref='messages')
 
     __mapper_args__ = {
         "polymorphic_identity": "message",
         "polymorphic_on": "type",
     }
 
-    def __init__(self, sid, name, body, intent, status, timestamp):
+    def __init__(self, job_number, sid, body):
+        print(f"current time: {current_sg_time()}")
+        self.job_number = job_number
         self.sid = sid
-        self.name = name
         self.body = body
-        self.intent = intent
-        self.timestamp = timestamp
-        self.status = status
+        self.timestamp = current_sg_time()
+        self.status = TEMP
+        self.seq_no = self.get_seq_no(job_number) + 1 if self.get_seq_no(job_number) is not None else 1
+        db.session.add(self)
+        db.session.commit()
+
+    @classmethod
+    def get_seq_no(cls, job_number):
+        return db.session.query(db.func.max(cls.seq_no)).filter(cls.job_number == job_number).scalar()
 
     @staticmethod
-    def check_for_intent(user_str):
+    def check_for_intent(message):
         '''Function takes in a user input and if intent is not MC, it returns False. Else, it will return a list with the number of days, today's date and end date'''
 
         # 2 kinds of inputs: "I will be taking 2 days leave due to a medical appointment  mc vs I will be on medical leave for 2 days"
         
-        print(f"user_str: {user_str}")
-        mc_keyword_patterns = re.compile(r'\b(?:leave|mc|sick|doctor)\b', re.IGNORECASE)
-        mc_match = mc_keyword_patterns.search(user_str)
+        print(f"message: {message}")
+        mc_keyword_patterns = re.compile(mc_pattern, re.IGNORECASE)
+        mc_match = mc_keyword_patterns.search(message)
 
         if mc_match:
-            return True
-    
-    @staticmethod
-    def check_yes_no(message):
-        confirmation_pattern = re.compile(r'^(yes|no)$', re.IGNORECASE)
+            return intents['TAKE_MC']
         
-        if confirmation_pattern.match(message):
-            return True
-        return False
+        else:
+            return intents['ES_SEARCH']
+    
+    # @staticmethod
+    # def check_confirm_cancel(message):
+    #     confirmation_pattern = re.compile(r'^(confirm|cancel)$', re.IGNORECASE)
+        
+    #     if confirmation_pattern.match(message):
+    #         return True
+    #     return False
     
     @staticmethod
     def get_message(request):
@@ -78,60 +91,37 @@ class Message(db.Model):
         return sid
 
     
-    def commit_message(self, status):
-        '''tries to update status otherise adds the object'''
+    def commit_status(self, status):
+        '''tries to update status'''
         self.status = status
-        db.session.add(self)
+        # db.session.add(self)
         db.session.commit()
 
         return True
-    
+
+    def commit_reply_sid(self, msg_meta):
+        '''tries to update generated reply'''
+        self.reply_sid = msg_meta.sid
+        # db.session.add(self)
+        db.session.commit()
+
+        return True
+
+    def commit_reply(self, body):
+        self.reply = body
+        db.session.commit()
+
     @classmethod
     def get_message_by_sid(cls, sid):
         msg = cls.query.filter_by(
-            status=PENDING_CALLBACK,
             sid=sid
         ).first()
         return msg
     
     @classmethod
-    def get_message_by_latest_sid(cls, sid):
+    def get_reply_sid(cls, sid):
+        '''This method will be used when replying the user'''
         msg = cls.query.filter_by(
-            status=PENDING_CALLBACK,
-            latest_sid=sid
+            reply_sid=sid
         ).first()
         return msg
-    
-    @classmethod
-    def get_recent_message(cls, number):
-        '''Returns the user if they have any pending MC message from the user within 1 hour'''
-        recent_msg = cls.query.filter_by(
-            name=User.get_user(number).name
-        ).order_by(
-            desc(cls.timestamp)
-        ).first()
-        
-        if recent_msg:
-            timestamp = recent_msg.timestamp
-            current_time = datetime.now()
-            time_difference = current_time - timestamp
-            print(time_difference)
-            if time_difference < timedelta(hours=1):
-                return recent_msg
-            
-        return None
-
-    def notify_complete(self, client):
-        client.messages.create(
-                from_=os.environ.get('TWILIO_NO'),
-                to= 'whatsapp:+65' + str(self.user.number),
-                body=f"All messages have been sent successfully"
-            )
-        
-    def update_latest_sid_for_callback(self, sid):
-        self.latest_sid = sid
-        self.commit_message(PENDING_CALLBACK)
-
-    
-    # @classmethod
-    # def add(cls, message,):

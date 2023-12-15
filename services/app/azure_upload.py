@@ -2,9 +2,7 @@ from datetime import datetime, timedelta
 import os
 import requests
 from dotenv import load_dotenv
-from models import AzureSyncError, ReplyError
-from config import Config
-import time
+from models import AzureSyncError, ReplyError, User
 from utilities import delay_decorator
 import pandas as pd
 import json
@@ -17,6 +15,12 @@ def get_year():
     format_date = cur_date.strftime("%Y")
 
     return format_date
+
+class AzureSyncError(Exception):
+
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
 
 class SpreadsheetManager:
     def __init__(self):
@@ -37,7 +41,7 @@ class SpreadsheetManager:
     def headers(self):
         # read the token from the file
         if os.environ.get('LIVE') == "1":
-            print("getting headers in azure upload")
+            # print("getting headers in azure upload")
             with open(os.environ.get('TOKEN_PATH'), 'r') as file:
                 token = file.read().strip()
 
@@ -77,10 +81,10 @@ class SpreadsheetManager:
 
         return table_url
 
-    def upload_data(self, mc_details):
+    def upload_data(self, job):
 
         body = {
-            "values": mc_details.generate_date_data() # this function is from mc_details class
+            "values": job.generate_date_data() # this function is from mc_details class
         }
         
         self.write_to_excel(body)
@@ -272,6 +276,9 @@ class SpreadsheetManager:
 
 
     def send_message_to_principal(self, client):
+        
+        p_name, p_number = User.get_principal()
+
         response = requests.get(url=f"{self.table_url}/rows?", headers=self.headers)
         mc_arrs = [tuple(info) for object_info in response.json()['value'] for info in object_info['values']]
         mc_table = pd.DataFrame(data = mc_arrs, columns=["date", "name", "dept"])
@@ -280,34 +287,47 @@ class SpreadsheetManager:
         mc_today = mc_table.loc[mc_table['date'] == date_today]
         
         #groupby
-        mc_today_by_dept = mc_today.groupby("dept", as_index=False).agg(total_by_dept = ("name", "count"), names = ("name", lambda x: '\r'.join(x)))
-        
-        # get values
-        dept_aggs = [tuple(dept_agg) for dept_agg in mc_today_by_dept.values]
-        message = ""
-        total = 0
-        if len(mc_today_by_dept) == 0:
-            message += "All staff are present today\r\r"
-        else:
-            for dept, total_by_dept, names in dept_aggs:
-                total += total_by_dept
-                message += f"{dept}: {total_by_dept}\r{names}\r\r"
-            
-        message += f"Total: {str(total)}"
+        mc_today_by_dept = mc_today.groupby("dept").agg(total_by_dept = ("name", "count"), names = ("name", lambda x: ', '.join(x)))
 
-        print(type(message))
-        print(type(date_today))
+        # convert to a dictionary where the dept is the key
+        dept_aggs = mc_today_by_dept.apply(lambda x: [x.total_by_dept, x.names], axis=1).to_dict()
+
+        dept_order = ('ICT', 'Finance', 'Voc Ed', 'Lower Pri', 'Upper Pri', 'Allied Professionals', 'HR')
 
         content_variables = {
-            '1': 'Bob',
+            '1': p_name,
             '2': date_today,
-            '3': message
+            '17': total
         }
+        
+        # get values
+        # message = []
+        total = 0
+        # if len(mc_today_by_dept) == 0:
+        #     message += "All staff are present today\r\r"
+        if len(mc_today_by_dept) != 0:
+            count = 3
+            for dept in dept_order:
+                found = False
+                if dept in dept_aggs:
+                    content_variables[str(count)] = dept_aggs['dept'][1]  # names
+                    content_variables[str(count + 1)] = str(dept_aggs['dept'][0])  # number of names
+                    found = True
+                    break  # Exit the loop as we found the department
+
+                if not found:  # If department was not in message, add default values
+                    content_variables[str(count)] = "NIL"
+                    content_variables[str(count + 1)] = '0'  # number of names
+
+                count += 2
+
+        # print(type(message))
+        # print(type(date_today))
 
         content_variables = json.dumps(content_variables)
         
         message = client.messages.create(
-            to=os.environ.get('TEMP_NO'),
+            to=str(p_number),
             from_=os.environ.get("MESSAGING_SERVICE_SID"),
             content_sid=os.environ.get("MC_DAILY_SID"),
             content_variables=content_variables,
@@ -315,12 +335,14 @@ class SpreadsheetManager:
         )
 
 if __name__ == "__main__":
-    from app import client
+    from app import app
+    from models.chatbot import client
     env_path = os.path.join(os.path.dirname(__file__), '.env')
     load_dotenv(dotenv_path=env_path)
     manager = SpreadsheetManager()
     try:
-        manager.send_message_to_principal(client)
+        with app.app_context():
+            manager.send_message_to_principal(client)
     except AzureSyncError as e:
         print(e.message)
-        raise ReplyError("I'm sorry, something went wrong with the code, please check with ICT")
+        # raise ReplyError("I'm sorry, something went wrong with the code, please check with ICT")

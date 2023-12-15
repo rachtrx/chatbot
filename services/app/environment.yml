@@ -30,3 +30,10 @@ dependencies:
   - fire
   - sentencepiece
   - fairscale
+  - elasticsearch-dsl>=8.0.0,<9.0.0
+  - elasticsearch=8.10.0
+  - python-docx
+  - pdfminer.six
+  - pdfplumber
+  - pytesseract
+  - Pillow

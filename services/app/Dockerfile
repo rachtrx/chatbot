@@ -39,10 +39,17 @@ RUN chmod +x entrypoint.sh
 # # chown all the files to the app user
 # RUN chown -R app:app $APP_HOME
 
-# RUN python -m spacy download en_core_web_sm
+RUN python -m spacy download en_core_web_sm
 
-# Install cron
-RUN apt-get update && apt-get -y install cron
+
+ENV DEBIAN_FRONTEND noninteractive
+
+# install cron and tesseract 
+RUN apt-get update \
+    # && apt-get install -y tesseract-ocr cron curl\
+    && apt-get install -y cron curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy azure_cron.txt file to the cron.d directory
 COPY azure_cron.txt /etc/cron.d/azure_cron.txt
@@ -58,9 +65,8 @@ RUN touch /var/log/cron.log
 RUN touch /var/log/cron2.log
 
 # Run the command on container startup
-CMD cron && tail -f /var/log/cron.log && tail -f /var/log/cron2.log
 
 # # Switch to the app user
 # USER app
 
-ENTRYPOINT [ "/home/app/web/entrypoint.sh" ]
+ENTRYPOINT ["/home/app/web/entrypoint.sh", "es01", "gunicorn", "--bind", "0.0.0.0:5001", "app:app"]
