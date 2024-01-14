@@ -2,11 +2,13 @@ from datetime import datetime
 from elasticsearch import Elasticsearch, NotFoundError
 from ._settings import index_body
 from .file_extraction import read_pdf, read_word, read_txt
-from config import manager
+from azure.utils import generate_header
 import requests
 import os
 import json
 import re
+import logging
+from logs.config import setup_logger
 
 es = Elasticsearch(
     ["https://es01:9200"],
@@ -15,16 +17,18 @@ es = Elasticsearch(
     ca_certs=os.environ.get('ES_CA_CERTS')
 )
 
+logger = setup_logger('es.manage', 'es.log')
+
 index_name = "sharepoint_docs"
 
 def create_index():
     if not es.indices.exists(index=index_name):
         # Create the index if it doesn't exist
-        print("creating index")
+        logger.info("creating index")
         response = es.indices.create(index=index_name, body=index_body)
-        print(f"Index created: {response}")
+        logger.info(f"Index created: {response}")
     else:
-        print("Index already exists")
+        logger.info("Index already exists")
 
 def process_text_to_sentences(text):
     # Replace newline characters with spaces
@@ -48,29 +52,29 @@ def index_document(fileobj, text, keywords, index = index_name):
     """
     Index a document in Elasticsearch
     """
-    doc = construct_document(fileobj)
     doc_id = fileobj["id"]
+    exists = get_document(index_name, doc_id)
+
+    if exists:
+        return
+        logger.info("doc exists!")
+    else:
+        logger.info("doc doesn't exist!")
+
+    doc = construct_document(fileobj)
 
     doc["content"] = process_text_to_sentences(text) # set the content to be the text
     doc["keywords"] = ' '.join(keywords)
 
-    # print(doc["file"]["url"])
-    # print(doc_id)
-
-    exists = get_document(index_name, doc_id)
-
-    # print(exists)
-
-    # print(doc["file"]["author"])
-
     if not exists:
+        
         resp = es.index(index=index, id=doc_id, document=doc)
-        print(f"Indexed result: {resp['result']}")
+        logger.info(f"Indexed result: {resp['result']}")
 
     else:
         update_document(doc_id, doc)
 
-    print("successfully indexed!")
+    logger.info("successfully indexed!")
 
 def update_document(doc_id, updated_doc, index=index_name):
     """
@@ -108,13 +112,14 @@ def search_documents(index, query):
 def get_document(index, doc_id):
     try:
         resp = es.get(index=index, id=doc_id)
-        # print(resp['_source'])
+
+        # logger.info(resp['_source'])
         return True
     except NotFoundError:
-        print(f"Document with ID {doc_id} not found in index {index}.")
+        logger.info(f"Document with ID {doc_id} not found in index {index}.")
         return False
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logger.info(f"An error occurred: {e}")
         return False
 
 def refresh_index(index):
@@ -132,13 +137,14 @@ def read_document(stream, filename):
 
 def loop_through_files(url, fileobj=None):
 
-    print("looping")
-    # print(manager.headers)
+    logger.info("looping")
 
-    response = requests.get(url=url, headers=manager.headers)
+    headers = generate_header()
+
+    response = requests.get(url=url, headers=headers)
     # response.raise_for_status()
     if not 200 <= response.status_code < 300:
-        print("something went wrong when getting files")
+        logger.info("something went wrong when getting files")
         return
 
     if fileobj:
@@ -177,7 +183,7 @@ def construct_document(fileobj):
         }
     }
 
-    print(f"filename: {fileobj['name']}")
+    logger.info(f"filename: {fileobj['name']}")
 
     return doc
 
@@ -198,7 +204,7 @@ def search_for_document(query):
                     best_doc = doc
                     top_sentence_no = inner_hit['_source']['sentence_no']
         else:
-            print("No matching documents found.")
+            logger.info("No matching documents found.")
 
     # Logic to find surrounding sentence numbers
     prev_sentence_no = max(1, top_sentence_no - 1)
@@ -211,9 +217,9 @@ def search_for_document(query):
     current_sentence = next((s["sentence"] for s in sentences if s['sentence_no'] == top_sentence_no), None)
     next_sentence = next((s["sentence"] for s in sentences if s['sentence_no'] == next_sentence_no), None)
 
-    print("Previous:", prev_sentence)
-    print("Current:", current_sentence)
-    print("Next:", next_sentence)
+    logger.info("Previous:", prev_sentence)
+    logger.info("Current:", current_sentence)
+    logger.info("Next:", next_sentence)
     
     data = " ".join([prev_sentence, current_sentence, next_sentence])
     result.append((data, best_doc['_source']['file']['filename'], best_doc['_source']['file']['url']))           

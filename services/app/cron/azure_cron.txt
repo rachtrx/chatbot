@@ -1,0 +1,3 @@
+TZ=Asia/Singapore
+* * * * * cd /home/app/web/ && /opt/conda/envs/chatbot/bin/python -m azure.users_sync >> /var/log/cron_sync.log 2>&1
+0 8 * * * cd /home/app/web/ && /opt/conda/envs/chatbot/bin/python -m azure.mc.upload >> /var/log/cron_report.log 2>&1

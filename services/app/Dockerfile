@@ -10,6 +10,20 @@ RUN mamba env create -f environment.yml
 # Final stage
 FROM condaforge/mambaforge:latest
 
+ENV DEBIAN_FRONTEND noninteractive
+
+# install cron and tesseract 
+RUN apt-get update \
+    # && apt-get install -y tesseract-ocr cron curl\
+    && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    cron \
+    curl \
+    postgresql-client \
+    tzdata \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 # create directory for the app user
 RUN mkdir -p /home/app
 
@@ -41,18 +55,12 @@ RUN chmod +x entrypoint.sh
 
 RUN python -m spacy download en_core_web_sm
 
-
-ENV DEBIAN_FRONTEND noninteractive
-
-# install cron and tesseract 
-RUN apt-get update \
-    # && apt-get install -y tesseract-ocr cron curl\
-    && apt-get install -y cron curl \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Set timezone
+RUN ln -sf /usr/share/zoneinfo/Asia/Singapore /etc/localtime \
+    && echo "Asia/Singapore" > /etc/timezone
 
 # Copy azure_cron.txt file to the cron.d directory
-COPY azure_cron.txt /etc/cron.d/azure_cron.txt
+COPY cron/azure_cron.txt /etc/cron.d/azure_cron.txt
  
 # Give execution rights on the cron job
 RUN chmod 0644 /etc/cron.d/azure_cron.txt
@@ -61,12 +69,12 @@ RUN chmod 0644 /etc/cron.d/azure_cron.txt
 RUN crontab /etc/cron.d/azure_cron.txt
  
 # Create the log file to be able to run tail
-RUN touch /var/log/cron.log
-RUN touch /var/log/cron2.log
+RUN touch /var/log/cron_sync.log
+RUN touch /var/log/cron_report.log
 
 # Run the command on container startup
 
 # # Switch to the app user
 # USER app
 
-ENTRYPOINT ["/home/app/web/entrypoint.sh", "es01", "gunicorn", "--bind", "0.0.0.0:5001", "app:app"]
+ENTRYPOINT ["/home/app/web/entrypoint.sh", "es01", "gunicorn", "-w", "4", "--bind", "0.0.0.0:5001", "--timeout", "120", "app:app"]

@@ -16,6 +16,10 @@ import pytesseract
 import requests
 import spacy
 
+from logs.config import setup_logger
+
+setup_logger('es.file_extraction', 'es.log')
+
 def is_bold(font_name):
     return "Bold" in font_name or "Bd" in font_name
 
