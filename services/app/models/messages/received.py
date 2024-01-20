@@ -4,7 +4,7 @@ from extensions import db
 from sqlalchemy import desc, union_all
 from typing import List
 import uuid
-from constants import intents, messages, CONFIRM, CANCEL, OK, PENDING_CALLBACK
+from constants import intents, messages, OK
 import re
 from dateutil.relativedelta import relativedelta
 import os
@@ -13,6 +13,7 @@ from config import client
 from models.exceptions import ReplyError
 from .abstract import Message
 from .sent import MessageSent
+from constants import mc_pattern
 
 from logs.config import setup_logger
 
@@ -24,8 +25,6 @@ class MessageReceived(Message):
     reply_sid = db.Column(db.String(80), nullable=True)
 
     __tablename__ = "message_received"
-
-    # job = db.relationship('Job', backref='received_messages')
 
     __mapper_args__ = {
         "polymorphic_identity": "message_received"
@@ -42,7 +41,6 @@ class MessageReceived(Message):
         
         print(f"message: {message}")
 
-        mc_pattern = r'(leave|mc|appointment|sick|doctor)' # TODO duplicate in dates.py
         mc_keyword_patterns = re.compile(mc_pattern, re.IGNORECASE)
         mc_match = mc_keyword_patterns.search(message)
 
@@ -68,9 +66,7 @@ class MessageReceived(Message):
         sid = request.form.get("MessageSid")
         return sid
 
-
     def commit_reply_sid(self, sid):
-        '''tries to update generated reply'''
         self.reply_sid = sid
         # db.session.add(self)
         db.session.commit()
@@ -78,32 +74,18 @@ class MessageReceived(Message):
 
         return True
 
-    # def commit_reply(self, body):
-    #     self.reply = body
-    #     db.session.commit()
-
-    #     self.logger.info(f"reply message committed with {self.reply}")
-    
-    # @classmethod
-    # def get_reply_sid(cls, sid):
-    #     '''This method gets the message instance based on the reply sid'''
-    #     msg = cls.query.filter_by(
-    #         reply_sid=sid
-    #     ).first()
-    #     return msg if msg else None
-
 
     ########################
     # CHATBOT FUNCTIONALITY
     ########################
 
-    def create_reply_msg(self, reply, to_no=None):
+    def create_reply_msg(self, reply):
 
         job = self.job
 
         self.logger.info(f"message status: {self.status}, job status: {job.status}")
 
-        sent_msg = MessageSent.send_msg(reply, job, to_no)
+        sent_msg = MessageSent.send_msg(messages['SENT'], reply, job)
 
         self.commit_reply_sid(sent_msg.sid)
         self.commit_status(OK)
@@ -134,9 +116,26 @@ class MessageConfirm(MessageReceived):
         
     @classmethod
     def get_latest_confirm_message(cls, job_no):
-        latest_message = cls.query \
-                        .filter(cls.job_no == job_no) \
-                        .order_by(cls.timestamp.desc()) \
+        latest_message = MessageSent.query \
+                        .filter(
+                            MessageSent.job_no == job_no,
+                            MessageSent.is_expecting_reply == True
+                        ).order_by(cls.timestamp.desc()) \
                         .first()
 
         return latest_message if latest_message else None
+    
+    def check_for_other_decision(self):
+        
+        # other_decision = CANCEL if self.decision == CONFIRM else CANCEL
+
+        other_message = MessageConfirm.query \
+                        .filter(
+                            MessageConfirm.ref_msg_sid == self.ref_msg_sid,
+                            MessageConfirm.sid != self.sid,
+                            # MessageConfirm.decision == other_decision
+                        ).first()
+        
+        # TODO not sure why other_decision doesnt work
+        
+        return other_message

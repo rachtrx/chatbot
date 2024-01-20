@@ -4,7 +4,7 @@ from extensions import db
 from sqlalchemy import desc, JSON
 from typing import List
 import uuid
-from constants import intents, errors, DURATION_CONFLICT, PENDING_USER_REPLY, CONFIRM, CANCEL, FAILED, OK, CHANGED, CANCELLED, PENDING
+from constants import intents, errors, DURATION_CONFLICT, PENDING_USER_REPLY, CONFIRM, CANCEL, FAILED, OK, CHANGED, PENDING, SERVER_ERROR
 import re
 from dateutil.relativedelta import relativedelta
 import os
@@ -13,33 +13,31 @@ import logging
 import traceback
 import json
 from utilities import current_sg_time, print_all_dates, print_relations_list
-from azure.mc.upload import SpreadsheetManager
+from azure.sheet_manager import SpreadsheetManager
 from azure.utils import loop_mc_files, AzureSyncError
 import time
 from overrides import overrides
 
 from logs.config import setup_logger
 
-from constants import intents, MAX_UNBLOCK_WAIT
+from constants import intents, FAILED
 
 from models.exceptions import ReplyError, DurationError
-from models.users import User
-from models.messages import MessageForward, MessageConfirm
+from models.jobs.user.abstract import JobUser
 
-from ..job import Job
-from .utils import dates, get_cv
+from .utils_mc import dates, get_cv
 
 
-class JobMc(Job):
+class JobMc(JobUser):
     __tablename__ = "job_mc"
-    job_no = db.Column(db.ForeignKey("job.job_no"), primary_key=True) # TODO on delete cascade?
+    job_no = db.Column(db.ForeignKey("job_user.job_no"), primary_key=True) # TODO on delete cascade?
     _start_date = db.Column(db.String(20), nullable=True)
     _end_date = db.Column(db.String(20), nullable=True)
     duration = db.Column(db.Integer, nullable=True)
     _new_monthly_dates = db.Column(JSON, nullable=True)
     _current_dates = db.Column(JSON, nullable=True)
-    azure_complete = db.Column(db.Boolean, default=False, nullable=True)
-    forwards_complete = db.Column(db.Boolean, default=False, nullable=True)
+    azure_status = db.Column(db.Integer, default=None, nullable=True)
+    forwards_status = db.Column(db.Integer, default=None, nullable=True)
     
     __mapper_args__ = {
         "polymorphic_identity": "job_mc"
@@ -51,7 +49,6 @@ class JobMc(Job):
         super().__init__(name)
         self.new_monthly_dates = {}
         self.current_dates = []
-        db.session.commit()
 
     @property
     def start_date(self):
@@ -85,65 +82,63 @@ class JobMc(Job):
     def current_dates(self, value):
         self._current_dates = json.dumps(value)
 
+    def reset_complete_conditions(self):
+        self.azure_status = None
+        self.forwards_status = None
+        db.session.commit()
+
     @overrides
     def validate_confirm_message(self):
 
         decision = self.current_msg.decision
-        raise_unknown_error = False
 
         self.logger.info(f"Status: {self.status}, decision: {decision}")
 
-        if decision != CONFIRM and decision != CANCEL:
-            logging.error(f"UNCAUGHT DECISION {decision}")
-            raise_unknown_error = True
+        if not self.user.is_blocking: # job is COMPLETED/FAILED
+            self.validate_confirmation_again()
+        
+        elif self.user.is_blocking and self.status != PENDING_USER_REPLY: # other button had been pressed or another job in progress, but the job is no longer pending user reply
+            # refreshing the object 4 lines below can lose the current_msg, so save the msg first
+            temp_msg = self.current_msg
+            is_blocking = self.user.wait_for_unblock()
+            if not is_blocking:
+                db.session.refresh(self)
+                self.current_msg = temp_msg
+                logging.error(f"TRYING AGAIN {self.user.is_blocking}, {self.status}, {decision}")
+                self.validate_confirmation_again()
+            else:
+                logging.error(f"{self.user.is_blocking}, {self.status}, {decision}")
+                raise ReplyError(errors['UNKNOWN_ERROR']) # blocking
 
-        if decision == CANCEL:
+        elif self.user.is_blocking: # blocking and pending user reply
 
-            if self.status != OK or self.status != PENDING_USER_REPLY:
-                raise_unknown_error = True
-
-            self.commit_cancel()
-
-            if self.status == OK:
-
-                latest_confirm_msg = MessageConfirm.get_latest_confirm_message(self.job_no)
-                if self.current_msg.ref_msg_sid != latest_confirm_msg.ref_msg_sid:
-                    raise ReplyError(errors['NOT_LAST_MSG'], job_status=None)
-                
-                is_blocking = True
-
-                for _ in range(MAX_UNBLOCK_WAIT):
-                    if not self.user.is_blocking:
-                        is_blocking = False
-                        break
-                    time.sleep(1)
-
-                if is_blocking:
-                    raise_unknown_error = True
-                # OK
-                
-            else: # PENDING_USER_REPLY
+            if decision == CANCEL:
                 self.logger.info("cancelling MC due to wrong date")
-                
-                raise ReplyError(errors['WRONG_DATE'], intent=intents['TAKE_MC'])
+                raise ReplyError(errors['WRONG_DATE'], job_status=SERVER_ERROR)
         
-        else: # CONFIRM
+            else: # CONFIRM AND PENDING REPLY
+                pass
 
-            if self.status == PENDING_USER_REPLY:
-                # confirm MC
-                pass # OK
-
-            elif self.is_cancelled:
-                raise ReplyError(errors['CONFIRMING_CANCELLED_MSG'])
-
-            else: # TODO IMPT need to wait awhile first!
-                raise_unknown_error = True
-        
-        if raise_unknown_error:
+    def validate_confirmation_again(self):
+        '''This function will return if no errors are thrown, only accepts Cancel after OK'''
+        decision = self.current_msg.decision
+        if decision == CANCEL:
+            from models.messages import MessageConfirm
+            latest_confirm_msg = MessageConfirm.get_latest_confirm_message(self.job_no)
+            if self.current_msg.ref_msg_sid != latest_confirm_msg.sid:
+                raise ReplyError(errors['NOT_LAST_MSG'], job_status=None)
+            # TODO Not really sure how to implement this. when to set azure_status to fail? what error to catch...
+            if (not self.forwards_status or self.forwards_status < 400) or \
+                (not self.azure_status or self.azure_status < 400):
+                self.commit_cancel()
+                return
+            else:
+                raise ReplyError(errors['JOB_MC_FAILED'])
+    
+        elif decision == CONFIRM and self.status == SERVER_ERROR:
+            raise ReplyError(errors['CONFIRMING_CANCELLED_MSG'])
+        else: # CONFIRM and unknown status
             raise ReplyError(errors['UNKNOWN_ERROR'])
-
-        self.commit_status(PENDING)
-        return
 
 
     @overrides
@@ -160,19 +155,20 @@ class JobMc(Job):
         return reply
 
     @overrides
-    def check_for_complete(self):
-        if self.status == OK:
-            return
-        
+    def validate_complete(self):
         self.logger.info(f"user: {self.user.name}, messages: {self.messages}")
+        
+        if self.azure_status == OK and self.forwards_status == OK:
+            last_message_replied = self.all_messages_successful() # IMPT check for any double decisions before unblocking
+            if last_message_replied:
+                # self.logger.info("job complete")
+                return True
+        return False
+    
 
-        last_message_replied = self.all_messages_replied()
-            
-        if self.azure_complete and self.forwards_complete and last_message_replied:
-            self.logger.info("job complete")
-            self.commit_status(OK) if self.cancelled is False else self.commit_status(CANCELLED)
-            self.user.is_blocking = False
-            db.session.commit()
+    ########
+    # ENTRY
+    ########
 
     def generate_base(self):
         '''Generates the basic details of the MC, including the start, end and duration of MC'''
@@ -196,7 +192,7 @@ class JobMc(Job):
                     # if there are specified dates and duration is wrong
                     elif self.duration and self.duration != duration_c:
 
-                        body = f'The duration from {self.start_date} to {self.end_date} ({duration_c}) days) do not match with {self.duration} days. Please send another message in the form "From dd/mm to dd/mm" to indicate the MC dates. Thank you!'
+                        body = f'The duration from {self.start_date} to {self.end_date} ({duration_c}) days) do not match with {self.duration} days. Please send another message in the form "MC from dd/mm to dd/mm" to indicate the MC dates. Thank you!'
 
                         raise DurationError(body)
                     
@@ -225,14 +221,14 @@ class JobMc(Job):
                 except AzureSyncError as e:
                     self.logger.info(e.message)
                     body = f"Hi {self.user.name}, we were unable to retrieve the current MC records. Please try again. If the problem persists, please check with the ICT department"
-                    raise ReplyError(body, intent=intents['TAKE_MC'])
+                    raise ReplyError(body)
 
                 self.logger.info(f"Dates validated")
                 
                 return start_date_status, overlap_status
                 
         except DurationError as e:
-            raise ReplyError(e.message, intent=intents['TAKE_MC'], job_status=DURATION_CONFLICT)
+            raise ReplyError(e.message)
         
     def duration_calc(self):
         '''ran when start_date and end_date is True, returns duration between self.start_time and self.end_time. 
@@ -250,6 +246,46 @@ class JobMc(Job):
         print(f'duration: {duration}')
 
         return duration
+
+        
+    def set_start_end_date(self, message):
+        '''This function takes in a mc_message and returns True or False, at the same time setting start and end dates where possible and resolving possible conflicts. Checks if can do something about start date, end date and duration'''
+
+        named_month_start, named_month_end = dates.named_month_extraction(message)
+        ddmm_start, ddmm_end = dates.named_ddmm_extraction(message)
+        day_start, day_end = dates.named_day_extraction(message)
+        
+        start_dates = [date for date in [named_month_start, ddmm_start, day_start] if date is not None]
+        end_dates = [date for date in [named_month_end, ddmm_end, day_end] if date is not None]
+
+        self.logger.info(f"{start_dates}, {end_dates}")
+
+        if len(start_dates) > 1:
+
+            body = f'Conflicting start dates {", ".join(str(date) for date in start_dates)}. Please send another message in the form "MC from dd/mm to dd/mm" to indicate the MC dates. Thank you!'
+
+            raise DurationError(body)
+        if len(end_dates) > 1:
+            
+            body = f'Conflicting end dates {", ".join(str(date) for date in end_dates)}. Please send another message in the form "MC from dd/mm to dd/mm" to indicate the MC dates. Thank you!'
+
+            raise DurationError(body)
+        
+        if len(start_dates) == 1:
+            self.start_date = start_dates[0]
+        if len(end_dates) == 1:
+            self.end_date = end_dates[0]
+        
+        if self.start_date and self.end_date:
+            self.logger.info(f"{type(self.start_date)} {type(self.end_date)}")
+            # try:
+            # TODO SET NEW DATES IF ITS 2024
+
+            return self.duration_calc() # returns duration_c
+            # except:
+            #     return False
+        
+        return None
         
     def validate_start_date(self):
         '''Checks if start date is valid, otherwise tries to set the start date and duration'''
@@ -362,69 +398,30 @@ class JobMc(Job):
         content_variables = self.user.get_cv_many_relations(cv_func, self)
         
         if content_variables is None: # if no relations
-            raise ReplyError(errors['NO_RELATIONS'], intent=intents['TAKE_MC'])
+            raise ReplyError(errors['NO_RELATIONS'])
         else:
             return content_sid, content_variables
-        
-    
-    def set_start_end_date(self, message):
-        '''This function takes in a mc_message and returns True or False, at the same time setting start and end dates where possible and resolving possible conflicts. Checks if can do something about start date, end date and duration'''
-
-        named_month_start, named_month_end = dates.named_month_extraction(message)
-        ddmm_start, ddmm_end = dates.named_ddmm_extraction(message)
-        print(f'ddmm_end: {ddmm_end}')
-        day_start, day_end = dates.named_day_extraction(message)
-        
-        start_dates = [date for date in [named_month_start, ddmm_start, day_start] if date is not None]
-        end_dates = [date for date in [named_month_end, ddmm_end, day_end] if date is not None]
-
-        self.logger.info(f"{start_dates}, {end_dates}")
-
-        if len(start_dates) > 1:
-
-            body = f'Conflicting start dates {", ".join(str(date) for date in start_dates)}. Please send another message in the form "From dd/mm to dd/mm" to indicate the MC dates. Thank you!'
-
-            raise DurationError(body)
-        if len(end_dates) > 1:
-            
-            body = f'Conflicting end dates {", ".join(str(date) for date in end_dates)}. Please send another message in the form "From dd/mm to dd/mm" to indicate the MC dates. Thank you!'
-
-            raise DurationError(body)
-        
-        if len(start_dates) == 1:
-            self.start_date = start_dates[0]
-        if len(end_dates) == 1:
-            self.end_date = end_dates[0]
-        
-        if self.start_date and self.end_date:
-            self.logger.info(f"{type(self.start_date)} {type(self.end_date)}")
-            # try:
-            # TODO SET NEW DATES IF ITS 2024
-
-            return self.duration_calc() # returns duration_c
-            # except:
-            #     return False
-        
-        return None
 
     
-    ##############################
-    # FORWARDING THE MC MESSAGE
-    ##############################
+    ###################################
+    # HANDLE USER REPLY
+    ###################################
 
     def forward_messages(self):
+
+        from models.messages import MessageForward
         
         if self.current_msg.decision == CONFIRM:
-            content_sid = os.environ.get("MC_NOTIFY_SID")
+            self.content_sid = os.environ.get("MC_NOTIFY_SID")
 
         else: 
-            content_sid = os.environ.get("MC_NOTIFY_CANCEL_SID") # USER CANCELS
+            self.content_sid = os.environ.get("MC_NOTIFY_CANCEL_SID") # USER CANCELS
         
-        cv_and_relations_list = MessageForward.get_cv_and_relations_list(self.user, MessageForward.get_forward_mc_cv, self)
+        cv_and_relations_list = MessageForward.get_cv_and_users_list(MessageForward.get_forward_mc_cv, self.user, self)
 
         self.logger.info(f"forwarding messages with this cv list: {cv_and_relations_list}")
 
-        MessageForward.forward_template_msges(cv_and_relations_list, content_sid, self)
+        MessageForward.forward_template_msges(cv_and_relations_list, self)
         
     def update_azure(self):
 
@@ -473,7 +470,7 @@ class JobMc(Job):
                 current_dates.extend(current_dates_array)
                 
             self.current_dates = current_dates
-            self.azure_complete = True
+            self.azure_status = OK
             db.session.commit()
 
             if decision == CONFIRM:
@@ -492,7 +489,7 @@ class JobMc(Job):
         except AzureSyncError as e:
             self.logger.info(e.message)
             body = f"Hi {self.user.name}, your MC records FAILED to update. Please try again. If the problem persists, please check with the ICT department"
-            raise ReplyError(body, intent=intents['TAKE_MC'])
+            raise ReplyError(body)
     
 
     

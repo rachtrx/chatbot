@@ -8,8 +8,10 @@ from config import client
 
 from logs.config import setup_logger
 
+from models.jobs.abstract import Job
+
 class Message(db.Model):
-    logger = setup_logger('models.message_sent')
+    logger = setup_logger('models.message_abstract')
     __tablename__ = "message"
 
     sid = db.Column(db.String(80), primary_key=True, nullable=False)
@@ -23,7 +25,8 @@ class Message(db.Model):
     job = db.relationship('Job', backref='messages')
 
     __mapper_args__ = {
-        "polymorphic_on": "type"
+        "polymorphic_on": "type",
+        "polymorphic_identity": "message"
     }
 
     def __init__(self, job_no, sid, body, seq_no):
@@ -71,7 +74,6 @@ class Message(db.Model):
     # TO CHECK
     @staticmethod
     def get_seq_no(job_no):
-        from models.jobs import Job
         '''finds the sequence number of the message in the job, considering all message types - therefore must use the parent class name instead of "cls"'''
 
         job = Job.query.filter_by(job_no=job_no).first()
@@ -100,4 +102,3 @@ class Message(db.Model):
         ).first()
         
         return msg if msg else None
-    

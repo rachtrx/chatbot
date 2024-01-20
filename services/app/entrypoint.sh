@@ -28,6 +28,7 @@ cmd="$@"
 
 # >&2 echo "Elasticsearch is up - executing command"
 
+# flask setup_azure
 
 service cron start
 echo "cron service started"

@@ -1,32 +1,35 @@
 import os
 from dotenv import load_dotenv
 
-from flask import Flask, request, jsonify, Response
+from flask import request, Response
 from flask.cli import with_appcontext
-from twilio.twiml.messaging_response import MessagingResponse
 import logging
 import traceback
-from sqlalchemy import inspect
-from datetime import datetime
+from sqlalchemy import inspect, event
 
-from config import Config
 from extensions import db
+from models.exceptions import ReplyError
 
 from models.users import User
-from models.exceptions import ReplyError
-from models.messages import MessageSent, MessageReceived, MessageForward, MessageConfirm
+from models.messages.sent import MessageForward
+from models.messages.received import MessageReceived
 from models.messages.abstract import Message
-from models.jobs import JobMc, JobEs, JobUnknown, Job
+
+from models.jobs.user.abstract import JobUser
+
+from models.jobs.unknown.job_unknown import JobUnknown
+
+from tasks import main as create_task
 
 from es.manage import loop_through_files, create_index
-from azure.utils import acquire_token
 
+from constants import intents, errors, messages, system
+from constants import FAILED, PENDING_USER_REPLY, OK, PENDING_CALLBACK, PENDING
 
-from constants import intents, errors, messages
-from constants import FAILED, PENDING_USER_REPLY, OK, PENDING_CALLBACK
+from manage import create_app
 
-app = Flask(__name__)
-app.config.from_object(Config)
+env_path = "/home/app/web/.env"
+load_dotenv(dotenv_path=env_path)
 
 # Configure the root logger
 logging.basicConfig(
@@ -38,8 +41,12 @@ logging.basicConfig(
 
 logging.getLogger('twilio.http_client').setLevel(logging.WARNING)
 
-db.init_app(app)
+app = create_app()
 
+@app.cli.command("setup_azure")
+@with_appcontext
+def setup_azure():
+    create_task([system['ACQUIRE_TOKEN'], system['SYNC_USERS']])
 
 @app.cli.command("create_new_index")
 @with_appcontext
@@ -51,29 +58,26 @@ def create_new_index():
 def loop_files():
     with app.app_context():
         temp_url = os.environ.get('TEMP_FOLDER_URL')
-        acquire_token()
         loop_through_files(temp_url)
+
+def log_table_creation(target, connection, **kw):
+    logging.info(f"Creating table: {target.name}")
 
 @app.cli.command("create_db")
 @with_appcontext
 def create_db():
-    # Create an inspector
+    # Get a list of existing tables before any creation
     inspector = inspect(db.engine)
+    existing_tables = inspector.get_table_names()
+    for table in existing_tables:
+        logging.info(f"Table {table} already exists.")
 
-    # List of all tables that should be created
-    # Replace 'YourModel' with actual model class names
-    tables = [User.__tablename__, Job.__tablename__, JobUnknown.__tablename__, JobMc.__tablename__, JobEs.__tablename__, Message.__tablename__, MessageSent.__tablename__, MessageReceived.__tablename__, MessageForward.__tablename__, MessageConfirm.__tablename__]
+    # Bind the event listeners to log table creation
+    for table in db.Model.metadata.tables.values():
+        event.listen(table, 'before_create', log_table_creation)
 
-    # Iterate over the tables and check if they exist
-    for table in tables:
-        if not inspector.has_table(table):
-            logging.info(f"Creating table: {table}")
-            # Reflect only the specific table
-            db.Model.metadata.create_all(db.engine, tables=[db.Model.metadata.tables[table]])
-        else:
-            logging.info(f"Table {table} already exists.")
-
-    db.session.commit()
+    # Create all tables that do not exist
+    db.Model.metadata.create_all(db.engine)
 
 @app.cli.command("remove_db")
 @with_appcontext
@@ -88,10 +92,6 @@ def seed_db():
     db.session.add(user)
     db.session.commit()
 
-# def to_sg_number(number):
-#     return 'whatsapp:+65' + str(number)
-
-
 def general_workflow(user, sid, user_str, replied_details):
 
     # CHECK if there was a decision
@@ -103,25 +103,31 @@ def general_workflow(user, sid, user_str, replied_details):
 
     else:
 
-        recent_job = Job.get_recent_job(user.number)
-
-        logging.info(f"recent job {'found' if recent_job else 'not found'}")
-
-        if recent_job and recent_job.status == PENDING_USER_REPLY:
-            raise ReplyError(errors['PENDING_USER_REPLY'], job_status=None)
-
         # go to database to get the last user_str in the past 5 mins that is not a double user_str
-        elif user.is_blocking:
-            # check if the recent message hasnt been replied to yet
-            if recent_job:
-                logging.error("double message")
-                raise ReplyError(errors['DOUBLE_MESSAGE'], job_status=None)
+        if user.is_blocking:
+            recent_pending_job = JobUser.get_recent_pending_job(user.number)
+            if recent_pending_job:
+                # check if the recent message hasnt been replied to yet
+                
+                if recent_pending_job.status == PENDING_USER_REPLY:
+                    raise ReplyError(errors['PENDING_USER_REPLY'])
+                
+                for msg in recent_pending_job.messages:
+                    if msg.status == PENDING_CALLBACK:
+                        raise ReplyError(errors['MESSAGE_STILL_PENDING'])
+                    elif msg.status == PENDING:
+                        raise ReplyError(errors['DOUBLE_MESSAGE'])
+                    else:
+                        raise ReplyError(errors['UNKNOWN_ERROR'])
+                
 
         # NEW JOB WILL BE CREATED
         
         intent = MessageReceived.check_for_intent(user_str)
-        job = Job.create_job(intent, user.name)
+        if intent != intents['TAKE_MC']:
+            raise ReplyError(errors['ES_REPLY_ERROR'])
 
+        job = JobUser.create_job(intent, user.name)
         received_msg = Message.create_message(messages['RECEIVED'], job.job_no, sid, user_str)
 
     job.current_msg = received_msg
@@ -148,6 +154,7 @@ def sms_reply():
     try:
         if not user:
             raise ReplyError(errors['USER_NOT_FOUND'])
+        
         
         replied_details = None
         
@@ -177,15 +184,17 @@ def sms_reply():
                 if user:
                     name = user.name
                     number = user.sg_number
-                    job = Job.create_job(re.intent, name)
+                    job = JobUser.create_job(re.intent, name)
                 else:
                     number = request.form.get("From")
+                    logging.info(f"unknown number: {number}")
                     job = JobUnknown(number)
                 
-                job.commit_status(re.job_status)
                 received_message = Message.create_message(messages['RECEIVED'], job.job_no, sid, user_str)
 
-            received_message.create_reply_msg(re.err_message, number)
+            job.commit_status(re.job_status)
+
+            received_message.create_reply_msg(re.err_message)
             logging.info(traceback.format_exc())
 
         except Exception:
@@ -213,7 +222,7 @@ def sms_reply_callback():
         sid = request.values.get('MessageSid')
 
         # check if this is a forwarded message, which would have its own ID
-        message = Message.get_message_by_sid(sid) # TODO get the forward too? shouldnt MessageSent get forward though
+        message = Message.get_message_by_sid(sid)
 
         if not message:
             logging.info(f"not a message, {sid}")
@@ -242,24 +251,33 @@ def update_message_and_job_status(status, sid, message):
     elif status == "delivered":
         logging.info(f"message {sid} was sent successfully")
 
-        if message.is_expecting_user_reply == True:
+        if message.is_expecting_reply == True:
             job.commit_status(PENDING_USER_REPLY)
         
         message.commit_status(OK)
-        job.check_for_complete()
+        
+        if message.type == "message_forward":
+            if message.job.forward_status_not_null():
+                MessageForward.check_message_forwarded(message.job, message.seq_no)
+        else:
+            job.check_for_complete()
         
         # reply message expecting user reply. just to be safe, specify the 2 types of messages
-        
     
     elif status == "failed":
         # job immediately fails
-        job.commit_status(FAILED)
+        if message.type == "message_forward" and message.job.forward_status_not_null():
+            MessageForward.check_message_forwarded(message.job, message.seq_no)
+        else:
+            job.commit_status(FAILED) # forward message failed is still ok to some extent, especially if the user cancels afterwards. It's better to inform about the cancel
+
         message.commit_status(FAILED)
 
         if job.type == "job_es": # TODO should probably send to myself
-            message.send_msg([os.environ.get("ERROR_SID"), None], message.job)
+            Message.send_msg(messages['SENT'], (os.environ.get("ERROR_SID"), None), message.job)
 
     return job
 
 if __name__ == "__main__":
+    # local development, not for gunicorn
     app.run(debug=True)

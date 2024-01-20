@@ -1,65 +1,18 @@
-import msal
 import os
-from dotenv import load_dotenv
 import requests
 from datetime import datetime
 import logging
 import time
 from utilities import current_sg_time
+from models.exceptions import AzureSyncError
 
 from logs.config import setup_logger
 
-env_path = "/home/app/web/.env"
-load_dotenv(dotenv_path=env_path)
-
-logger = setup_logger('az.utils')
-
-config = {
-    'client_id': os.environ.get('CLIENT_ID'),
-    'client_secret': os.environ.get('CLIENT_SECRET'),
-    'authority': os.environ.get('AUTHORITY'),
-    'scope': [os.environ.get('SCOPE')],
-    'site_id': os.environ.get('SITE_ID'),
-}
-
-# create an MSAL instance providing the client_id, authority and client_credential params
-msal_instance = msal.ConfidentialClientApplication(config['client_id'], authority=config['authority'], client_credential=config['client_secret'])
-
-class AzureSyncError(Exception):
-
-    def __init__(self, message):
-        self.message = message
-        super().__init__(self.message)
-
-
-def acquire_token(scope=config['scope']):
-    # First, try to lookup an access token in cache
-    token_result = msal_instance.acquire_token_silent(scope, account=None)
-    # print("retrieving token")
-
-    # If the token is available in cache, save it to a variable
-    if token_result:
-        print('Access token was loaded from cache')
-
-    # If the token is not available in cache, acquire a new one from Azure AD and save it to a variable
-    if not token_result:
-        token_result = msal_instance.acquire_token_for_client(scopes=scope)
-        # print(token_result)
-        access_token = 'Bearer ' + token_result['access_token']
-
-        print(f"Live env: {os.environ.get('LIVE')}")
-
-        if os.environ.get('LIVE') == '1':
-            # write the token to the file if on live, otherwise just use the token printed for postman
-            print(f"Token path: {os.environ.get('TOKEN_PATH')}")
-            with open(os.environ.get('TOKEN_PATH'), 'w') as file:
-                file.write(access_token)
-
-    return
-
-def generate_header():
-    with open(os.environ.get('TOKEN_PATH'), 'r') as file:
-        token = file.read().strip()
+def generate_header(token=None):
+    
+    if not token:
+        with open(os.environ.get('TOKEN_PATH'), 'r') as file:
+            token = file.read().strip()
 
     headers = {
         'Authorization': token,
@@ -120,10 +73,6 @@ def delay_decorator(message, seconds = 1, retries = 5):
                     time.sleep(seconds)
                 count += 1
             raise AzureSyncError(f"{message}. {response.text}")
-
             
         return inner_wrapper
     return outer_wrapper
-
-if __name__ == "__main__":
-    acquire_token()

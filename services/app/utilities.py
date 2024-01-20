@@ -2,8 +2,6 @@ import time
 from datetime import datetime, timedelta
 import pytz
 import logging
-import json
-from constants import PENDING, OK, CANCELLED
 
 def current_sg_time(dt_type=None, hour_offset = None):
     singapore_tz = pytz.timezone('Asia/Singapore')

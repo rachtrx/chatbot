@@ -1,17 +1,11 @@
-from datetime import datetime, timedelta, date
 from extensions import db
 # from sqlalchemy.orm import 
-from sqlalchemy import Column, ForeignKey, Integer, String, desc
-from typing import List
-import uuid
-import re
-from dateutil.relativedelta import relativedelta
-from twilio.rest import Client
-import os
+from sqlalchemy import ForeignKey, String
 from logs.config import setup_logger
-from constants import FAILED
+from constants import MAX_UNBLOCK_WAIT
 from utilities import get_relations_name_and_no_list
 import json
+import time
 
 class User(db.Model):
 
@@ -20,7 +14,7 @@ class User(db.Model):
     __tablename__ = "users"
     name = db.Column(db.String(80), primary_key=True, nullable=False)
     number = db.Column(db.Integer(), unique=True, nullable=False)
-    dept = db.Column(db.String(50), nullable=False)
+    dept = db.Column(db.String(50), nullable=True)
 
     # Self-referential relationships
     reporting_officer_name = db.Column(String(80), ForeignKey('users.name', ondelete='SET NULL'), nullable=True)
@@ -74,24 +68,38 @@ class User(db.Model):
     def get_ro(self):
         return [self.reporting_officer] if self.reporting_officer else []
 
-    def get_dept_admins(self):
-        dept_admins = User.query.filter(
+    def get_dept_admins(self, include_self=False):
+        query = User.query.filter(
             User.is_dept_admin == True,
-            User.dept == self.dept,
-            User.name != self.name
-        ).all()
+            User.dept == self.dept
+        )
+        if not include_self:
+            query = query.filter(User.name != self.name)
+        dept_admins = query.all()
         return dept_admins if dept_admins else []
 
-    def get_global_admins(self):
-        global_admins = User.query.filter(
-            User.is_global_admin == True,
-            User.name != self.name
-        ).all()
+
+    def get_global_admins(self, include_self=False):
+        query = User.query.filter(User.is_global_admin == True)
+        if not include_self:
+            query = query.filter(User.name != self.name)
+        global_admins = query.all()
         return global_admins if global_admins else []
 
     def get_relations(self):
         # Using list unpacking to handle both list and empty list cases
         return set(self.get_ro()) | set(self.get_dept_admins()) | set(self.get_global_admins())
+    
+    def wait_for_unblock(self):
+        is_blocking = True
+        for _ in range(MAX_UNBLOCK_WAIT):
+            if not self.is_blocking:
+                is_blocking = False
+                break
+            db.session.refresh(self)
+            time.sleep(1)
+
+        return is_blocking
     
     ######################################################
     # FOR SENDING SINGLE REPLY MSG ABT ALL THEIR RELATIONS

@@ -70,7 +70,6 @@ RUN crontab /etc/cron.d/azure_cron.txt
  
 # Create the log file to be able to run tail
 RUN touch /var/log/cron_sync.log
-RUN touch /var/log/cron_report.log
 
 # Run the command on container startup
 

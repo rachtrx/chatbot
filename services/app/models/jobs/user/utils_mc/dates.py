@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, date
-from constants import month_mapping, days_arr, day_mapping
+from constants import month_mapping, days_arr, day_mapping, mc_pattern
 import re
 from dateutil.relativedelta import relativedelta
 import logging
@@ -10,7 +10,7 @@ from logs.config import setup_logger
 
 # SECTION utils
 start_prefixes = r'from|on|for|mc|starting|doctor'
-end_prefixes = r'to|until|til(l)?|ending'
+end_prefixes = r'to|until|til|till|ending'
 
 def generate_date_obj(match_obj, date_format):
     '''returns date object from the regex groups, where there are typically 2 groups: start date and end date'''
@@ -126,7 +126,6 @@ def named_ddmm_extraction(mc_message):
 duration_pattern = r'(?P<duration1>\d\d?\d?|a)'
 alternative_duration_pattern = r'(?P<duration2>\d\d?\d?|a)' # need to have both so that can be compiled together (otherwise it will be rejected in that OR)
 day_pattern = r'(day|days)'
-mc_pattern = r'(leave|mc|appointment|sick|doctor)'
 
 # Combine the basic patterns into two main alternatives
 alternative1 = duration_pattern + r'\s.*?' + day_pattern + r'\s.*?' + mc_pattern
@@ -149,24 +148,28 @@ def duration_extraction(message):
 
     return None
 
-def calc_start_end_date(self, duration):
+def calc_start_end_date(duration):
     '''ran when start_date and end_date is False; takes in extracted duration and returns the calculated start and end date. need to -1 since today is the 1st day. This function is only used if there are no dates. It does not check if dates are correct as the duration will be assumed to be wrong'''
     print("manually calc days")
-    print(self.duration)
+    print(duration)
     start_date = current_sg_time().date()
-    end_date = (self.start_date + timedelta(days=int(duration) - 1))
+    end_date = (start_date + timedelta(days=int(duration) - 1))
 
     return start_date, end_date
 
 
 # SECTION 4. next tues
 # ignore all the "this", it will be handled later. 
-days_regex = r'\b(?P<prefix>' + start_prefixes + r'|' + end_prefixes + r')\s*(this)?\s*(?P<offset>next|nx)?\s(?P<days>mon(day)?|tue(s(day)?)?|wed(nesday)?|thu(rs(day)?)?|fri(day)?|sat(urday)?|sun(day)?|today|tomorrow|tmr|tdy)\b' # required to alter user string
+days_regex = r'\b(this)?\s*(?P<offset>next|nx)?\s(?P<days>mon(day)?|tue(s(day)?)?|wed(nesday)?|thu(rs(day)?)?|fri(day)?|sat(urday)?|sun(day)?|today|tomorrow|tmr|tdy)\b' # required to alter user string
 
 # done fixing the day names
 days_pattern = r'Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday'
-start_day_pattern = r'(' + start_prefixes + r')\s*(?P<start_buffer>next|nx)?\s(?P<start_day>' + days_pattern + r')'
-end_day_pattern = r'(' + end_prefixes + r')\s*(?P<end_buffer>next|nx)?\s(?P<end_day>' + days_pattern + r')'
+end_prefixes_list = end_prefixes.split('|')
+negative_lookbehinds = r"(?<!" + r"\s)(?<!".join(end_prefixes_list) + r"\s)"
+
+start_day_pattern = rf'\s(?:{start_prefixes}|{negative_lookbehinds}(?P<start_buffer>next|nx))*\s(?P<start_day>{days_pattern})'
+
+end_day_pattern = r'(?:' + end_prefixes + r')\s*(?P<end_buffer>next|nx)?\s(?P<end_day>' + days_pattern + r')'
 
 def resolve_day(day_key):
     today = date.today()
@@ -180,18 +183,21 @@ def resolve_day(day_key):
 def replace_with_full_day(match):
     '''pass in the match object from the sub callback and return the extended month string'''
     # Get the matched abbreviation or full month name
-    prefix = match.group('prefix') + (' ' + match.group('offset') if match.group('offset') is not None else '')
+    offset = match.group('offset') if match.group('offset') is not None else ''
     day_key = match.group('days').lower()
-    print(prefix)
+    print(offset)
 
     if day_key in ['today', 'tomorrow', 'tmr', 'tdy']:
-        return prefix + ' ' + resolve_day(day_key)
+        return offset + ' ' + resolve_day(day_key)
     
     # Return the capitalized full month name from the dictionary
-    return prefix + ' ' + day_mapping[day_key]
+    return offset + ' ' + day_mapping[day_key]
 
 def named_day_extraction(message):
     '''checks the body for days, returns (start_date, end_date)'''
+
+    logging.info(start_day_pattern)
+    logging.info(f"negative lookbehinds: {negative_lookbehinds}")
 
     # days_regex, start_day_pattern, and end_day_pattern can be found in constants.py
     user_str = re.sub(days_regex, replace_with_full_day, message, flags=re.IGNORECASE)
@@ -208,18 +214,20 @@ def named_day_extraction(message):
     start_day = end_day = None
 
     if start_days:
+        logging.info("start days found")
         start_week_offset = 0
         start_buffer = start_days.group("start_buffer") # retuns "next" or None
         start_day = start_days.group("start_day")
-        print(f'start buffer: {start_buffer}')
+        logging.info(f'start day: {start_day}')
         if start_buffer != None:
             start_week_offset = 1
 
     if end_days:
+        logging.info("end days found")
         end_week_offset = 0
         end_buffer = end_days.group("end_buffer") # retuns "next" or None
         end_day = end_days.group("end_day")
-        print(f'end buffer: {end_buffer}')
+        logging.info(f'end day: {end_day}')
         if end_buffer != None:
             end_week_offset = 1
             end_week_offset -= start_week_offset

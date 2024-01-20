@@ -11,13 +11,13 @@ from overrides import overrides
 
 from es.manage import search_for_document
 from models.exceptions import ReplyError, DurationError
-from ..job import Job
+from models.jobs.user.abstract import JobUser
 
 from logs.config import setup_logger
 
-class JobEs(Job):
+class JobEs(JobUser):
     __tablename__ = "job_es"
-    job_no = db.Column(db.ForeignKey("job.job_no"), primary_key=True) # TODO on delete cascade?
+    job_no = db.Column(db.ForeignKey("job_user.job_no"), primary_key=True) # TODO on delete cascade?
     helpful = db.Column(db.Boolean, nullable=True)
     answered = db.Column(db.Boolean, default=False, nullable=False)
 
@@ -31,7 +31,6 @@ class JobEs(Job):
         super().__init__(name)
         self.new_monthly_dates = {}
         self.current_dates = []
-        db.session.commit()
 
     @overrides
     def validate_confirm_message(self):
@@ -47,7 +46,7 @@ class JobEs(Job):
     @overrides
     def entry_action(self):
         try:
-            reply = self.get_es_reply(self.current_msg)
+            reply = self.get_es_reply()
             # logging.info("querying documents")
         except Exception as e:
             # logging.info(e)
@@ -74,14 +73,14 @@ class JobEs(Job):
 
     @overrides
     def check_for_complete(self):
-        last_message_replied = self.all_messages_replied()
+        last_message_replied = self.all_messages_successful()
         if self.answered and last_message_replied:
             self.commit_status(OK)
             self.logger.info("job complete")
 
-    def get_es_reply(self, es_message):
+    def get_es_reply(self):
 
-        result = search_for_document(es_message.body)
+        result = search_for_document(self.current_msg.body)
         # logging.info(f"Main result: {result}")
 
         sid, cv = self.get_query_cv(result)

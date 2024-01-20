@@ -2,46 +2,39 @@ import datetime
 
 MAX_UNBLOCK_WAIT = 30
 
-TEMP = 1
-
 # USER ACTIONS
 CONFIRM = 2
-CONFIRM_WIHTOUT_VALIDATION = 3
 CANCEL = 4
 
+# OTHER STATUSES
+CHANGED = 5 # changed dates and start date for MC
 
 ##################################
 # JOB STATUSES
 ##################################
 
 OK = 200
-CANCELLED = 201
-# PENDING
+FAILED = 400
+# CANCELLED = 202 # cancelled after confirm
+
+# PENDING JOB STATUSES
 PENDING = 300   
 PENDING_USER_REPLY = 301
+# PENDING MSG CALLBACK
+PENDING_CALLBACK = 302
 
-USER_ERROR = 400
-DURATION_CONFLICT = 401 # TODO
-CHANGED = 402
+# ERROR JOB STATUS
+CLIENT_ERROR = 401
+SERVER_ERROR = 402
+DURATION_CONFLICT = 403 # TODO
 DOUBLE_MESSAGE = 404 # This will always be a job with the single message
-FAILED = 500
-
-##################################
-# MESSAGE STATUSES
-##################################
-
-DELIVERED = 251
-
-# PENDING
-PENDING_CALLBACK = 351
 
 ####################################
 
 intents = {
     "TAKE_MC": 1,
     "OTHERS": 2,
-    "USER_CONFIRMATION": 3,
-    "ES_SEARCH": 4
+    "ES_SEARCH": 3
 }
 
 messages = {
@@ -51,10 +44,17 @@ messages = {
     "FORWARD": 4
 }
 
+system = {
+    "SYNC_USERS": 1,
+    "INDEX_DOCUMENT": 2,
+    "AM_REPORT": 3,
+    "ACQUIRE_TOKEN": 4
+}
+
 errors = {
     "USER_NOT_FOUND": "I'm sorry, your contact has not been added to our database. Please check with HR.",
     "PENDING_USER_REPLY": "Please reply to the previous message first, thank you!",
-    "DOUBLE_MESSAGE": "Please send only 1 message at a time, thank you!",
+    "DOUBLE_MESSAGE": "The previous job has not completed or there was an error completing it. If the problem persists, please try again in 2 minutes, thank you!",
     "UNKNOWN_ERROR": "Something went wrong, please send the message again",
     "NO_RECENT_MSG": "I'm sorry, we could not find any messages from you in the past 5 minutes, could you send it again?",
     "DATES_NOT_FOUND": "The chatbot is still in development, we regret that we could not determine your period of MC, could you specify the dates/duration again?",
@@ -64,7 +64,9 @@ errors = {
     "ES_REPLY_ERROR": "The chatbot is still in development, we regret that we could not determine your intent. If you need additional help, please reach out to our new helpline 87178103.",
     "AZURE_SYNC_ERROR": "I'm sorry, something went wrong with the code, please check with ICT.",
     "ALL_DUPLICATE_DATES": "You are already on MC on all these dates",
-    "NOT_LAST_MSG": "To confirm or cancel the MC, please only reply to the latest message!"
+    "NOT_LAST_MSG": "To confirm or cancel the MC, please only reply to the latest message!",
+    "MESSAGE_STILL_PENDING": "Sorry, please try again in a few seconds, a message sent to you is still pending success confirmation.",
+    "JOB_MC_FAILED": "Sorry, it weems like no forwarded messages were successful and data was not successfully updated."
 }
 
 # SECTION proper months
@@ -115,3 +117,5 @@ day_mapping = {
     'sun': 'Sunday',
     'sunday': 'Sunday',
 }
+
+mc_pattern = r'(leave|mc|appointment|sick|doctor|ml|ccl|npl|medical cert|medical certificate)'

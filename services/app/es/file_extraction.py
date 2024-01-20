@@ -12,8 +12,7 @@ import pdfplumber
 # To extract the images from the PDFs
 from PIL import Image
 # To perform OCR to extract text from images 
-import pytesseract 
-import requests
+import pytesseract
 import spacy
 
 from logs.config import setup_logger

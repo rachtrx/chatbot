@@ -8,16 +8,14 @@ import json
 import logging
 import traceback
 
-
-from ..utils import generate_header, delay_decorator, AzureSyncError
+from .utils import generate_header, delay_decorator
 from utilities import current_sg_time
-from models.users import User
 from logs.config import setup_logger
 
 class SpreadsheetManager:
 
     def __init__(self, mmyy=None, user=None, logger=None):
-        self.template_path = os.path.join(os.path.dirname(__file__), 'excel_files', 'mc_template.xlsx')
+        self.template_path = '/home/app/web/excel_files/mc_template.xlsx'
         self.drive_url = f"https://graph.microsoft.com/v1.0/drives/{os.environ.get('DRIVE_ID')}"
         self.folder_url = self.drive_url + f"/items/{os.environ.get('FOLDER_ID')}"
         if mmyy:
@@ -31,8 +29,8 @@ class SpreadsheetManager:
         self.user = user if user else None
 
         self.logger = logger if logger else setup_logger('az.mc.spreadsheetmanager')
-
         self.logger.info(f"drive_url: {self.drive_url}, folder_url = {self.folder_url}")
+        self.headers = generate_header()
 
     @property
     def query_book_url(self):
@@ -41,11 +39,6 @@ class SpreadsheetManager:
     @property
     def create_book_url(self):
         return self.folder_url + f":/{self.year}.xlsx:/content"
-
-    @property
-    def headers(self):
-        # read the token from the file
-        return generate_header()
     
     @property
     def table_url(self):
@@ -414,101 +407,3 @@ class SpreadsheetManager:
         for index in sorted_indexes:
             _delete_from_excel(index)
 
-
-    #####################################
-    # SENDING MESSAGE TO PRINCIPAL
-    #####################################
-
-    def send_message_to_principal(self, client):
-
-        response = requests.get(url=f"{self.table_url}/rows?", headers=self.headers)
-        # self.logger.info(response.text)
-        mc_arrs = [tuple(info) for object_info in response.json()['value'] for info in object_info['values']]
-        mc_table = pd.DataFrame(data = mc_arrs, columns=["date", "name", "dept"])
-        # filter by today
-        date_today = current_sg_time("%d/%m/%Y")
-        mc_today = mc_table.loc[mc_table['date'] == date_today]
-
-        content_variables = {
-                '2': date_today
-            }
-
-        all_present = False
-        
-        if len(mc_today) == 0:
-            all_present = True
-        
-        if not len(mc_today) == 0:
-
-            #groupby
-            mc_today_by_dept = mc_today.groupby("dept").agg(total_by_dept = ("name", "count"), names = ("name", lambda x: ', '.join(x)))
-
-            # convert to a dictionary where the dept is the key
-            dept_aggs = mc_today_by_dept.apply(lambda x: [x.total_by_dept, x.names], axis=1).to_dict()
-
-            # self.logger.info(dept_aggs)
-
-            dept_order = ('ICT', 'Finance', 'Voc Ed', 'Lower Pri', 'Upper Pri', 'Allied Professionals', 'HR')
-
-            total = 0
-
-            count = 3
-            for dept in dept_order:
-                if dept in dept_aggs:
-                    content_variables[str(count)] = dept_aggs[dept][1]  # names
-                    content_variables[str(count + 1)] = str(dept_aggs[dept][0])  # number of names
-                    total += dept_aggs[dept][0]
-                    count += 2
-                    continue
-
-                content_variables[str(count)] = "NIL"
-                content_variables[str(count + 1)] = '0'  # number of names
-                count += 2
-
-            content_variables['17'] = str(total)
-
-            # self.logger.info(type(message))
-            # self.logger.info(type(date_today))
-                    
-            # self.logger.info(content_variables)
-
-        for global_admin in User.get_global_admins():
-
-            # self.logger.info(f"{p_name}, {p_number}")
-
-            new_content_variables = content_variables
-            new_content_variables['1'] = global_admin.name
-
-            content_variables = json.dumps(new_content_variables)
-            
-            
-            client.messages.create(
-                to=str(global_admin.sg_number),
-                from_=os.environ.get("MESSAGING_SERVICE_SID"),
-                content_sid=os.environ.get("SEND_MESSAGE_TO_LEADERS_SID") if all_present else os.environ.get("SEND_MESSAGE_TO_LEADERS_ALL_PRESENT_SID"),
-                content_variables=new_content_variables,
-                # status_callback=os.environ.get("CALLBACK_URL")
-            )
-
-if __name__ == "__main__":
-    from app import app
-    from config import client
-
-    logger = setup_logger('az.mc.report', 'daily_mc_report.log')
-
-    env_path = "/home/app/web/.env"
-    load_dotenv(dotenv_path=env_path)
-    manager = SpreadsheetManager(logger=logger)
-
-    try:
-        with app.app_context():
-            manager.send_message_to_principal(client)
-
-    except AzureSyncError as e:
-
-        logger.info(e.message)
-        # raise ReplyError("I'm sorry, something went wrong with the code, please check with ICT")
-
-    except Exception as e:
-
-        logger.info(traceback.format_exc())
