@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, time
 import os
 import requests
-from dotenv import load_dotenv
+import numpy as np
 import pandas as pd
 import json
 
@@ -203,10 +203,10 @@ class SpreadsheetManager:
         # ADD TABLE HEADERS
         @delay_decorator("Table headers could not be initialised.", retries = 10)
         def _add_table_headers():
-            table_headers_url = f"{worksheet_url}/range(address='A1:C1')"
+            table_headers_url = f"{worksheet_url}/range(address='A1:D1')"
 
             header_values = {
-                "values": [["Date", "Name", "Department"]]
+                "values": [["Date", "Name", "Department", "Type"]]
             }
 
             response = requests.patch(table_headers_url, headers=self.headers, json=header_values)
@@ -218,7 +218,7 @@ class SpreadsheetManager:
             add_table_url = f"{worksheet_url}/tables/add"
 
             body = {
-                "address": "A1:C1",
+                "address": "A1:D1",
                 "hasHeaders": True,
             }
 
@@ -291,23 +291,30 @@ class SpreadsheetManager:
         current_details_list = [tuple(info) for object_info in response.json()['value'] for info in object_info['values']]
 
         self.logger.info(current_details_list[:5])
-        current_details_df = pd.DataFrame(data = current_details_list, columns = ["date", "name", "dept"])
+        current_details_df = pd.DataFrame(data = current_details_list, columns = ["date", "name", "dept", "type"])
 
         self.logger.info(current_details_df.head())
+        current_details_df['date'] = current_details_df['date'].str.strip()
+        current_details_df['date'].replace('', np.nan, inplace=True)
+        current_details_df.dropna(subset=['date'], inplace=True)
 
         current_details_df['date'] = pd.to_datetime(current_details_df['date'], format='%d/%m/%Y')
         current_details_df['date'] = current_details_df['date'].dt.date
+
+        self.logger.info(f"DATES IN FIND CURRENT DATES: {current_details_df.date}")
 
         time_now = current_sg_time()
 
         if time_now > current_sg_time(hour_offset = 8):
             mask = ((current_details_df["name"] == self.user.name) & (current_details_df["date"] > time_now.date()))
+            # mask = ((current_details_df["name"] == self.user.name) & (current_details_df["date"] > pd.Timestamp(time_now.date())))
         else:
             mask = ((current_details_df["name"] == self.user.name) & (current_details_df["date"] >= time_now.date()))
+            # mask = ((current_details_df["name"] == self.user.name) & (current_details_df["date"] >= pd.Timestamp(time_now.date())))
 
         current_dates = current_details_df.loc[mask, "date"]
 
-        return current_dates    
+        return current_dates
     
     
     def get_unique_current_dates(self):
@@ -339,12 +346,12 @@ class SpreadsheetManager:
     # UPLOADING DATA
     #######################################
     
-    def upload_data(self, dates_list):
+    def upload_data(self, dates_list, leave_type):
 
         modified_dates_list = [f"'{date}" for date in dates_list]
 
         body = {
-            "values": [[date, self.user.name, self.user.dept] for date in modified_dates_list]
+            "values": [[date, self.user.name, self.user.dept, leave_type] for date in modified_dates_list]
         }
         
         self.write_to_excel(body)

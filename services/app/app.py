@@ -123,11 +123,13 @@ def general_workflow(user, sid, user_str, replied_details):
 
         # NEW JOB WILL BE CREATED
         
-        intent = MessageReceived.check_for_intent(user_str)
-        if intent != intents['TAKE_MC']:
+        intent, options = MessageReceived.check_for_intent(user_str)
+        if intent == intents['ES_SEARCH'] or intent == None:
             raise ReplyError(errors['ES_REPLY_ERROR'])
+        elif intent == intents['TAKE_MC_NO_TYPE']:
+            raise ReplyError(errors['MC_WRONG_SYNTAX'])
 
-        job = JobUser.create_job(intent, user.name)
+        job = JobUser.create_job(intent, user.name, options)
         received_msg = Message.create_message(messages['RECEIVED'], job.job_no, sid, user_str)
 
     job.current_msg = received_msg
@@ -154,7 +156,6 @@ def sms_reply():
     try:
         if not user:
             raise ReplyError(errors['USER_NOT_FOUND'])
-        
         
         replied_details = None
         

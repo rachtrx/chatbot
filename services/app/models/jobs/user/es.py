@@ -18,6 +18,7 @@ from logs.config import setup_logger
 class JobEs(JobUser):
     __tablename__ = "job_es"
     job_no = db.Column(db.ForeignKey("job_user.job_no"), primary_key=True) # TODO on delete cascade?
+    category = db.Column(db.String(20), nullable=True)
     helpful = db.Column(db.Boolean, nullable=True)
     answered = db.Column(db.Boolean, default=False, nullable=False)
 
@@ -27,10 +28,11 @@ class JobEs(JobUser):
         "polymorphic_identity": "job_es"
     }
 
-    def __init__(self, name):
+    def __init__(self, name, category):
         super().__init__(name)
         self.new_monthly_dates = {}
         self.current_dates = []
+        self.category = category
 
     @overrides
     def validate_confirm_message(self):

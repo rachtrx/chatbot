@@ -2,7 +2,7 @@ from extensions import db
 # from sqlalchemy.orm import 
 import uuid
 import logging
-from constants import intents, PENDING, OK
+from constants import PENDING, OK, FAILED
 import uuid
 from utilities import current_sg_time
 
@@ -45,11 +45,11 @@ class Job(db.Model): # system jobs
                     self.logger.info("2 CONFIRMS NOT FOUND")
                 if other_msg and (other_msg.status == OK or msg.status == OK):
                     continue
-                elif msg.status != OK:
+                elif msg.status == FAILED: # TODO decide on whether to check for NOT OK instead!
                     all_replied = False
                     break
             else:
-                if msg.status != OK:
+                if msg.status == FAILED: # TODO decide on whether to check for NOT OK instead!
                     all_replied = False
                     break
 
@@ -65,6 +65,7 @@ class Job(db.Model): # system jobs
         if self.status == OK:
             return
         complete = self.validate_complete()
+        self.logger.info(f"complete: {complete}")
         if complete:
             self.commit_status(OK)
         db.session.commit()

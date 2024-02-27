@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, date
-from constants import month_mapping, days_arr, day_mapping, mc_pattern
+from constants import month_mapping, days_arr, day_mapping, mc_keywords
 import re
 from dateutil.relativedelta import relativedelta
 import logging
@@ -9,7 +9,8 @@ from utilities import current_sg_time
 from logs.config import setup_logger
 
 # SECTION utils
-start_prefixes = r'from|on|for|mc|starting|doctor'
+start_prefixes = r'from|on|for|starting|doctor|leave|mc|appointment|sick|doctor|ml|ccl|npl|medical cert|medical certificate'
+# added these incase users say I am on mc today
 end_prefixes = r'to|until|til|till|ending'
 
 def generate_date_obj(match_obj, date_format):
@@ -128,8 +129,8 @@ alternative_duration_pattern = r'(?P<duration2>\d\d?\d?|a)' # need to have both 
 day_pattern = r'(day|days)'
 
 # Combine the basic patterns into two main alternatives
-alternative1 = duration_pattern + r'\s.*?' + day_pattern + r'\s.*?' + mc_pattern
-alternative2 = mc_pattern + r'\s.*?' + alternative_duration_pattern + r'\s.*?' + day_pattern
+alternative1 = duration_pattern + r'\s.*?' + day_pattern + r'\s.*?' + mc_keywords
+alternative2 = mc_keywords + r'\s.*?' + alternative_duration_pattern + r'\s.*?' + day_pattern
 
 # Combine the two main alternatives into the final pattern
 final_duration_extraction = r'\b(?:on|taking|take) (' + alternative1 + r'|' + alternative2 + r')\b'
@@ -160,7 +161,7 @@ def calc_start_end_date(duration):
 
 # SECTION 4. next tues
 # ignore all the "this", it will be handled later. 
-days_regex = r'\b(this)?\s*(?P<offset>next|nx)?\s(?P<days>mon(day)?|tue(s(day)?)?|wed(nesday)?|thu(rs(day)?)?|fri(day)?|sat(urday)?|sun(day)?|today|tomorrow|tmr|tdy)\b' # required to alter user string
+days_regex = r'\b(?P<prefix>' + start_prefixes + r'|' + end_prefixes + r')\s*(this)?\s*(?P<offset>next|nx)?\s(?P<days>mon(day)?|tue(s(day)?)?|wed(nesday)?|thu(rs(day)?)?|fri(day)?|sat(urday)?|sun(day)?|today|tomorrow|tmr|tdy)\b' # required to alter user string
 
 # done fixing the day names
 days_pattern = r'Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday'
@@ -178,20 +179,20 @@ def resolve_day(day_key):
     if day_key in ['today', 'tdy']:
         return days_arr[today_weekday] # today
     else:
-        return days_arr[today_weekday + 1] # tomorrow
+        return days_arr[(today_weekday + 1) % 7] # tomorrow
 
 def replace_with_full_day(match):
     '''pass in the match object from the sub callback and return the extended month string'''
     # Get the matched abbreviation or full month name
-    offset = match.group('offset') if match.group('offset') is not None else ''
+    prefix = match.group('prefix') + (' ' + match.group('offset') if match.group('offset') is not None else '')
     day_key = match.group('days').lower()
-    print(offset)
+    print(prefix)
 
     if day_key in ['today', 'tomorrow', 'tmr', 'tdy']:
-        return offset + ' ' + resolve_day(day_key)
-    
+        return prefix + ' ' + resolve_day(day_key)
+
     # Return the capitalized full month name from the dictionary
-    return offset + ' ' + day_mapping[day_key]
+    return prefix + ' ' + day_mapping[day_key]
 
 def named_day_extraction(message):
     '''checks the body for days, returns (start_date, end_date)'''
@@ -201,6 +202,8 @@ def named_day_extraction(message):
 
     # days_regex, start_day_pattern, and end_day_pattern can be found in constants.py
     user_str = re.sub(days_regex, replace_with_full_day, message, flags=re.IGNORECASE)
+
+    logging.info(f"new user string: {user_str}")
 
     compiled_start_day_pattern = re.compile(start_day_pattern, re.IGNORECASE)
     compiled_end_day_pattern = re.compile(end_day_pattern, re.IGNORECASE)

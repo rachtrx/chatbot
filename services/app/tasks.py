@@ -28,7 +28,7 @@ def main(jobs=None):
 
         logger.info(f"{minute}, {cur_datetime.hour}")
 
-        if minute == 36 and cur_datetime.hour == 23: # bool
+        if minute == 0 and cur_datetime.hour == 8: # bool
             daily_update_time = True
             jobs.append(system["AM_REPORT"])
 

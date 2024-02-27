@@ -1,5 +1,6 @@
 .env
 .env.db
+.env.dev
 azure_urls.log
 app.log
 cron.log

@@ -15,6 +15,17 @@ def current_sg_time(dt_type=None, hour_offset = None):
         return dt.strftime(dt_type)
     else:
         return dt
+    
+def get_latest_date_past_8am():
+    
+    timenow = current_sg_time(hour_offset=8)
+
+    if timenow.hour >= 8:
+        tomorrow = timenow + timedelta(days=1)
+        return tomorrow.date()
+    else:
+        return timenow.date()
+
 
 
 def loop_relations(func):

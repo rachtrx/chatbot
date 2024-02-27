@@ -52,7 +52,12 @@ class JobAmReport(JobSystem):
 
         response = requests.get(url=f"{url}/rows?", headers=header)
         # self.logger.info(response.text)
+        if response.status_code != 200 and not response.json()['value']:
+            self.content_sid = os.environ.get("SEND_MESSAGE_TO_LEADERS_ALL_PRESENT_SID")
+
         mc_arrs = [tuple(info) for object_info in response.json()['value'] for info in object_info['values']]
+           
+        
         mc_table = pd.DataFrame(data = mc_arrs, columns=["date", "name", "dept"])
         # filter by today
         

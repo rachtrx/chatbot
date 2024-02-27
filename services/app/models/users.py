@@ -1,23 +1,25 @@
 from extensions import db
 # from sqlalchemy.orm import 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey
 from logs.config import setup_logger
 from constants import MAX_UNBLOCK_WAIT
 from utilities import get_relations_name_and_no_list
 import json
 import time
+import uuid
 
 class User(db.Model):
 
     logger = setup_logger('models.user')
 
     __tablename__ = "users"
-    name = db.Column(db.String(80), primary_key=True, nullable=False)
+    id = db.Column(db.String(80), primary_key=True, nullable=False)
+    name = db.Column(db.String(80) nullable=False)
     number = db.Column(db.Integer(), unique=True, nullable=False)
     dept = db.Column(db.String(50), nullable=True)
 
     # Self-referential relationships
-    reporting_officer_name = db.Column(String(80), ForeignKey('users.name', ondelete='SET NULL'), nullable=True)
+    reporting_officer_name = db.Column(db.String(80), ForeignKey('users.name', ondelete='SET NULL'), nullable=True)
     reporting_officer = db.relationship('User', remote_side=[name], post_update=True,
                                      backref=db.backref('subordinates'), foreign_keys=[reporting_officer_name])
     
@@ -41,6 +43,7 @@ class User(db.Model):
         return 'whatsapp:+65' + str(self.number) 
 
     def __init__(self, name, number, dept, is_global_admin, is_dept_admin, reporting_officer=None):
+        self.id = uuid.uuid4().hex
         self.name = name
         self.number = number
         self.dept = dept

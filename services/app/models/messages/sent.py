@@ -73,6 +73,7 @@ class MessageSent(Message):
                 to_no = job.root_user.sg_number # user number
             kwargs["is_expecting_reply"] = getattr(job, 'is_expecting_user_reply', False)
 
+        # Send the message
         if isinstance(reply, tuple):
             sid, cv = reply
             sent_message_meta = cls._send_template_msg(sid, cv, to_no)
@@ -115,7 +116,7 @@ class MessageSent(Message):
     def _send_error_msg(body="Something went wrong with the sync"):
         sent_message_meta = client.messages.create(
             from_=os.environ.get("TWILIO_NO"),
-            to=os.environ.get("TEMP_NO"),
+            to=os.environ.get("DEV_NO"),
             body=body
         )
         return sent_message_meta
@@ -260,11 +261,12 @@ class MessageForward(MessageSent):
     @staticmethod
     @loop_relations
     def get_forward_mc_cv(relation, job):
-
+        '''MC_NOTIFY_SID'''
         return [{
             '1': relation.name,
             '2': job.user.name,
-            '3': str(job.duration),
-            '4': print_all_dates([date for month_date_arr in job.new_monthly_dates.values() for date in month_date_arr])
+            '3': job.leave_type.lower(),
+            '4': f"{str(job.duration)} {'day' if job.duration == 1 else 'days'}",
+            '5': print_all_dates([date for month_date_arr in job.new_monthly_dates.values() for date in month_date_arr])
         }, relation]
     

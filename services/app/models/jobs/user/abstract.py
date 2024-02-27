@@ -40,12 +40,13 @@ class JobUser(Job): # Abstract class
     def user(self):
         return User.query.filter_by(name=self.name).first()
 
-    def __init__(self, name):
+    def __init__(self, name, options=None):
         super().__init__()
         self.name = name
 
     @classmethod
     def create_job(cls, intent, *args, **kwargs):
+        '''args is typically "user" and "options"'''
         if intent == intents['TAKE_MC']:
             from .mc import JobMc
             new_job = JobMc(*args, **kwargs)

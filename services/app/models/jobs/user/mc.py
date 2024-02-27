@@ -1,26 +1,18 @@
 from datetime import datetime, timedelta, date
 from extensions import db
-# from sqlalchemy.orm import 
-from sqlalchemy import desc, JSON
-from typing import List
-import uuid
-from constants import intents, errors, DURATION_CONFLICT, PENDING_USER_REPLY, CONFIRM, CANCEL, FAILED, OK, CHANGED, PENDING, SERVER_ERROR
-import re
+from sqlalchemy import JSON
+from constants import errors, PENDING_USER_REPLY, CONFIRM, CANCEL, OK, CHANGED, SERVER_ERROR
 from dateutil.relativedelta import relativedelta
 import os
 import uuid
 import logging
-import traceback
 import json
 from utilities import current_sg_time, print_all_dates, print_relations_list
 from azure.sheet_manager import SpreadsheetManager
 from azure.utils import loop_mc_files, AzureSyncError
-import time
 from overrides import overrides
 
 from logs.config import setup_logger
-
-from constants import intents, FAILED
 
 from models.exceptions import ReplyError, DurationError
 from models.jobs.user.abstract import JobUser
@@ -38,6 +30,7 @@ class JobMc(JobUser):
     _current_dates = db.Column(JSON, nullable=True)
     azure_status = db.Column(db.Integer, default=None, nullable=True)
     forwards_status = db.Column(db.Integer, default=None, nullable=True)
+    leave_type = db.Column(db.String(20), nullable=False)
     
     __mapper_args__ = {
         "polymorphic_identity": "job_mc"
@@ -45,10 +38,11 @@ class JobMc(JobUser):
 
     logger = setup_logger('models.job_mc')
 
-    def __init__(self, name):
+    def __init__(self, name, leave_type):
         super().__init__(name)
         self.new_monthly_dates = {}
         self.current_dates = []
+        self.leave_type = leave_type
 
     @property
     def start_date(self):
@@ -158,7 +152,7 @@ class JobMc(JobUser):
     def validate_complete(self):
         self.logger.info(f"user: {self.user.name}, messages: {self.messages}")
         
-        if self.azure_status == OK and self.forwards_status == OK:
+        if self.azure_status == OK or self.forward_messages == OK: # BUG if self.forward_message checked, then user cannot cancel and will timeout
             last_message_replied = self.all_messages_successful() # IMPT check for any double decisions before unblocking
             if last_message_replied:
                 # self.logger.info("job complete")
@@ -341,7 +335,9 @@ class JobMc(JobUser):
 
         self.monthly_dates = {}
 
-        for date in daterange():
+        dates = list(daterange())
+
+        for date in dates:
             month_key = date.strftime('%B-%Y')
             if month_key not in self.monthly_dates:
                 self.monthly_dates[month_key] = []
@@ -354,6 +350,7 @@ class JobMc(JobUser):
         for mmyy, dates_list in self.monthly_dates.items():
             self.logger.info(f"starting manager for {mmyy}, dates list is {dates_list}")
             manager = SpreadsheetManager(mmyy, self.user)
+            logging.info(f"DATES LIST IN CHECK FOR DUPLICATES: {dates_list}")
             date_data = manager.check_duplicate_dates(dates_list)
             new_duplicates, new_non_duplicates = date_data
 
@@ -380,10 +377,12 @@ class JobMc(JobUser):
 
         start_date_status, overlap_status = statuses
 
+        self.logger.info(f"STATUSES: {start_date_status}, {overlap_status}")
+
         if overlap_status == CHANGED and start_date_status == CHANGED:
             cv_func = get_cv.get_later_start_date_and_overlap_confirm_mc_cv
             content_sid = os.environ.get("MC_LATER_START_DATE_AND_OVERLAP_CONFIRMATION_CHECK_SID")
-        if overlap_status == CHANGED: # check that it is an mc message
+        elif overlap_status == CHANGED: # check that it is an mc message
             cv_func = get_cv.get_overlap_confirm_mc_cv
             content_sid = os.environ.get("MC_OVERLAP_CONFIRMATION_CHECK_SID")
         elif start_date_status == CHANGED:
@@ -445,10 +444,9 @@ class JobMc(JobUser):
                 current_mc_dates = manager.get_unique_current_dates()
                 current_dates_array = [date.strftime('%d/%m/%Y') for date in current_mc_dates] if len(current_mc_dates) > 0 else []
                 # dont extend yet since cancel decision needs to slice the array
-                
 
                 if decision == CONFIRM:
-                    manager.upload_data(dates_list)
+                    manager.upload_data(dates_list, self.leave_type)
                     # The call to get the dates often happen too fast, so we manually add the dates
                     current_dates.extend(dates_list)
                 elif decision == CANCEL:

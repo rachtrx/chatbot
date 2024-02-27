@@ -1,4 +1,3 @@
-import datetime
 
 MAX_UNBLOCK_WAIT = 30
 
@@ -31,10 +30,23 @@ DOUBLE_MESSAGE = 404 # This will always be a job with the single message
 
 ####################################
 
+
+
+leave_types = {
+    "Medical": ["medical leave", "ml"],
+    "Childcare": ["childcare leave", "child care leave", "ccl"],
+    "Parentcare": ["parentcare leave", "parent care leave", "pcl"],
+    "Hospitalisation": ["hospitalisation leave", "hospitalization leave", "hl"],
+    "Compassionate": ["compassionate leave", "cl"]
+}
+mc_keywords = r'(' + '|'.join([keyword for keywords in leave_types.values() for keyword in keywords]) + ')'
+mc_alt_words = r'(leave|mc|appointment|sick|doctor|medical cert|medical certificate)'
+
 intents = {
     "TAKE_MC": 1,
-    "OTHERS": 2,
-    "ES_SEARCH": 3
+    "TAKE_MC_NO_TYPE": 2,
+    "OTHERS": 3,
+    "ES_SEARCH": 4
 }
 
 messages = {
@@ -63,10 +75,11 @@ errors = {
     "WRONG_DATE": "I'm sorry, if I got the dates and duration wrong, please send it to me again!",
     "ES_REPLY_ERROR": "The chatbot is still in development, we regret that we could not determine your intent. If you need additional help, please reach out to our new helpline 87178103.",
     "AZURE_SYNC_ERROR": "I'm sorry, something went wrong with the code, please check with ICT.",
-    "ALL_DUPLICATE_DATES": "You are already on MC on all these dates",
-    "NOT_LAST_MSG": "To confirm or cancel the MC, please only reply to the latest message!",
+    "ALL_DUPLICATE_DATES": "You are already on leave for all these dates",
+    "NOT_LAST_MSG": "To confirm or cancel the leave, please only reply to the latest message!",
     "MESSAGE_STILL_PENDING": "Sorry, please try again in a few seconds, a message sent to you is still pending success confirmation.",
-    "JOB_MC_FAILED": "Sorry, it weems like no forwarded messages were successful and data was not successfully updated."
+    "JOB_MC_FAILED": "Sorry, it weems like no forwarded messages were successful and data was not successfully updated.",
+    "MC_WRONG_SYNTAX": "Sorry, the message should specify the type of leave. Possible values: medical leave, ml, childcare leave, child care leave, ccl, parentcare leave, parent care leave, pcl, hospitalization leave, hospitalisation leave, hl, compassionate leave, cl"
 }
 
 # SECTION proper months
@@ -117,5 +130,3 @@ day_mapping = {
     'sun': 'Sunday',
     'sunday': 'Sunday',
 }
-
-mc_pattern = r'(leave|mc|appointment|sick|doctor|ml|ccl|npl|medical cert|medical certificate)'

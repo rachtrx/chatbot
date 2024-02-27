@@ -7,14 +7,24 @@ then
     echo "Waiting for postgres..."
 
     while ! pg_isready -h $SQL_HOST -p $SQL_PORT -q; do
-      echo "Waiting for PostgreSQL to start..."
       sleep 1
-  done
+    done
 
     echo "PostgreSQL started"
-    echo "Creating the database tables..."
-    flask create_db
-    echo "Tables created"
+
+    echo "SQL USER: " $SQL_USER
+    echo "SQL HOST: " $SQL_HOST
+
+    # Check if the 'chatbot' database exists
+    if psql -h $SQL_HOST -U $SQL_USER -lqt | cut -d \| -f 1 | grep -qw "chatbot"; then
+        echo "Database 'chatbot' already exists"
+    else
+        echo "Database 'chatbot' does not exist. Creating..."
+        psql -h $SQL_HOST -U $SQL_USER -c "CREATE DATABASE chatbot"
+        flask create_db
+        echo "Creating the database tables..."
+        echo "Tables created"
+    fi
 fi
 
 host="$1"
@@ -28,7 +38,7 @@ cmd="$@"
 
 # >&2 echo "Elasticsearch is up - executing command"
 
-# flask setup_azure
+flask setup_azure
 
 service cron start
 echo "cron service started"

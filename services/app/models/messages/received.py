@@ -13,7 +13,7 @@ from config import client
 from models.exceptions import ReplyError
 from .abstract import Message
 from .sent import MessageSent
-from constants import mc_pattern
+from constants import mc_keywords, mc_alt_words, leave_types
 
 from logs.config import setup_logger
 
@@ -36,19 +36,28 @@ class MessageReceived(Message):
     @staticmethod
     def check_for_intent(message):
         '''Function takes in a user input and if intent is not MC, it returns False. Else, it will return a list with the number of days, today's date and end date'''
-
-        # 2 kinds of inputs: "I will be taking 2 days leave due to a medical appointment  mc vs I will be on medical leave for 2 days"
         
         print(f"message: {message}")
 
-        mc_keyword_patterns = re.compile(mc_pattern, re.IGNORECASE)
+        mc_keyword_patterns = re.compile(mc_keywords, re.IGNORECASE)
         mc_match = mc_keyword_patterns.search(message)
 
         if mc_match:
-            return intents['TAKE_MC']
+            matched_term = mc_match.group(0) if mc_match else None
+            leave_type = None
+            for key, values in leave_types.items():
+                if matched_term.lower() in [v.lower() for v in values]:
+                    leave_type = key
+                    return intents['TAKE_MC'], leave_type
+            # UNKNOWN ERROR... keyword found but couldnt lookup 
+            return None, None
+                
+        mc_altword_patterns = re.compile(mc_alt_words, re.IGNORECASE)
+        if mc_altword_patterns.search(message):
+            return intents['TAKE_MC_NO_TYPE'], None
+            
         
-        else:
-            return intents['ES_SEARCH']
+        return intents['ES_SEARCH'], None
     
     @staticmethod
     def get_message(request):
