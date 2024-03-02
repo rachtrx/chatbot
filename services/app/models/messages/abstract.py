@@ -3,12 +3,14 @@ from extensions import db
 from typing import List
 from constants import messages, PENDING
 from dateutil.relativedelta import relativedelta
-from utilities import current_sg_time
+from utilities import current_sg_time, run_new_context, get_session
 from config import client
+from sqlalchemy.orm import joinedload
 
 from logs.config import setup_logger
 
 from models.jobs.abstract import Job
+import logging
 
 class Message(db.Model):
     logger = setup_logger('models.message_abstract')
@@ -42,11 +44,11 @@ class Message(db.Model):
             cur_seq_no = self.get_seq_no(job_no)
             self.seq_no = cur_seq_no + 1
         self.logger.info(f"new_message: {self.body}, seq no: {self.seq_no}")
+        
     
     @staticmethod
     def fetch_message(sid):
         message = client.messages(sid).fetch()
-
         return message.body
     
     @staticmethod
@@ -66,31 +68,36 @@ class Message(db.Model):
             new_message =  MessageForward(*args, **kwargs)
         else:
             raise ValueError(f"Unknown Message Type: {msg_type}")
-        db.session.add(new_message)
-        db.session.commit()
+        session = get_session()
+        session.add(new_message)
+        session.commit()
         Message.logger.info(f"created new message with seq number {new_message.seq_no}")
         return new_message
-
+    
     # TO CHECK
     @staticmethod
     def get_seq_no(job_no):
         '''finds the sequence number of the message in the job, considering all message types - therefore must use the parent class name instead of "cls"'''
 
-        job = Job.query.filter_by(job_no=job_no).first()
+        session = get_session()
+        for instance in session.identity_map.values():
+            logging.info(f"Instance in get_seq_no session: {instance}")
 
-        if len(job.messages) > 0:
+        messages = session.query(Message).filter_by(job_no=job_no).all()
+
+        if len(messages) > 0:
             # Then query the messages relationship
-            cur_seq_no = max(message.seq_no for message in job.messages)
+            cur_seq_no = max(message.seq_no for message in messages)
         else:
             cur_seq_no = 0
 
         return cur_seq_no
 
     def commit_status(self, status):
+        session = get_session()
         '''tries to update status'''
         self.status = status
-        # db.session.add(self)
-        db.session.commit()
+        session.commit()
         self.logger.info(f"message committed with status {status}")
 
         return True

@@ -2,6 +2,100 @@ import time
 from datetime import datetime, timedelta
 import pytz
 import logging
+from functools import wraps
+from extensions import db
+from models.exceptions import ReplyError
+import inspect
+import traceback
+from sqlalchemy.orm import scoped_session, sessionmaker
+import threading
+
+from flask import has_request_context, current_app
+
+ThreadSession = None
+
+def init_thread_session(engine):
+    global ThreadSession
+    ThreadSession = scoped_session(sessionmaker(bind=engine))
+
+def get_session():
+    if has_request_context():
+        return current_app.extensions['sqlalchemy'].db.session
+    else:
+        return ThreadSession()
+
+def run_new_context(wait_time=None):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self_or_cls, *args, **kwargs):
+            from manage import create_app
+            from models.jobs.abstract import Job
+            from models.messages.abstract import Message
+
+            logging.basicConfig(
+                filename='/var/log/app.log',  # Log file path
+                filemode='a',  # Append mode
+                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Log message format
+                level=logging.INFO  # Log level
+            )
+
+            if wait_time:
+                time.sleep(wait_time)
+
+            app = create_app()
+            with app.app_context():
+                session = get_session()
+
+                logging.info("In decorator")
+
+                try:
+                    session.merge(self_or_cls)
+                    if inspect.isclass(self_or_cls):
+                        func(self_or_cls, *args, **kwargs)
+                    else:
+                        # Instance method logic
+                        pri_key = getattr(self_or_cls, 'job_no', getattr(self_or_cls, 'sid', None))
+                        dynamic_attrs = {attr: getattr(self_or_cls, attr) for attr in dir(self_or_cls) \
+                                        if not attr.startswith('__') and not callable(getattr(self_or_cls, attr)) \
+                                        and not hasattr(self_or_cls.__class__, attr)}
+                        db_instance = session.query(type(self_or_cls)).get(pri_key)
+                        logging.info(f"db instance found: {db_instance}")
+
+                        if db_instance:
+                            if isinstance(self_or_cls, Job) and self_or_cls.locked:
+                                for _ in range(300):
+                                    time.sleep(5)
+                                    session.refresh(self_or_cls)
+                                    if not self_or_cls.locked:
+                                        break
+                                if not self_or_cls.locked:
+                                    self_or_cls.lock(session)
+                                    session.commit()
+                                else:
+                                    raise Exception
+                            for attr, value in dynamic_attrs.items():
+                                setattr(db_instance, attr, value)
+                            self_or_cls = db_instance
+
+                        logging.info(id(session))
+                        func(self_or_cls, *args, **kwargs)
+                        if isinstance(self_or_cls, Job):
+                            self_or_cls.unlock(session)
+
+                except Exception as e:
+                    session.rollback()
+                    logging.error("Something went wrong! Exception in decorator")
+                    logging.error(traceback.format_exc())
+                finally:
+                    logging.info(id(session))
+                    if threading.current_thread() == threading.main_thread():
+                        logging.error("This is running in the main thread.")
+                    else:
+                        logging.error("This is running in a separate thread.")
+                        ThreadSession.remove()
+        return wrapper
+    return decorator
+
 
 def current_sg_time(dt_type=None, hour_offset = None):
     singapore_tz = pytz.timezone('Asia/Singapore')
@@ -17,7 +111,7 @@ def current_sg_time(dt_type=None, hour_offset = None):
         return dt
     
 def get_latest_date_past_8am():
-    
+
     timenow = current_sg_time(hour_offset=8)
 
     if timenow.hour >= 8:

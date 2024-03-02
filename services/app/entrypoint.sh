@@ -21,10 +21,11 @@ then
     else
         echo "Database 'chatbot' does not exist. Creating..."
         psql -h $SQL_HOST -U $SQL_USER -c "CREATE DATABASE chatbot"
-        flask create_db
-        echo "Creating the database tables..."
-        echo "Tables created"
     fi
+
+    flask create_db
+    echo "Creating the database tables..."
+    echo "Tables created"
 fi
 
 host="$1"

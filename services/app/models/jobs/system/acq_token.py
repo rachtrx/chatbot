@@ -45,7 +45,6 @@ class JobAcqToken(JobSystem):
         print(f"Live env: {os.environ.get('LIVE')}")
 
         if os.environ.get('LIVE') == '1':
-            # write the token to the file if on live, otherwise just use the token printed for postman
             print(f"Token path: {os.environ.get('TOKEN_PATH')}")
             with open(os.environ.get('TOKEN_PATH'), 'w') as file:
                 file.write(access_token)

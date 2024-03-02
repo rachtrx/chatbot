@@ -8,9 +8,10 @@ import time
 import logging
 import threading
 
-from utilities import loop_relations, join_with_commas_and, print_all_dates
+from utilities import loop_relations, join_with_commas_and, print_all_dates, run_new_context, get_session
 
 from models.users import User
+from models.jobs.abstract import Job
 from models.jobs.unknown.job_unknown import JobUnknown
 from models.jobs.user.abstract import JobUser
 from models.jobs.system.abstract import JobSystem
@@ -40,9 +41,10 @@ class MessageSent(Message):
         self.is_expecting_reply = is_expecting_reply
 
     def commit_message_body(self, body):
+        session = get_session()
         self.body = body
         self.logger.info(f"message body committed: {self.body}")
-        db.session.commit()
+        session.commit()
 
     @classmethod
     def send_msg(cls, msg_type, reply, job, **kwargs):
@@ -152,67 +154,6 @@ class MessageForward(MessageSent):
     @staticmethod
     def acknowledge_decision():
         return f"All messages have been sent successfully."
-    
-    @classmethod
-    def check_message_forwarded(cls, job, seq_no):
-        time.sleep(5) 
-
-        from app import app
-
-        with app.app_context():
-
-            try:
-                job = db.session.merge(job)
-            except:
-                job = db.session.add(job)
-            
-            db.session.refresh(job)
-
-            forwarded_msgs = cls.query.filter(
-                cls.job_no == job.job_no,
-                cls.seq_no == seq_no,
-            )
-
-            logging.info("in threading function")
-            logging.info([f_msg.forward_status, f_msg.sid] for f_msg in forwarded_msgs)
-
-            success = []
-            failed = []
-            unknown = []
-            for f_msg in forwarded_msgs:
-                to_name = f_msg.to_name
-
-                if f_msg.status == OK:
-                    success.append(to_name)
-                elif f_msg.status == FAILED:
-                    failed.append(to_name)
-                else:
-                    unknown.append(to_name)
-
-            content_variables = {
-                '1': join_with_commas_and(success) if len(success) > 0 else "NA",
-                '2': join_with_commas_and(failed) if len(failed) > 0 else "NA",
-                '3': join_with_commas_and(unknown) if len(unknown) > 0 else "NA"
-            }
-            
-            content_variables = json.dumps(content_variables)
-
-            reply = (os.environ.get("FORWARD_MESSAGES_CALLBACK_SID"), content_variables)
-
-            cls.send_msg(messages['SENT'], reply, job)
-
-            db.session.refresh(job)
-
-            if not len(failed) > 0 and not len(unknown) > 0: 
-                job.forwards_status = OK
-            elif len(unknown) > 0:
-                job.forwards_status = PENDING
-            else:
-                job.forwards_status = FAILED
-
-            db.session.commit()
-            job.check_for_complete()
-
 
     ########################
     # CHATBOT FUNCTIONALITY
@@ -222,18 +163,22 @@ class MessageForward(MessageSent):
     def forward_template_msges(cls, content_variables_and_users_list, job):
 
         new_seq_no = MessageSent.get_seq_no(job.job_no) + 1
+        successful_relations = []
 
         for content_variables, relation in content_variables_and_users_list:
-            cls.send_msg(
-                msg_type=messages['FORWARD'],
-                reply=(job.content_sid, content_variables), 
-                job=job, 
-                seq_no=new_seq_no,
-                relation=relation
-            )
+            try:
+                cls.send_msg(
+                    msg_type=messages['FORWARD'],
+                    reply=(job.content_sid, content_variables), 
+                    job=job, 
+                    seq_no=new_seq_no,
+                    relation=relation
+                )
+                successful_relations.append(relation.name)
+            except:
+                continue
 
-        callback_thread = threading.Thread(target=cls.check_message_forwarded, args=(job, new_seq_no)) # need to pass number as object not available in thread due to lazy loading of user
-        callback_thread.start()
+        return (new_seq_no, successful_relations)
 
 
     ###################################################
@@ -267,6 +212,5 @@ class MessageForward(MessageSent):
             '2': job.user.name,
             '3': job.leave_type.lower(),
             '4': f"{str(job.duration)} {'day' if job.duration == 1 else 'days'}",
-            '5': print_all_dates([date for month_date_arr in job.new_monthly_dates.values() for date in month_date_arr])
+            '5': print_all_dates(job.dates_to_update, date_obj=True)
         }, relation]
-    

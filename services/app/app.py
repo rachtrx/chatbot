@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-from flask import request, Response
+from flask import request, Response, has_request_context
 from flask.cli import with_appcontext
 import logging
 import traceback
@@ -20,6 +20,8 @@ from models.jobs.user.abstract import JobUser
 from models.jobs.unknown.job_unknown import JobUnknown
 
 from tasks import main as create_task
+from sqlalchemy import create_engine
+from utilities import run_new_context, init_thread_session
 
 from es.manage import loop_through_files, create_index
 
@@ -42,6 +44,9 @@ logging.basicConfig(
 logging.getLogger('twilio.http_client').setLevel(logging.WARNING)
 
 app = create_app()
+engine = create_engine(app.config['SQLALCHEMY_DATABASE_URI'])
+logging.info(app.config['SQLALCHEMY_DATABASE_URI'])
+init_thread_session(engine)
 
 @app.cli.command("setup_azure")
 @with_appcontext
@@ -122,7 +127,6 @@ def general_workflow(user, sid, user_str, replied_details):
                 
 
         # NEW JOB WILL BE CREATED
-        
         intent, options = MessageReceived.check_for_intent(user_str)
         if intent == intents['ES_SEARCH'] or intent == None:
             raise ReplyError(errors['ES_REPLY_ERROR'])
@@ -229,55 +233,13 @@ def sms_reply_callback():
             logging.info(f"not a message, {sid}")
 
         else:
-            update_message_and_job_status(status, sid, message)
+            job = message.job
+            job.update_with_msg_callback(status, sid, message)
                         
     except Exception as e:
         logging.error(traceback.format_exc())
 
     return Response(status=200)
-
-def update_message_and_job_status(status, sid, message):
-
-    job = message.job
-    
-    if (message.status != PENDING_CALLBACK):
-        logging.info("message was not expecting a reply")
-        return Response(status=200)
-    
-    if status == "sent" and message.body is None:
-        outgoing_body = Message.fetch_message(sid)
-        logging.info(f"outgoing message: {outgoing_body}")
-        message.commit_message_body(outgoing_body)
-
-    elif status == "delivered":
-        logging.info(f"message {sid} was sent successfully")
-
-        if message.is_expecting_reply == True:
-            job.commit_status(PENDING_USER_REPLY)
-        
-        message.commit_status(OK)
-        
-        if message.type == "message_forward":
-            if message.job.forward_status_not_null():
-                MessageForward.check_message_forwarded(message.job, message.seq_no)
-        else:
-            job.check_for_complete()
-        
-        # reply message expecting user reply. just to be safe, specify the 2 types of messages
-    
-    elif status == "failed":
-        # job immediately fails
-        if message.type == "message_forward" and message.job.forward_status_not_null():
-            MessageForward.check_message_forwarded(message.job, message.seq_no)
-        else:
-            job.commit_status(FAILED) # forward message failed is still ok to some extent, especially if the user cancels afterwards. It's better to inform about the cancel
-
-        message.commit_status(FAILED)
-
-        if job.type == "job_es": # TODO should probably send to myself
-            Message.send_msg(messages['SENT'], (os.environ.get("ERROR_SID"), None), message.job)
-
-    return job
 
 if __name__ == "__main__":
     # local development, not for gunicorn

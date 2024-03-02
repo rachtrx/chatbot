@@ -348,7 +348,7 @@ class SpreadsheetManager:
     
     def upload_data(self, dates_list, leave_type):
 
-        modified_dates_list = [f"'{date}" for date in dates_list]
+        modified_dates_list = [f"'{datetime.strftime(date, '%d/%m/%Y')}" for date in dates_list]
 
         body = {
             "values": [[date, self.user.name, self.user.dept, leave_type] for date in modified_dates_list]
@@ -377,8 +377,6 @@ class SpreadsheetManager:
 
     def delete_data(self, dates_list):
 
-        dates_list = [datetime.strptime(date, "%d/%m/%Y").date() for date in dates_list]
-
         current_dates = self.find_current_dates()
         # self.logger.info(f"current dates: {current_dates}")
 
@@ -391,7 +389,6 @@ class SpreadsheetManager:
         self.delete_from_excel(indexes)
 
         del_dates = dates_to_del.tolist()
-        del_dates = [datetime.strftime(date, "%d/%m/%Y") for date in del_dates] # old dates are not removed
         # self.logger.info(f"ok dates: {ok_dates}")
 
         self.logger.info("Data deleted successfully")

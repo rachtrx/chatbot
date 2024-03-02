@@ -1,11 +1,12 @@
 from extensions import db
 # from sqlalchemy.orm import 
 from sqlalchemy import desc, JSON
-from constants import intents, errors, CONFIRM, CANCEL
+from constants import intents, errors, CONFIRM, CANCEL, OK
 import logging
 import traceback
 import json
 import os
+from utilities import run_new_context, get_session
 
 from overrides import overrides
 
@@ -73,7 +74,6 @@ class JobEs(JobUser):
 
             return body
 
-    @overrides
     def check_for_complete(self):
         last_message_replied = self.all_messages_successful()
         if self.answered and last_message_replied:
@@ -82,22 +82,25 @@ class JobEs(JobUser):
 
     def get_es_reply(self):
 
+        session = get_session()
         result = search_for_document(self.current_msg.body)
         # logging.info(f"Main result: {result}")
 
         sid, cv = self.get_query_cv(result)
 
         self.answered == True
-        db.session.commit()
+        session.commit()
 
         return sid, cv
 
     def commit_helpful(self, helpful):
         '''tries to update helpful record'''
         
+        session = get_session()
+
         self.helpful = helpful
-        # db.session.add(self)
-        db.session.commit()
+
+        session.commit()
 
         self.logger.info(f"response was helpful: {helpful}")
 

@@ -10,16 +10,17 @@ import time
 
 class Metric(db.Model):
 
+    logger = setup_logger('models.metrics')
+
     __tablename__ = "metrics"
     
     user = db.Column(db.String(80), primary_key=True, nullable=False)
     number = db.Column(db.Integer(), unique=True, nullable=False)
     dept = db.Column(db.String(50), nullable=True)
-
+    last_local_db_update = db.Column(db.DateTime(timezone=True), nullable=True)
+    last_azure_db_update = db.Column(db.DateTime(timezone=True), nullable=True)
 
     def check_azure_sync_status(self, api_url):
-
-        logger = setup_logger('models.user')
 
         try:
             response = requests.get(api_url)

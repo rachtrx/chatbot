@@ -10,7 +10,7 @@ import re
 from dateutil.relativedelta import relativedelta
 import os
 import uuid
-from utilities import current_sg_time
+from utilities import current_sg_time, run_new_context, get_session
 from constants import intents, errors
 from models.exceptions import ReplyError
 from models.jobs.abstract import Job
@@ -28,7 +28,7 @@ class JobUser(Job): # Abstract class
 
     job_no = db.Column(db.ForeignKey("job.job_no"), primary_key=True)
     
-    name = db.Column(db.String(80), nullable=True)
+    name = db.Column(db.String(80), nullable=True) # dont create relationship otherwise the name is gone after deleted
     is_cancelled = db.Column(db.Boolean, default=False, nullable=False)
     
     __mapper_args__ = {
@@ -38,9 +38,11 @@ class JobUser(Job): # Abstract class
 
     @property
     def user(self):
-        return User.query.filter_by(name=self.name).first()
+        session = get_session()
+        user = session.query(User).filter_by(name=self.name).first()
+        return user
 
-    def __init__(self, name, options=None):
+    def __init__(self, name):
         super().__init__()
         self.name = name
 
@@ -61,22 +63,26 @@ class JobUser(Job): # Abstract class
         if new_job.user:
             new_job.user.is_blocking = True
             cls.logger.info("blocking user")
-        db.session.add(new_job)
-        db.session.commit()
+        session = get_session()
+        session.add(new_job)
+        session.commit()
         return new_job
     
     def commit_cancel(self):
         '''tries to cancel'''
+        session = get_session()
         self.status = PENDING
         self.is_cancelled = True
+        session.commit()
+
         self.reset_complete_conditions() # TO IMPLEMENT
-        db.session.commit()
         return True
     
     @classmethod
     def get_recent_pending_job(cls, number):
         '''Returns the user if they have any pending MC message from the user within 5mins'''
-        latest_message = Message.query.join(cls).join(User, cls.name == User.name).filter(
+        session = get_session()
+        latest_message = session.query(Message).join(cls).join(User, cls.name == User.name).filter(
             User.name == User.get_user(number).name,
             cls.status.between(300, 399)
             # dont need worry about forward message since its a message_sent object
@@ -90,7 +96,7 @@ class JobUser(Job): # Abstract class
             cls.logger.info(f"last timestamp: {last_timestamp}, current timestamp: {current_time}")
             time_difference = current_time - last_timestamp
             print(time_difference)
-            if time_difference < timedelta(minutes=2):
+            if time_difference < timedelta(minutes=1):
                 cls.logger.info(f"message found: {latest_message.body}")
                 return latest_message.job
             
@@ -106,11 +112,14 @@ class JobUser(Job): # Abstract class
     def entry_action(self):
         pass
 
+    def run_background_tasks(self):
+        pass
+
     def handle_request(self):
 
         logging.info("job set with expects")
 
-        from models.messages import MessageConfirm
+        from models.messages.received import MessageConfirm
 
         if isinstance(self.current_msg, MessageConfirm):
             # these 2 functions are implemented with method overriding
@@ -131,3 +140,9 @@ class JobUser(Job): # Abstract class
             raise ReplyError(errors['UNKNOWN ERROR'])
 
         self.current_msg.create_reply_msg(reply)
+
+        if self.current_msg.seq_no == 1:
+            return
+        
+        self.run_background_tasks() # to improve
+        

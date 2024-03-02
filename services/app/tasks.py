@@ -2,12 +2,15 @@ from manage import create_app
 from constants import system
 from models.jobs.system.abstract import JobSystem
 from constants import messages
+from extensions import db
 
 from dotenv import load_dotenv
 from models.messages.sent import MessageSent
-from utilities import current_sg_time
+from utilities import current_sg_time, get_session
 from constants import OK, FAILED
 from logs.config import setup_logger
+import logging
+import traceback
 
 env_path = "/home/app/web/.env"
 load_dotenv(dotenv_path=env_path)
@@ -51,17 +54,29 @@ def main(jobs=None):
 
         logger.info(f"Creating job for {job}")
 
-        with app.app_context():
-            new_job = JobSystem.create_job(job)
-            body = new_job.main()
+        with app.app_context(): # to use separately?
+            try:
+                new_job = JobSystem.create_job(job)
 
-            if new_job.task_status == OK and not daily_update_time:
-                new_job.commit_status(OK)
-                continue
-            if new_job.task_status == FAILED:
-                new_job.commit_status(FAILED)
+                body = new_job.main()
+
+                if new_job.task_status == OK and not daily_update_time:
+                    new_job.commit_status(OK)
+                    continue
+                if new_job.task_status == FAILED:
+                    new_job.commit_status(FAILED)
+                
+                MessageSent.send_msg(messages['SENT'], body, new_job)
             
-            MessageSent.send_msg(messages['SENT'], body, new_job)
+            except Exception as e:
+                db.session.rollback()
+                logger.error(traceback.format_exc())
+            
+            finally:
+                db.session.close()
+
+    logger.info("Tasks complete")
+            
     
         
 if __name__ == "__main__":

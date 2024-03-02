@@ -14,6 +14,7 @@ from models.exceptions import ReplyError
 from .abstract import Message
 from .sent import MessageSent
 from constants import mc_keywords, mc_alt_words, leave_types
+from utilities import run_new_context, get_session
 
 from logs.config import setup_logger
 
@@ -76,9 +77,9 @@ class MessageReceived(Message):
         return sid
 
     def commit_reply_sid(self, sid):
+        session = get_session()
         self.reply_sid = sid
-        # db.session.add(self)
-        db.session.commit()
+        session.commit()
         self.logger.info(f"reply committed with sid {self.reply_sid}")
 
         return True

@@ -34,7 +34,7 @@ def get_overlap_confirm_mc_cv(relations_list, job):
     return {
         '1': job.user.name,
         '2': print_all_dates(job.duplicate_dates, date_obj=True),
-        '3': print_all_dates(job.non_duplicate_dates, date_obj=True),
+        '3': print_all_dates(job.dates_to_update, date_obj=True),
         '4': str(job.duration),
         '5': print_relations_list(relations_list),
         '6': str(CONFIRM),
@@ -46,7 +46,7 @@ def get_later_start_date_and_overlap_confirm_mc_cv(relations_list, job):
     return {
         '1': job.user.name,
         '2': print_all_dates(job.duplicate_dates, date_obj=True),
-        '3': print_all_dates(job.non_duplicate_dates, date_obj=True),
+        '3': print_all_dates(job.dates_to_update, date_obj=True),
         '4': str(job.duration),
         '5': print_relations_list(relations_list),
         '6': str(CONFIRM),

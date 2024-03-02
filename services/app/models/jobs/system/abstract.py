@@ -4,6 +4,9 @@ from logs.config import setup_logger
 from constants import OK, system, PENDING
 from overrides import overrides
 from models.users import User
+
+from utilities import run_new_context, get_session
+
 class JobSystem(Job):
 
     logger = setup_logger('models.job_system')
@@ -25,7 +28,8 @@ class JobSystem(Job):
 
     @property
     def root_user(self):
-        return User.query.filter_by(name=self.root_name).first()
+        user = db.session.query(User).filter_by(name=self.root_name).first()
+        return user
 
     @overrides
     def validate_complete(self):

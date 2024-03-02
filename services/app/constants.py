@@ -79,7 +79,8 @@ errors = {
     "NOT_LAST_MSG": "To confirm or cancel the leave, please only reply to the latest message!",
     "MESSAGE_STILL_PENDING": "Sorry, please try again in a few seconds, a message sent to you is still pending success confirmation.",
     "JOB_MC_FAILED": "Sorry, it weems like no forwarded messages were successful and data was not successfully updated.",
-    "MC_WRONG_SYNTAX": "Sorry, the message should specify the type of leave. Possible values: medical leave, ml, childcare leave, child care leave, ccl, parentcare leave, parent care leave, pcl, hospitalization leave, hospitalisation leave, hl, compassionate leave, cl"
+    "MC_WRONG_SYNTAX": "Sorry, the message should specify the type of leave. Possible values: medical leave, ml, childcare leave, child care leave, ccl, parentcare leave, parent care leave, pcl, hospitalization leave, hospitalisation leave, hl, compassionate leave, cl",
+    "NO_DEL_DATE": "Sorry, there are no dates left to delete."
 }
 
 # SECTION proper months

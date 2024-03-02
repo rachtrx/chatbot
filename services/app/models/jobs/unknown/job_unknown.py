@@ -14,10 +14,6 @@ class JobUnknown(Job):
     __tablename__ = 'job_unknown'
 
     job_no = db.Column(db.ForeignKey("job.job_no"), primary_key=True)
-    # job_no = db.Column(db.String, primary_key=True)
-    # type = db.Column(db.String(50))
-    # status = db.Column(db.Integer(), nullable=False)
-    # created_at = db.Column(db.DateTime(timezone=True), default=current_sg_time())
 
     from_no = db.Column(db.String(30), nullable=False)
     

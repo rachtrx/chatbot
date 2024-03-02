@@ -1,13 +1,14 @@
 from datetime import datetime, timedelta, date
 from extensions import db
 from sqlalchemy import JSON
-from constants import errors, PENDING_USER_REPLY, CONFIRM, CANCEL, OK, CHANGED, SERVER_ERROR
+from constants import errors, PENDING_USER_REPLY, CONFIRM, CANCEL, OK, CHANGED, SERVER_ERROR, messages
 from dateutil.relativedelta import relativedelta
 import os
 import uuid
 import logging
 import json
-from utilities import current_sg_time, print_all_dates, print_relations_list
+import threading
+from utilities import current_sg_time, print_all_dates, run_new_context, join_with_commas_and, get_latest_date_past_8am, get_session
 from azure.sheet_manager import SpreadsheetManager
 from azure.utils import loop_mc_files, AzureSyncError
 from overrides import overrides
@@ -16,8 +17,11 @@ from logs.config import setup_logger
 
 from models.exceptions import ReplyError, DurationError
 from models.jobs.user.abstract import JobUser
+from models.mc_records import McRecord
+from models.messages.sent import MessageSent
 
 from .utils_mc import dates, get_cv
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait
 
 
 class JobMc(JobUser):
@@ -26,10 +30,10 @@ class JobMc(JobUser):
     _start_date = db.Column(db.String(20), nullable=True)
     _end_date = db.Column(db.String(20), nullable=True)
     duration = db.Column(db.Integer, nullable=True)
-    _new_monthly_dates = db.Column(JSON, nullable=True)
-    _current_dates = db.Column(JSON, nullable=True)
+    _dates_to_update = db.Column(JSON, nullable=True)
     azure_status = db.Column(db.Integer, default=None, nullable=True)
     forwards_status = db.Column(db.Integer, default=None, nullable=True)
+    local_db_updated = db.Column(db.Boolean(), nullable=False)
     leave_type = db.Column(db.String(20), nullable=False)
     
     __mapper_args__ = {
@@ -41,9 +45,9 @@ class JobMc(JobUser):
     def __init__(self, name, leave_type):
         super().__init__(name)
         self.new_monthly_dates = {}
-        self.current_dates = []
         self.leave_type = leave_type
-
+        self.local_db_updated = False
+    
     @property
     def start_date(self):
         return datetime.strptime(self._start_date, "%d/%m/%Y").date() if self._start_date is not None else None
@@ -61,45 +65,60 @@ class JobMc(JobUser):
         self._end_date = datetime.strftime(value, "%d/%m/%Y")
 
     @property
-    def new_monthly_dates(self):
-        return json.loads(self._new_monthly_dates) if self._new_monthly_dates is not None else None
+    def dates_to_update(self):
+        if self._dates_to_update is not None:
+            dates_list = json.loads(self._dates_to_update)
+            if isinstance(dates_list, (list, tuple, set)):
+                return [datetime.strptime(date, "%d/%m/%Y").date() for date in dates_list]
+        return None
 
-    @new_monthly_dates.setter
-    def new_monthly_dates(self, value):
-        self._new_monthly_dates = json.dumps(value)
+    @dates_to_update.setter
+    def dates_to_update(self, dates):
+        dates = [datetime.strftime(date, "%d/%m/%Y") for date in dates]
+        self._dates_to_update = json.dumps(dates)
 
     @property
-    def current_dates(self):
-        return json.loads(self._current_dates) if self._current_dates is not None else None
-    
-    @current_dates.setter
-    def current_dates(self, value):
-        self._current_dates = json.dumps(value)
+    def new_dates(self):
+        '''self.dates_to_update may return [], so dont index it'''
+        dates = {} 
+        for date in self.dates_to_update:
+            key = date.strftime('%B-%Y')
+            if key not in dates:
+                dates[key] = []
+            dates[key].append(date)
+
+        return dates
 
     def reset_complete_conditions(self):
+        session = get_session()
         self.azure_status = None
         self.forwards_status = None
-        db.session.commit()
+        session.commit()
 
     @overrides
     def validate_confirm_message(self):
+
+        session = get_session()
 
         decision = self.current_msg.decision
 
         self.logger.info(f"Status: {self.status}, decision: {decision}")
 
+        if self.end_date < get_latest_date_past_8am() and decision == CANCEL:
+            raise ReplyError(errors['NO_DEL_DATE'])
+
         if not self.user.is_blocking: # job is COMPLETED/FAILED
-            self.validate_confirmation_again()
+            self.validate_confirmation_again(decision)
         
         elif self.user.is_blocking and self.status != PENDING_USER_REPLY: # other button had been pressed or another job in progress, but the job is no longer pending user reply
             # refreshing the object 4 lines below can lose the current_msg, so save the msg first
             temp_msg = self.current_msg
             is_blocking = self.user.wait_for_unblock()
             if not is_blocking:
-                db.session.refresh(self)
+                session.commit()
                 self.current_msg = temp_msg
                 logging.error(f"TRYING AGAIN {self.user.is_blocking}, {self.status}, {decision}")
-                self.validate_confirmation_again()
+                self.validate_confirmation_again(decision)
             else:
                 logging.error(f"{self.user.is_blocking}, {self.status}, {decision}")
                 raise ReplyError(errors['UNKNOWN_ERROR']) # blocking
@@ -113,17 +132,18 @@ class JobMc(JobUser):
             else: # CONFIRM AND PENDING REPLY
                 pass
 
-    def validate_confirmation_again(self):
-        '''This function will return if no errors are thrown, only accepts Cancel after OK'''
-        decision = self.current_msg.decision
         if decision == CANCEL:
-            from models.messages import MessageConfirm
+            self.dates_to_update = [date for date in self.dates_to_update if date >= get_latest_date_past_8am()]
+
+    def validate_confirmation_again(self, decision):
+        '''This function will return if no errors are thrown, only accepts Cancel after OK'''
+        if decision == CANCEL:
+            from models.messages.received import MessageConfirm
             latest_confirm_msg = MessageConfirm.get_latest_confirm_message(self.job_no)
             if self.current_msg.ref_msg_sid != latest_confirm_msg.sid:
                 raise ReplyError(errors['NOT_LAST_MSG'], job_status=None)
-            # TODO Not really sure how to implement this. when to set azure_status to fail? what error to catch...
-            if (not self.forwards_status or self.forwards_status < 400) or \
-                (not self.azure_status or self.azure_status < 400):
+            # TODO future work... set job_status to none since other msges can still be replied to
+            if self.local_db_updated:
                 self.commit_cancel()
                 return
             else:
@@ -134,13 +154,37 @@ class JobMc(JobUser):
         else: # CONFIRM and unknown status
             raise ReplyError(errors['UNKNOWN_ERROR'])
 
+    def run_background_tasks(self):
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [
+                executor.submit(self.check_message_forwarded, (self.forwards_seq_no)),
+                executor.submit(self.update_azure)
+            ]
+            # for future in as_completed(futures):
+            #     try:
+            #         result = future.result()
+            #     except Exception as e:
+            #         print(f'Task generated an exception: {e}')
+
+            wait(futures)
+        session = get_session()
+        session.flush([self])
+        session.refresh(self)
+        self.check_for_complete()
+
 
     @overrides
     def handle_user_reply_action(self):
-        self.forward_messages()
-        reply = self.update_azure()
-        return reply
+        updated_db_msg = self.update_local_db()
+        self.forwards_seq_no = self.forward_messages()
+        return f"{updated_db_msg}, messages have been forwarded. Pending success..."
     
+    def update_local_db(self):
+        if not self.is_cancelled:
+            return McRecord.insert_local_db(self)
+        else:
+            return McRecord.delete_local_db(self)
+
     @overrides
     def entry_action(self):
         statuses = self.generate_base()
@@ -150,16 +194,25 @@ class JobMc(JobUser):
 
     @overrides
     def validate_complete(self):
+        session = get_session()
+
+        logging.info(f"session id in validate complete: {id(session)}")
+        
+        for instance in session.identity_map.values():
+            logging.info(f"Instance in validate_complete session: {instance}")
+        logging.info(type(self))
+        
+
         self.logger.info(f"user: {self.user.name}, messages: {self.messages}")
         
-        if self.azure_status == OK or self.forward_messages == OK: # BUG if self.forward_message checked, then user cannot cancel and will timeout
+        if self.local_db_updated:
             last_message_replied = self.all_messages_successful() # IMPT check for any double decisions before unblocking
             if last_message_replied:
-                # self.logger.info("job complete")
+                self.logger.info("all messages successful")
                 return True
+        self.logger.info("all messages successful")
         return False
     
-
     ########
     # ENTRY
     ########
@@ -282,6 +335,7 @@ class JobMc(JobUser):
         return None
         
     def validate_start_date(self):
+        session = get_session()
         '''Checks if start date is valid, otherwise tries to set the start date and duration'''
         earliest_possible_date = current_sg_time().date()
         self.logger.info(f"current time is later than 8am: {current_sg_time() > current_sg_time(hour_offset=8)}")
@@ -300,7 +354,7 @@ class JobMc(JobUser):
                 self.logger.info("date is too early but can be fixed")
                 self.start_date = earliest_possible_date
                 self.duration = (self.end_date - self.start_date).days + 1
-                db.session.commit()
+                session.commit()
                 status = CHANGED
         else:
             status = OK
@@ -310,13 +364,12 @@ class JobMc(JobUser):
         
     def validate_overlap(self):
         '''
-        checks if the dates overlap, sets self.duplicate_dates, self.non_duplicate_dates, and self._new_monthly_dates
-        Sets the dates that do not overlap as self._new_monthly_dates and calculates the duration
+        checks if the dates overlap, sets self.duplicate_dates, self.dates_to_update, and self.duration
         '''
         # IMPT This is the very last validation. If the user confirms, it bypasses another validation check!
         self.check_for_duplicates() # sets the duplicate dates
 
-        if len(self.duplicate_dates) != 0 and len(self.non_duplicate_dates) != 0:
+        if len(self.duplicate_dates) != 0 and len(self.dates_to_update) != 0:
             self.logger.info("duplicates but can be fixed")
             status = CHANGED
         elif len(self.duplicate_dates) != 0:
@@ -329,48 +382,26 @@ class JobMc(JobUser):
 
     def check_for_duplicates(self):
 
+        session = get_session()
+
+        start_date, duration = self.start_date, self.duration # these are actually functions
+
         def daterange():
-            for n in range(self.duration):
-                yield self.start_date + timedelta(n)
+            for n in range(duration):
+                yield start_date + timedelta(n)
 
-        self.monthly_dates = {}
+        all_dates_set = set(daterange())
+        duplicate_records = McRecord.get_duplicates(self)
+        duplicate_dates_set = set([record.date for record in duplicate_records])
 
-        dates = list(daterange())
+        non_duplicate_dates_set = all_dates_set - duplicate_dates_set
 
-        for date in dates:
-            month_key = date.strftime('%B-%Y')
-            if month_key not in self.monthly_dates:
-                self.monthly_dates[month_key] = []
-            self.monthly_dates[month_key].append(date)
+        self.duplicate_dates = sorted(list(duplicate_dates_set))
+        self.dates_to_update = sorted(list(non_duplicate_dates_set))
 
-        self.duplicate_dates = []
-        self.non_duplicate_dates = []
-        new_monthly_dates = self.new_monthly_dates if self.new_monthly_dates is not None else {}
+        self.duration = len(self.dates_to_update)
 
-        for mmyy, dates_list in self.monthly_dates.items():
-            self.logger.info(f"starting manager for {mmyy}, dates list is {dates_list}")
-            manager = SpreadsheetManager(mmyy, self.user)
-            logging.info(f"DATES LIST IN CHECK FOR DUPLICATES: {dates_list}")
-            date_data = manager.check_duplicate_dates(dates_list)
-            new_duplicates, new_non_duplicates = date_data
-
-            self.logger.info(f"duplicate dates: {new_duplicates}, non duplicates: {new_non_duplicates}")
-
-            # Store the filtered details back into a new dictionary
-            if len(new_non_duplicates) > 0:
-                new_monthly_dates[mmyy] = [datetime.strftime(date, "%d/%m/%Y") for date in new_non_duplicates]
-
-            # these are the arrays to inform the user about overlapping dates, they are not saved in the database
-            self.duplicate_dates.extend(new_duplicates)
-            self.non_duplicate_dates.extend(new_non_duplicates)
-
-        self.new_monthly_dates = new_monthly_dates
-        self.duration = len(self.non_duplicate_dates)
-        db.session.commit()
-
-        # self.logger.info(self.new_monthly_dates)
-        # self.logger.info(self.duplicate_dates)
-        # self.logger.info(self.non_duplicate_dates)
+        session.commit()
 
     def generate_msg_from_status(self, statuses):
         '''self always has a job that is an JobMc object'''
@@ -408,9 +439,9 @@ class JobMc(JobUser):
 
     def forward_messages(self):
 
-        from models.messages import MessageForward
+        from models.messages.sent import MessageForward
         
-        if self.current_msg.decision == CONFIRM:
+        if not self.is_cancelled:
             self.content_sid = os.environ.get("MC_NOTIFY_SID")
 
         else: 
@@ -420,74 +451,80 @@ class JobMc(JobUser):
 
         self.logger.info(f"forwarding messages with this cv list: {cv_and_relations_list}")
 
-        MessageForward.forward_template_msges(cv_and_relations_list, self)
-        
-    def update_azure(self):
+        [new_seq_no, successful_relations] = MessageForward.forward_template_msges(cv_and_relations_list, self)
 
-        decision = self.current_msg.decision
+        return new_seq_no
+            
+    @run_new_context()
+    def update_azure(self):
+        session = get_session()
+        logging.info(f"session id in update_azure: {id(session)}")
+
+        logging.basicConfig(
+            filename='/var/log/app.log',  # Log file path
+            filemode='a',  # Append mode
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Log message format
+            level=logging.INFO  # Log level
+        )
+        
+        logging.info("in update azure")
+
+        all_mc_dates = []
+        del_dates = []
 
         # upload to azure
         try:
-            current_dates = []
-
-            if decision == CANCEL:
-                del_dates = []
-
             mmyy_arr = loop_mc_files()
-            # self.logger.info(f"mmyy_arr: {mmyy_arr}")
 
             # check every 
-            for mmyy, dates_list in self.new_monthly_dates.items():
+            for mmyy, dates_list in self.new_dates.items():
                 self.logger.info(f"mmyy: {mmyy}")
 
                 manager = SpreadsheetManager(mmyy, self.user)
-                current_mc_dates = manager.get_unique_current_dates()
-                current_dates_array = [date.strftime('%d/%m/%Y') for date in current_mc_dates] if len(current_mc_dates) > 0 else []
+                existing_dates = manager.get_unique_current_dates()
                 # dont extend yet since cancel decision needs to slice the array
 
-                if decision == CONFIRM:
+                if not self.is_cancelled: # cfm
                     manager.upload_data(dates_list, self.leave_type)
                     # The call to get the dates often happen too fast, so we manually add the dates
-                    current_dates.extend(dates_list)
-                elif decision == CANCEL:
-                    del_mc_dates = manager.delete_data(dates_list)
-                    del_dates.extend(del_mc_dates)
-                    current_dates_array = [date for date in current_dates_array if date not in del_mc_dates]
+                    all_mc_dates.extend(dates_list)
+                else: # cancel
+                    del_month_mc_dates = manager.delete_data(dates_list)
+                    del_dates.extend(del_month_mc_dates)
+                    existing_dates = [date for date in existing_dates if date not in del_month_mc_dates]
 
-                current_dates.extend(current_dates_array)
+                all_mc_dates.extend(existing_dates)
                 
                 if mmyy in mmyy_arr:
                     mmyy_arr.remove(mmyy)
                     self.logger.info(f"removing {mmyy} from the array")
-
             
             for mmyy in mmyy_arr:
                 manager = SpreadsheetManager(mmyy, self.user)
                 current_mc_dates = manager.get_unique_current_dates()
-                current_dates_array = [date.strftime('%d/%m/%Y') for date in current_mc_dates] if len(current_mc_dates) > 0 else []
-                current_dates.extend(current_dates_array)
+                logging.info(f"Existing dates: {existing_dates}")
+                existing_dates = current_mc_dates if len(current_mc_dates) > 0 else []
+                all_mc_dates.extend(existing_dates)
                 
-            self.current_dates = current_dates
             self.azure_status = OK
-            db.session.commit()
 
-            if decision == CONFIRM:
-                body = f"Hi {self.user.name}, your future MC records have been updated. You are on MC on {print_all_dates(self.current_dates)}"
+            if not self.is_cancelled:
+                body = f"MC records have been updated on Sharepoint. You are on MC on {print_all_dates(all_mc_dates, date_obj=True)}"
             else:
                 body = f"Hi {self.user.name}, "
                 if len(del_dates) > 0:
-                    body += f"Your future MC records have been deleted for {print_all_dates(del_dates)}. "
+                    body += f"Your future MC records have been deleted on Sharepoint for {print_all_dates(del_dates, date_obj=True)}. "
                 if len(self.current_dates) > 0:
-                    body += f"You are on MC on {print_all_dates(self.current_dates)}."
+                    body += f"You are on MC on {print_all_dates(all_mc_dates, date_obj=True)}."
                 else:
                     body += f"There are no other MC records under your name."
 
-            return body
+            MessageSent.send_msg(messages['SENT'], body, self)
 
         except AzureSyncError as e:
             self.logger.info(e.message)
-            body = f"Hi {self.user.name}, your MC records FAILED to update. Please try again. If the problem persists, please check with the ICT department"
+            body = f"MC records FAILED to update. Please try again. If the problem persists, please check with the ICT department"
             raise ReplyError(body)
-    
+            
 
     
