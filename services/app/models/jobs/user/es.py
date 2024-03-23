@@ -1,12 +1,11 @@
-from extensions import db
+from extensions import db, get_session
 # from sqlalchemy.orm import 
 from sqlalchemy import desc, JSON
-from constants import intents, errors, CONFIRM, CANCEL, OK
+from constants import intents, errors, DECISIONS, OK
 import logging
 import traceback
 import json
 import os
-from utilities import run_new_context, get_session
 
 from overrides import overrides
 
@@ -31,23 +30,22 @@ class JobEs(JobUser):
 
     def __init__(self, name, category):
         super().__init__(name)
-        self.new_monthly_dates = {}
         self.current_dates = []
         self.category = category
 
     @overrides
     def validate_confirm_message(self):
 
-        decision = self.current_msg.decision
+        decision = self.received_msg.decision
 
-        if decision == CANCEL or decision == CONFIRM:
+        if decision == DECISIONS['CANCEL'] or decision == DECISIONS['CONFIRM']:
         # TODO CANCEL THE MC
             return
         else:
             raise ReplyError(errors['UNKNOWN_ERROR'])
         
     @overrides
-    def entry_action(self):
+    def handle_user_entry_action(self):
         try:
             reply = self.get_es_reply()
             # logging.info("querying documents")
@@ -61,15 +59,15 @@ class JobEs(JobUser):
     @overrides
     def handle_user_reply_action(self):
 
-        decision = self.current_msg.decision
+        decision = self.received_msg.decision
 
-        if decision == CANCEL or decision == CONFIRM:
+        if decision == DECISIONS['CANCEL'] or decision == DECISIONS['CONFIRM']:
         # TODO CANCEL THE MC
             self.commit_helpful(decision)
 
             body = "Thank you for the feedback!"
             
-            if decision == CANCEL:
+            if decision == DECISIONS['CANCEL']:
                 body += " We will try our best to improve the search :)"
 
             return body
@@ -83,7 +81,7 @@ class JobEs(JobUser):
     def get_es_reply(self):
 
         session = get_session()
-        result = search_for_document(self.current_msg.body)
+        result = search_for_document(self.received_msg.body)
         # logging.info(f"Main result: {result}")
 
         sid, cv = self.get_query_cv(result)
@@ -108,7 +106,7 @@ class JobEs(JobUser):
     
     def get_query_cv(self, result):
 
-        print(f"reply to query result: {result}")
+        logging.info(f"reply to query result: {result}")
 
         content_variables = {
                 '1': self.user.name,
@@ -121,8 +119,8 @@ class JobEs(JobUser):
                 content_variables[str(count + 1)] = f"[{filename}]({url})"
                 count += 2
 
-            content_variables[str(count)] = str(CONFIRM)
-            content_variables[str(count + 1)] = str(CANCEL)
+            content_variables[str(count)] = DECISIONS['CONFIRM']
+            content_variables[str(count + 1)] = DECISIONS['CANCEL']
 
             content_variables = json.dumps(content_variables)
 

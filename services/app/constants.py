@@ -1,9 +1,4 @@
-
 MAX_UNBLOCK_WAIT = 30
-
-# USER ACTIONS
-CONFIRM = 2
-CANCEL = 4
 
 # OTHER STATUSES
 CHANGED = 5 # changed dates and start date for MC
@@ -12,59 +7,98 @@ CHANGED = 5 # changed dates and start date for MC
 # JOB STATUSES
 ##################################
 
-OK = 200
-FAILED = 400
-# CANCELLED = 202 # cancelled after confirm
 
-# PENDING JOB STATUSES
-PENDING = 300   
+PROCESSING = 102
+ACCEPTED = 202
+CREATED = 201
+OK = 200
+SERVER_ERROR = 500 # Bad Request
+
 PENDING_USER_REPLY = 301
-# PENDING MSG CALLBACK
+# PROCESSING MSG CALLBACK
 PENDING_CALLBACK = 302
 
 # ERROR JOB STATUS
 CLIENT_ERROR = 401
 SERVER_ERROR = 402
-DURATION_CONFLICT = 403 # TODO
-DOUBLE_MESSAGE = 404 # This will always be a job with the single message
+# DURATION_CONFLICT = 403 # TODO
+DOUBLE_MESSAGE = 409 # Conflict This will always be a job with a single message
+
 
 ####################################
+# leave_job_status = {
+#     "PROCESSING": PROCESSING, 
+#     "PENDING_USER_REPLY": PENDING_USER_REPLY, 
+#     "ACCEPTED": ACCEPTED,
+#     "CREATED": CREATED,
+#     "OK": OK
+# } # → Processing, Pending User Reply, Accepted (Db), Ok (Forwards)
 
-
+DECISIONS = {
+    'CONFIRM': '1',
+    'CANCEL': '2',
+}
 
 leave_types = {
     "Medical": ["medical leave", "ml"],
     "Childcare": ["childcare leave", "child care leave", "ccl"],
     "Parentcare": ["parentcare leave", "parent care leave", "pcl"],
     "Hospitalisation": ["hospitalisation leave", "hospitalization leave", "hl"],
-    "Compassionate": ["compassionate leave", "cl"]
+    "Compassionate": ["compassionate leave", "cl"],
+    # "Paternity": ["paternity leave"],
+    # "Maternity": ['maternity leave'],
+    # "Anniversary": ['birthday leave', 'wedding leave', 'anniversary leave'],
+    # "Marriage": ['marriage leave']
 }
-mc_keywords = r'(' + '|'.join([keyword for keywords in leave_types.values() for keyword in keywords]) + ')'
-mc_alt_words = r'(leave|mc|appointment|sick|doctor|medical cert|medical certificate)'
+
+MC_DECISIONS = {str(index + 1): key for index, key in enumerate(leave_types.keys())}
+
+
+# MC_DECISIONS[str(len(leave_types) + 1)] = 'Others'
+# MC_DECISIONS IS NOW LIKE A CV DICTIONARY, FROM '1' TO '10'
+
+
+
+leave_keywords = r'(' + '|'.join([keyword for keywords in leave_types.values() for keyword in keywords]) + ')'
+leave_alt_words = r'(leave|mc|appointment|sick|doctor|medical cert|medical certificate)'
 
 intents = {
-    "TAKE_MC": 1,
-    "TAKE_MC_NO_TYPE": 2,
-    "OTHERS": 3,
-    "ES_SEARCH": 4
+    "TAKE_LEAVE": 1,
+    "CANCEL_LEAVE": 2,
+    "TAKE_LEAVE_NO_TYPE": 3,
+    "SHAREPOINT_ADD_RECORD": 4,
+    "SHAREPOINT_DEL_RECORD": 5,
+    "OTHERS": 6,
+    "ES_SEARCH": 7,
+    "SEND_ERROR_MESSAGE": 8
 }
 
 messages = {
     "SENT": 1, 
     "RECEIVED": 2,
-    "CONFIRM": 3, 
+    "CONFIRM": 3,
     "FORWARD": 4
 }
 
+
 system = {
-    "SYNC_USERS": 1,
-    "INDEX_DOCUMENT": 2,
-    "AM_REPORT": 3,
-    "ACQUIRE_TOKEN": 4
+    "MAIN": 1,
+    "SYNC_USERS": 2,
+    "INDEX_DOCUMENT": 3,
+    "AM_REPORT": 4,
+    "ACQUIRE_TOKEN": 5,
+    "SYNC_LEAVE_RECORDS": 6
+}
+
+METRIC_MAPPING = {index + 1: key for index, key in enumerate(system.keys())}
+
+metric_names = {
+    "LAST_AZURE_SYNC": "LAST_AZURE_SYNC",
+    "LAST_LOCAL_DB_UPDATE": "LAST_LOCAL_DB_UPDATE"
 }
 
 errors = {
-    "USER_NOT_FOUND": "I'm sorry, your contact has not been added to our database. Please check with HR.",
+    "USER_NOT_FOUND": "I'm sorry, your contact is not in our database. Please check with HR and try again in an hour.",
     "PENDING_USER_REPLY": "Please reply to the previous message first, thank you!",
     "DOUBLE_MESSAGE": "The previous job has not completed or there was an error completing it. If the problem persists, please try again in 2 minutes, thank you!",
     "UNKNOWN_ERROR": "Something went wrong, please send the message again",
@@ -78,9 +112,13 @@ errors = {
     "ALL_DUPLICATE_DATES": "You are already on leave for all these dates",
     "NOT_LAST_MSG": "To confirm or cancel the leave, please only reply to the latest message!",
     "MESSAGE_STILL_PENDING": "Sorry, please try again in a few seconds, a message sent to you is still pending success confirmation.",
-    "JOB_MC_FAILED": "Sorry, it weems like no forwarded messages were successful and data was not successfully updated.",
+    "JOB_LEAVE_FAILED": "Sorry, it seems like there is no records of this job in the database.",
     "MC_WRONG_SYNTAX": "Sorry, the message should specify the type of leave. Possible values: medical leave, ml, childcare leave, child care leave, ccl, parentcare leave, parent care leave, pcl, hospitalization leave, hospitalisation leave, hl, compassionate leave, cl",
-    "NO_DEL_DATE": "Sorry, there are no dates left to delete."
+    "NO_DEL_DATE": "Sorry, there are no dates left to delete.",
+    "TIMEOUT_MSG": "Sorry, it seems like the previous message timed out.",
+    "JOB_FAILED_MSG": "Sorry, the previous job has failed.",
+    "SENT_MESSAGE_MISSING": "Sorry, it seems like we could not find the relavant job",
+    "JOB_COMPLETED": "Sorry, the job has either completed or has failed."
 }
 
 # SECTION proper months

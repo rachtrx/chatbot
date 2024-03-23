@@ -17,7 +17,7 @@ import spacy
 
 from logs.config import setup_logger
 
-setup_logger('es.file_extraction', 'es.log')
+setup_logger('es.file_extraction', 'es')
 
 def is_bold(font_name):
     return "Bold" in font_name or "Bd" in font_name
@@ -257,9 +257,9 @@ def read_pdf(stream):
 
     text = ''.join(doc_content)
 
-    # print(f"text: {text}")
+    # logging.info(f"text: {text}")
 
-    # print(word_info[0] for word_info in words_info)
+    # logging.info(word_info[0] for word_info in words_info)
 
     keywords_arr = get_keywords(words_info)
 

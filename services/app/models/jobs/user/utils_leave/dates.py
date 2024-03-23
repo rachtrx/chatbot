@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, date
-from constants import month_mapping, days_arr, day_mapping, mc_keywords
+from constants import month_mapping, days_arr, day_mapping, leave_alt_words
 import re
 from dateutil.relativedelta import relativedelta
 import logging
@@ -15,9 +15,9 @@ end_prefixes = r'to|until|til|till|ending'
 
 def generate_date_obj(match_obj, date_format):
     '''returns date object from the regex groups, where there are typically 2 groups: start date and end date'''
-    print("matching dates")
+    logging.info("matching dates")
     date = None
-    print(match_obj.group("date"), match_obj.group("month"))
+    logging.info(match_obj.group("date"), match_obj.group("month"))
     if match_obj.group("date") and match_obj.group("month"):
         date = f'{match_obj.group("date")} {match_obj.group("month")} {current_sg_time().year}'
         date = datetime.strptime(date, date_format).date() # create datetime object
@@ -101,14 +101,14 @@ ddmm_pattern = r'(?P<date>' + dd_pattern + r')/(?P<month>' + mm_pattern + r')'
 ddmm_start_date_pattern = r'(' + start_prefixes + r')\s(' + ddmm_pattern + r')' 
 ddmm_end_date_pattern = r'(' + end_prefixes + r')\s(' + ddmm_pattern + r')'
 
-def named_ddmm_extraction(mc_message):
+def named_ddmm_extraction(leave_message):
     '''Check for normal date pattern ie. 11/11 or something'''
 
     compiled_start_date_pattern = re.compile(ddmm_start_date_pattern, re.IGNORECASE)
     compiled_end_date_pattern = re.compile(ddmm_end_date_pattern, re.IGNORECASE)
 
-    match_start_dates = compiled_start_date_pattern.search(mc_message)
-    match_end_dates = compiled_end_date_pattern.search(mc_message)
+    match_start_dates = compiled_start_date_pattern.search(leave_message)
+    match_end_dates = compiled_end_date_pattern.search(leave_message)
 
     start_date = end_date = None
 
@@ -123,17 +123,19 @@ def named_ddmm_extraction(mc_message):
     return (start_date, end_date)
 
 
-# SECTION 3. 5 days mc OR mc for 5 days
+# SECTION 3. 5 days leave OR leave for 5 days
 duration_pattern = r'(?P<duration1>\d\d?\d?|a)'
 alternative_duration_pattern = r'(?P<duration2>\d\d?\d?|a)' # need to have both so that can be compiled together (otherwise it will be rejected in that OR)
 day_pattern = r'(day|days)'
 
-# Combine the basic patterns into two main alternatives
-alternative1 = duration_pattern + r'\s.*?' + day_pattern + r'\s.*?' + mc_keywords
-alternative2 = mc_keywords + r'\s.*?' + alternative_duration_pattern + r'\s.*?' + day_pattern
+leave_type_max_two_words = r'(\b\w+\b\s+){0,2}'
+
+# Combine the basic patterns into two main alternatives. use the loose keywords for this, in case its a retry. if first try, allow max 2 words before "leave"
+alternative1 = duration_pattern + r'\s.*?' + day_pattern + r'\s.*?' + leave_type_max_two_words + leave_alt_words
+alternative2 = leave_type_max_two_words + leave_alt_words + r'\s.*?' + alternative_duration_pattern + r'\s.*?' + day_pattern
 
 # Combine the two main alternatives into the final pattern
-final_duration_extraction = r'\b(?:on|taking|take) (' + alternative1 + r'|' + alternative2 + r')\b'
+final_duration_extraction = r'\b.*?(?:on|taking|take) (' + alternative1 + r'|' + alternative2 + r')\b'
 
 def duration_extraction(message):
     '''ran always to check if user gave any duration'''
@@ -144,15 +146,15 @@ def duration_extraction(message):
     match_duration = urgent_absent_pattern.search(message)
     if match_duration:
         duration = match_duration.group("duration1") or match_duration.group("duration2")
-        print(f'duration: {duration}')
+        logging.info(f'DURATION: {duration}')
         return duration
 
     return None
 
 def calc_start_end_date(duration):
     '''ran when start_date and end_date is False; takes in extracted duration and returns the calculated start and end date. need to -1 since today is the 1st day. This function is only used if there are no dates. It does not check if dates are correct as the duration will be assumed to be wrong'''
-    print("manually calc days")
-    print(duration)
+    logging.info("manually calc days")
+    logging.info(duration)
     start_date = current_sg_time().date()
     end_date = (start_date + timedelta(days=int(duration) - 1))
 
@@ -186,7 +188,7 @@ def replace_with_full_day(match):
     # Get the matched abbreviation or full month name
     prefix = match.group('prefix') + (' ' + match.group('offset') if match.group('offset') is not None else '')
     day_key = match.group('days').lower()
-    print(prefix)
+    logging.info(prefix)
 
     if day_key in ['today', 'tomorrow', 'tmr', 'tdy']:
         return prefix + ' ' + resolve_day(day_key)
@@ -255,7 +257,7 @@ def get_future_date(start_day, end_day, start_week_offset, end_week_offset):
             # if end_week_offset > 0:
             #     end_week_offset -= 1 #TODO TEST
         else:
-            print(start_week_offset, end_week_offset)
+            logging.info(start_week_offset, end_week_offset)
             diff = start_day - today_weekday
         start_date = today + timedelta(days=diff + 7 * start_week_offset)
         

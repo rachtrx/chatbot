@@ -2,30 +2,39 @@
 
 set -e
 
-if [ "$DATABASE" = "postgres" ]
-then
-    echo "Waiting for postgres..."
+printenv > /etc/environment
 
-    while ! pg_isready -h $SQL_HOST -p $SQL_PORT -q; do
-      sleep 1
-    done
+export PYTHONPATH="$FLASK_APP_DIR:$PYTHONPATH"
 
-    echo "PostgreSQL started"
+echo "Waiting for postgres..."
+echo "SQL USER: " $SQL_USER
+echo "SQL HOST: " $SQL_HOST
 
-    echo "SQL USER: " $SQL_USER
-    echo "SQL HOST: " $SQL_HOST
+while ! pg_isready -h $SQL_HOST -p $SQL_PORT -q; do
+    echo "Still waiting"
+    sleep 1
+done
 
-    # Check if the 'chatbot' database exists
-    if psql -h $SQL_HOST -U $SQL_USER -lqt | cut -d \| -f 1 | grep -qw "chatbot"; then
-        echo "Database 'chatbot' already exists"
-    else
-        echo "Database 'chatbot' does not exist. Creating..."
-        psql -h $SQL_HOST -U $SQL_USER -c "CREATE DATABASE chatbot"
-    fi
+echo "PostgreSQL started"
 
-    flask create_db
-    echo "Creating the database tables..."
-    echo "Tables created"
+echo "SQL USER: " $SQL_USER
+echo "SQL HOST: " $SQL_HOST
+
+# Check if the 'chatbot' database exists
+if psql -h $SQL_HOST -U $SQL_USER -lqt | cut -d \| -f 1 | grep -qw "chatbot"; then
+    echo "Database 'chatbot' already exists"
+else
+    echo "Database 'chatbot' does not exist. Creating..."
+    psql -h $SQL_HOST -U $SQL_USER -c "CREATE DATABASE chatbot"
+fi
+
+if [ -n "$NEW_MIGRATION_MESSAGE" ]; then
+    cd $FLASK_APP_DIR
+    alembic revision --autogenerate -m "$NEW_MIGRATION_MESSAGE"
+    alembic upgrade head
+    echo "Database setup and migrations complete."
+else
+    echo "skipping migrations."
 fi
 
 host="$1"

@@ -1,15 +1,14 @@
-from extensions import db
+from extensions import db, get_session
 # from sqlalchemy.orm import 
 from typing import List
-from constants import messages, PENDING
+from constants import messages, PROCESSING
 from dateutil.relativedelta import relativedelta
-from utilities import current_sg_time, run_new_context, get_session
-from config import client
+from utilities import current_sg_time
+from config import twilio_client
 from sqlalchemy.orm import joinedload
 
 from logs.config import setup_logger
 
-from models.jobs.abstract import Job
 import logging
 
 class Message(db.Model):
@@ -20,11 +19,10 @@ class Message(db.Model):
     type = db.Column(db.String(50))
     body = db.Column(db.String(), nullable=True)
     timestamp = db.Column(db.DateTime(timezone=True), nullable=False)
-    status = db.Column(db.Integer(), nullable=False)
     seq_no = db.Column(db.Integer(), nullable=False)
 
     job_no = db.Column(db.String, db.ForeignKey('job.job_no'), nullable=True)
-    job = db.relationship('Job', backref='messages')
+    job = db.relationship('Job', backref='messages', lazy='select')
 
     __mapper_args__ = {
         "polymorphic_on": "type",
@@ -32,12 +30,12 @@ class Message(db.Model):
     }
 
     def __init__(self, job_no, sid, body, seq_no):
-        print(f"current time: {current_sg_time()}")
+        logging.info(f"current time: {current_sg_time()}")
         self.job_no = job_no
         self.sid = sid
         self.body = body
         self.timestamp = current_sg_time()
-        self.status = PENDING
+        self.status = PROCESSING
         if seq_no is not None:
             self.seq_no = seq_no
         else:
@@ -48,7 +46,7 @@ class Message(db.Model):
     
     @staticmethod
     def fetch_message(sid):
-        message = client.messages(sid).fetch()
+        message = twilio_client.messages(sid).fetch()
         return message.body
     
     @staticmethod
@@ -92,19 +90,12 @@ class Message(db.Model):
             cur_seq_no = 0
 
         return cur_seq_no
-
-    def commit_status(self, status):
-        session = get_session()
-        '''tries to update status'''
-        self.status = status
-        session.commit()
-        self.logger.info(f"message committed with status {status}")
-
-        return True
     
     @classmethod
     def get_message_by_sid(cls, sid):
-        msg = cls.query.filter_by(
+        session = get_session()
+
+        msg = session.query(cls).filter_by(
             sid=sid
         ).first()
         

@@ -17,7 +17,7 @@ es = Elasticsearch(
     ca_certs=os.environ.get('ES_CA_CERTS')
 )
 
-logger = setup_logger('es.manage', 'es.log')
+logger = setup_logger('es.manage', 'es')
 
 index_name = "sharepoint_docs"
 

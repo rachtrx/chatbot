@@ -1,11 +1,12 @@
 from models.jobs.abstract import Job
+from datetime import timedelta
 
 from logs.config import setup_logger
 from extensions import db
+from models.exceptions import ReplyError
 
-from constants import PENDING
-from utilities import current_sg_time
-import uuid
+from constants import PROCESSING
+from utilities import get_session, current_sg_time
 
 class JobUnknown(Job):
 
@@ -26,3 +27,16 @@ class JobUnknown(Job):
         self.from_no = from_no
         db.session.add(self)
         db.session.commit()
+
+    @classmethod
+    def check_for_prev_job(cls, from_no):
+        session = get_session()
+        last_job = session.query(cls).filter_by(from_no=from_no).first()
+
+        if last_job and current_sg_time() - last_job.created_at <= timedelta(hours=1):
+            return True
+        
+        else:
+            return False
+
+        

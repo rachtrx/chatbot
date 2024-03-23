@@ -8,29 +8,34 @@ import json
 import logging
 import traceback
 
-from .utils import generate_header, delay_decorator
-from utilities import current_sg_time
+from azure.utils import generate_header, delay_decorator
+from utilities import current_sg_time, get_latest_date_past_8am
 from logs.config import setup_logger
+import calendar
 
 class SpreadsheetManager:
 
-    def __init__(self, mmyy=None, user=None, logger=None):
+    def __init__(self, mmyy=None, user=None, token=None, dev=False):
         self.template_path = '/home/app/web/excel_files/mc_template.xlsx'
         self.drive_url = f"https://graph.microsoft.com/v1.0/drives/{os.environ.get('DRIVE_ID')}"
         self.folder_url = self.drive_url + f"/items/{os.environ.get('FOLDER_ID')}"
         if mmyy:
-            self.mmyy = mmyy
-            self.month, self.year = mmyy.split("-")
+            self.month, self.year = mmyy
+            self.month = calendar.month_name[self.month]
         else:
             self.month = current_sg_time().strftime('%B')
             self.year = current_sg_time().year
-            self.mmyy = f"{self.month}-{self.year}"
+        self.mmyy = f"{self.month}-{self.year}"
 
         self.user = user if user else None
+        self.dev = dev
 
-        self.logger = logger if logger else setup_logger('az.mc.spreadsheetmanager')
+        if not dev:
+            self.logger = setup_logger('az.leave.spreadsheetmanager')
+        else:
+            self.logger = setup_logger('app', 'test', '.')
         self.logger.info(f"drive_url: {self.drive_url}, folder_url = {self.folder_url}")
-        self.headers = generate_header()
+        self.headers = generate_header(token)
 
     @property
     def query_book_url(self):
@@ -51,12 +56,17 @@ class SpreadsheetManager:
         # self.logger.info(self.query_book_url)
         # self.logger.info(self.headers)
 
-        if os.path.exists('/home/app/web/logs/table_urls.json') and os.path.getsize('/home/app/web/logs/table_urls.json') > 0:
+        if not self.dev:
+            url_cache='/home/app/web/logs/table_urls.json'
+        else:
+            url_cache='table_urls.json'
+
+        if os.path.exists(url_cache) and os.path.getsize(url_cache) > 0:
             mode = 'r+'
         else:
             mode = 'w+'
 
-        with open('/home/app/web/logs/table_urls.json', mode) as file:
+        with open(url_cache, mode) as file:
             try:
                 table_url_dict = json.loads(file.read())
                 table_url = table_url_dict.get(self.mmyy)
@@ -82,7 +92,7 @@ class SpreadsheetManager:
         if new_book == True:
             self.deleteSheet1(worksheets_url)
 
-        with open("/home/app/web/logs/table_urls.json", 'r+') as file:
+        with open(url_cache, 'r+') as file:
             file.seek(0)
             table_url_dict[self.mmyy] = table_url
             file.write(json.dumps(table_url_dict, indent=4))
@@ -203,10 +213,10 @@ class SpreadsheetManager:
         # ADD TABLE HEADERS
         @delay_decorator("Table headers could not be initialised.", retries = 10)
         def _add_table_headers():
-            table_headers_url = f"{worksheet_url}/range(address='A1:D1')"
+            table_headers_url = f"{worksheet_url}/range(address='A1:E1')"
 
             header_values = {
-                "values": [["Date", "Name", "Department", "Type"]]
+                "values": [["id", "Date", "Name", "Department", "Type"]]
             }
 
             response = requests.patch(table_headers_url, headers=self.headers, json=header_values)
@@ -218,7 +228,7 @@ class SpreadsheetManager:
             add_table_url = f"{worksheet_url}/tables/add"
 
             body = {
-                "address": "A1:D1",
+                "address": "A1:E1",
                 "hasHeaders": True,
             }
 
@@ -274,7 +284,7 @@ class SpreadsheetManager:
     # DATA VALIDATION
     #######################################
         
-    def find_current_dates(self):
+    def find_all_dates(self):
         '''returns the current dates in a format %d/%m/%Y (to be stored as JSON in psql), and returns duplicates and non duplicates as date objects to be passed to utilities print_all_dates function)'''
         get_rows_url = f"{self.table_url}/rows"
 
@@ -291,30 +301,21 @@ class SpreadsheetManager:
         current_details_list = [tuple(info) for object_info in response.json()['value'] for info in object_info['values']]
 
         self.logger.info(current_details_list[:5])
-        current_details_df = pd.DataFrame(data = current_details_list, columns = ["date", "name", "dept", "type"])
+        current_details_df = pd.DataFrame(data = current_details_list, columns = ["record_id", "date", "name", "dept", "leave_type"])
 
         self.logger.info(current_details_df.head())
         current_details_df['date'] = current_details_df['date'].str.strip()
-        current_details_df['date'].replace('', np.nan, inplace=True)
-        current_details_df.dropna(subset=['date'], inplace=True)
-
-        current_details_df['date'] = pd.to_datetime(current_details_df['date'], format='%d/%m/%Y')
-        current_details_df['date'] = current_details_df['date'].dt.date
+        current_details_df.replace('', np.nan, inplace=True)
+        empty_date_mask = current_details_df['date'].isna()
+        current_details_df['date'] = current_details_df['date'].astype('object')
+        current_details_df.loc[~empty_date_mask, 'date'] = pd.to_datetime(current_details_df.loc[~empty_date_mask, 'date'], format='%d/%m/%Y').dt.date
+        current_details_df = current_details_df.reset_index(drop=False).rename(columns={'index': 'az_index'})
+        current_details_df = current_details_df.astype({"record_id": str, "name": str, "dept": str, "leave_type": str, "az_index": int})
+        logging.info(current_details_df)
 
         self.logger.info(f"DATES IN FIND CURRENT DATES: {current_details_df.date}")
 
-        time_now = current_sg_time()
-
-        if time_now > current_sg_time(hour_offset = 8):
-            mask = ((current_details_df["name"] == self.user.name) & (current_details_df["date"] > time_now.date()))
-            # mask = ((current_details_df["name"] == self.user.name) & (current_details_df["date"] > pd.Timestamp(time_now.date())))
-        else:
-            mask = ((current_details_df["name"] == self.user.name) & (current_details_df["date"] >= time_now.date()))
-            # mask = ((current_details_df["name"] == self.user.name) & (current_details_df["date"] >= pd.Timestamp(time_now.date())))
-
-        current_dates = current_details_df.loc[mask, "date"]
-
-        return current_dates
+        return current_details_df
     
     
     def get_unique_current_dates(self):
@@ -332,11 +333,11 @@ class SpreadsheetManager:
 
         self.logger.info(f"Dates list: {dates_list}, name: {self.user.name}")
 
-        current_mc_dates = self.get_unique_current_dates()
+        current_leave_dates = self.get_unique_current_dates()
 
         # dates_in_df = set(current_details_df["date"])
-        duplicates_array = [date for date in dates_list if date in current_mc_dates]
-        non_duplicates_array = [date for date in dates_list if date not in current_mc_dates]
+        duplicates_array = [date for date in dates_list if date in current_leave_dates]
+        non_duplicates_array = [date for date in dates_list if date not in current_leave_dates]
 
 
         return (duplicates_array, non_duplicates_array)
@@ -346,15 +347,8 @@ class SpreadsheetManager:
     # UPLOADING DATA
     #######################################
     
-    def upload_data(self, dates_list, leave_type):
-
-        modified_dates_list = [f"'{datetime.strftime(date, '%d/%m/%Y')}" for date in dates_list]
-
-        body = {
-            "values": [[date, self.user.name, self.user.dept, leave_type] for date in modified_dates_list]
-        }
-        
-        self.write_to_excel(body)
+    def upload_data(self, data):
+        self.write_to_excel({"values": data})
         self.logger.info("Data uploaded successfully")
 
    
@@ -375,25 +369,13 @@ class SpreadsheetManager:
     # DELETING DATA
     ####################################
 
-    def delete_data(self, dates_list):
-
-        current_dates = self.find_current_dates()
-        # self.logger.info(f"current dates: {current_dates}")
-
-        dates_to_del = current_dates.loc[current_dates.isin(dates_list)]
-        # self.logger.info(f"dates to del df: {dates_to_del}")
-
-        indexes = dates_to_del.index.tolist()
-        # self.logger.info(f"indexes to delete: {indexes}")
+    def delete_data(self, indexes):
 
         self.delete_from_excel(indexes)
-
-        del_dates = dates_to_del.tolist()
         # self.logger.info(f"ok dates: {ok_dates}")
 
         self.logger.info("Data deleted successfully")
-        return del_dates
-
+        return
    
     def delete_from_excel(self, indexes):
 

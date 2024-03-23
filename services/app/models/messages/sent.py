@@ -1,20 +1,17 @@
-from extensions import db
-from constants import messages, PENDING_CALLBACK, FAILED, OK, PENDING
+from extensions import db, get_session
+from constants import messages, intents, PENDING_CALLBACK, OK, MAX_UNBLOCK_WAIT
 import os
 import json
-from config import client
+from config import twilio_client
 from .abstract import Message
 import time
 import logging
-import threading
+import traceback
 
-from utilities import loop_relations, join_with_commas_and, print_all_dates, run_new_context, get_session
+from utilities import join_with_commas_and, print_all_dates
 
 from models.users import User
-from models.jobs.abstract import Job
-from models.jobs.unknown.job_unknown import JobUnknown
-from models.jobs.user.abstract import JobUser
-from models.jobs.system.abstract import JobSystem
+from models.exceptions import ReplyError
 
 from logs.config import setup_logger
 
@@ -29,8 +26,9 @@ class MessageSent(Message):
 
     sid = db.Column(db.ForeignKey("message.sid"), primary_key=True)
     is_expecting_reply = db.Column(db.Boolean, nullable=False)
+    status = db.Column(db.Integer(), nullable=False)
     
-    # job = db.relationship('Job', backref='sent_messages')
+    # job = db.relationship('Job', backref='sent_messages', lazy='select')
 
     __mapper_args__ = {
         "polymorphic_identity": "message_sent",
@@ -46,8 +44,20 @@ class MessageSent(Message):
         self.logger.info(f"message body committed: {self.body}")
         session.commit()
 
+    def commit_status(self, status):
+        self.logger.info(f"trying to commit status {status}")
+        session = get_session()
+        '''tries to update status'''
+        self.status = status
+        session.commit()
+        self.logger.info(f"message committed with status {status}")
+
+        message = session.query(MessageSent).filter_by(sid=self.sid).first()
+        self.logger.info(f"message status: {message.status}, passed status: {status}")
+        return True
+
     @classmethod
-    def send_msg(cls, msg_type, reply, job, **kwargs):
+    def send_msg(cls, msg_type, reply, job, **kwargs): 
 
         '''kwargs supplies the init variables to Message.create_messages() which call the following init functions based on the msg_type: 
         
@@ -61,12 +71,17 @@ class MessageSent(Message):
 
         For MessageSent, additional kwargs is not required (min total 3 args)
         For MessageForward, additional kwargs is required for seq_no and relation (min total 5 args)
+
+        for template messages, sid and cv are passed through reply as a tuple
         '''
 
         if msg_type == messages['FORWARD']:
-            to_no = kwargs['relation'].sg_number # forward message
+            to_no = kwargs['to_user'].sg_number # forward message
             kwargs["is_expecting_reply"] = getattr(job, 'is_expecting_relations_reply', False)
         else: # SENT
+            from models.jobs.user.abstract import JobUser
+            from models.jobs.unknown.unknown import JobUnknown
+            from models.jobs.system.abstract import JobSystem
             if isinstance(job, JobUnknown):
                 to_no = job.from_no # unknown number
             elif isinstance(job, JobUser):
@@ -78,6 +93,7 @@ class MessageSent(Message):
         # Send the message
         if isinstance(reply, tuple):
             sid, cv = reply
+            logging.info(cv)
             sent_message_meta = cls._send_template_msg(sid, cv, to_no)
         else:
             sent_message_meta = cls._send_normal_msg(reply, to_no)
@@ -93,9 +109,9 @@ class MessageSent(Message):
     @staticmethod
     def _send_template_msg(content_sid, content_variables, to_no):
 
-        print(content_variables)
+        logging.info(content_variables)
 
-        sent_message_meta = client.messages.create(
+        sent_message_meta = twilio_client.messages.create(
                 to=to_no,
                 from_=os.environ.get("MESSAGING_SERVICE_SID"),
                 content_sid=content_sid,
@@ -107,7 +123,7 @@ class MessageSent(Message):
     @staticmethod
     def _send_normal_msg(body, to_no):
         '''so far unused'''
-        sent_message_meta = client.messages.create(
+        sent_message_meta = twilio_client.messages.create(
             from_=os.environ.get("TWILIO_NO"),
             to=to_no,
             body=body
@@ -116,14 +132,13 @@ class MessageSent(Message):
     
     @staticmethod
     def _send_error_msg(body="Something went wrong with the sync"):
-        sent_message_meta = client.messages.create(
+        sent_message_meta = twilio_client.messages.create(
             from_=os.environ.get("TWILIO_NO"),
             to=os.environ.get("DEV_NO"),
             body=body
         )
         return sent_message_meta
     
-
 class MessageForward(MessageSent):
 
     logger = setup_logger('models.message_forward')
@@ -139,17 +154,24 @@ class MessageForward(MessageSent):
     # unused
     @property
     def to_user(self):
-        return User.query.filter_by(name=self.to_name).first()
+        if not getattr(self, '_to_user', None):
+            session = get_session()
+            self.to_user = session.query(User).filter_by(name=self.to_name).first()
+        return self._to_user
+    
+    @to_user.setter
+    def to_user(self, value):
+        self._to_user = value
 
     __mapper_args__ = {
         "polymorphic_identity": "message_forward",
         'inherit_condition': sid == MessageSent.sid
     }
 
-    def __init__(self, job_no, sid, is_expecting_reply, seq_no, relation):
-        self.logger.info(f"forward message created for {relation.name}")
+    def __init__(self, job_no, sid, is_expecting_reply, seq_no, to_user):
+        self.logger.info(f"forward message created for {to_user.name}")
         super().__init__(job_no, sid, is_expecting_reply, seq_no) # initialise message, body is always none since need templates to forward
-        self.to_name = relation.name
+        self.to_name = to_user.name
     
     @staticmethod
     def acknowledge_decision():
@@ -160,57 +182,29 @@ class MessageForward(MessageSent):
     ########################
     
     @classmethod
-    def forward_template_msges(cls, content_variables_and_users_list, job):
+    def forward_template_msges(cls, job):
+        '''Ensure the job has the following attributes: cv_and_users_list, content_sid (only needed for forward messages). It sets successful_forwards and forwards_seq_no'''
 
-        new_seq_no = MessageSent.get_seq_no(job.job_no) + 1
-        successful_relations = []
+        job.forwards_seq_no = MessageSent.get_seq_no(job.job_no) + 1
+        job.successful_forwards = []
 
-        for content_variables, relation in content_variables_and_users_list:
+        for content_variables, to_user in job.cv_and_users_list:
             try:
                 cls.send_msg(
                     msg_type=messages['FORWARD'],
                     reply=(job.content_sid, content_variables), 
                     job=job, 
-                    seq_no=new_seq_no,
-                    relation=relation
+                    seq_no=job.forwards_seq_no,
+                    to_user=to_user
                 )
-                successful_relations.append(relation.name)
-            except:
+                job.successful_forwards.append(to_user.name)
+            except Exception:
+                cls.logger.error(traceback.format_exc())
                 continue
-
-        return (new_seq_no, successful_relations)
-
-
-    ###################################################
-    # FOR SENDING MESSAGES TO ALL RELATIONS OF ONE PERSON
-    ###################################################
-
-    @staticmethod
-    def get_cv_and_users_list(get_cv_func, *func_args):
-        '''This function sets up the details of the forward to HOD and reporting officer message
-        
-        With the decorator, it returns a list as [(content_variables, relation_name), (content_variables, relation_name)]'''
-
-        cv_and_users_list = get_cv_func(*func_args) # for the cv funcs with loop relations, user is passed as the first argument in func args
-
-        for i, (cv, user) in enumerate(cv_and_users_list):
-            cv_and_users_list[i] = (json.dumps(cv), user)
-
-        return cv_and_users_list
-
 
     #################################
     # CV TEMPLATES FOR MANY MESSAGES
     #################################
     
-    @staticmethod
-    @loop_relations
-    def get_forward_mc_cv(relation, job):
-        '''MC_NOTIFY_SID'''
-        return [{
-            '1': relation.name,
-            '2': job.user.name,
-            '3': job.leave_type.lower(),
-            '4': f"{str(job.duration)} {'day' if job.duration == 1 else 'days'}",
-            '5': print_all_dates(job.dates_to_update, date_obj=True)
-        }, relation]
+    
+

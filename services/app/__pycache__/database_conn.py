@@ -12,10 +12,10 @@
 
 # SUCCESS = 1
 # PENDING_USER_REPLY = 2
-# FAILED = 3
+# SERVER_ERROR = 3
 
 # intents = {
-#     "TAKE_MC": 1,
+#     "TAKE_LEAVE": 1,
 #     "OTHERS": 2
 # }
 
@@ -25,7 +25,7 @@
 #     recent_msg = McDetails.query.filter_by(
 #         number=number, 
 #         status=PENDING_USER_REPLY, 
-#         intent=intents["TAKE_MC"]
+#         intent=intents["TAKE_LEAVE"]
 #     ).order_by(
 #         desc(McDetails.timestamp)
 #     ).first()
@@ -58,7 +58,7 @@
 #         start_date=start_date,
 #         end_date=end_date, 
 #         duration=duration,
-#         intent=intents["TAKE_MC"],
+#         intent=intents["TAKE_LEAVE"],
 #         status=PENDING_USER_REPLY,
 #     )
 
