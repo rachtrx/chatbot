@@ -34,7 +34,7 @@ def loop_leave_files(url=os.environ.get('LEAVE_FOLDER_URL'), latest_date=None):
     if not 200 <= response.status_code < 300:
         logging.info("something went wrong when getting files")
         logging.info(response.text)
-        return
+        raise AzureSyncError("Connection to Azure failed")
     
     months = []
 

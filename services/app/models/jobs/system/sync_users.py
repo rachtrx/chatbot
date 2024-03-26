@@ -45,7 +45,10 @@ class JobSyncUsers(JobSystem):
 
         response = requests.get(url=USERS_TABLE_URL, headers=self.header)
 
-        data = [tuple(info) for object_info in response.json()['value'] for info in object_info['values']]
+        try:
+            data = [tuple(info) for object_info in response.json()['value'] for info in object_info['values']]
+        except KeyError:
+            raise AzureSyncError("Connection to Azure failed")
 
         # logging.info(lookups_arrs)
 

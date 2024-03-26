@@ -6,6 +6,7 @@ from extensions import init_thread_session, get_session, remove_thread_session
 
 from dotenv import load_dotenv
 from models.messages.sent import MessageSent
+from models.exceptions import AzureSyncError
 from utilities import current_sg_time, convert_utc_to_sg_tz
 from constants import OK, SERVER_ERROR, PROCESSING
 from logs.config import setup_logger
@@ -59,7 +60,7 @@ def main(jobs_to_run=[]):
 
     for i, _type in enumerate(jobs, 1):
 
-        cv_index = 1 + (i - 1) * 3
+        cv_index = 1 + (i - 1) * 3 # arithmetic progression
         
         if _type in jobs_to_run:
 
@@ -83,6 +84,11 @@ def main(jobs_to_run=[]):
                         job.commit_status(OK)
 
                     cv[str(cv_index)] = job.reply
+
+                except AzureSyncError as e:
+                    session.rollback()
+                    job.commit_status(SERVER_ERROR)
+                    job.body = cv[str(cv_index)] = f"Failed: {e.message}"
 
                 except Exception as e:
                     logging.error(traceback.format_exc())
