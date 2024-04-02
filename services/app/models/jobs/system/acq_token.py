@@ -11,6 +11,7 @@ from utilities import current_sg_time
 from datetime import datetime
 import json
 import logging
+from models.exceptions import AzureSyncError
 
 class JobAcqToken(JobSystem):
 
@@ -76,19 +77,16 @@ class JobAcqToken(JobSystem):
             if not self.token:
                 self.token = self.msal_instance.acquire_token_for_client(scopes=self.scope)
 
-        except Exception as e:
-            self.error = True
-            self.reply = "Failed to retrieve token. Likely due to Client Secret Expiration. To create a new Client Secret, go to Microsoft Entra ID → Applications → App Registrations → Chatbot → Certificates & Secrets → New client secret. Then send it to me with the syntax"
-            raise
+            access_token = 'Bearer ' + self.token['access_token']
 
-        access_token = 'Bearer ' + self.token['access_token']
+        except Exception as e:
+            reply = "Failed to retrieve token. Likely due to Client Secret Expiration. To create a new Client Secret, go to Microsoft Entra ID → Applications → App Registrations → Chatbot → Certificates & Secrets → New client secret. Then update the .env file and restart Docker"
+            raise AzureSyncError(reply)
 
         logging.info(f"Live env: {os.environ.get('LIVE')}")
 
-        if os.environ.get('LIVE') == '1':
-            logging.info(f"Token path: {os.environ.get('TOKEN_PATH')}")
-            with open(os.environ.get('TOKEN_PATH'), 'w') as file:
-                file.write(access_token)
+        with open(os.environ.get('TOKEN_PATH'), 'w') as file:
+            file.write(access_token)
 
         logging.info("Access token retrieved.")
 

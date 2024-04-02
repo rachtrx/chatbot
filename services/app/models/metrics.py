@@ -54,6 +54,7 @@ class Metric(db.Model):
         self.last_job_no = job.job_no
         session.commit()
 
+        # both last update and last successful update are the same, and suddenly status not ok; or last update not last usccessful update but it didnt fail
         if updates_match and self.status != OK or not updates_match and self.status != SERVER_ERROR:
             return True
         

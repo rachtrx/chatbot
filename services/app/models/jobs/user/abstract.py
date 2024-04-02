@@ -150,10 +150,10 @@ class JobUser(Job): # Abstract class
                             if decision == DECISIONS['CANCEL']:
                                 raise ReplyError(job.cancel_msg, job_status=CLIENT_ERROR)
                             if decision == DECISIONS['CONFIRM']:
-                                job.update_info(job_information) # IMPT. SUCCESSFUL, SET ATTRIBUTES AND CONTINUE
+                                job.update_info(job_information)
                             else:
                                 raise ReplyError(errors['UNKNOWN_ERROR'])
-                        else: # choice found
+                        else: # IMPT choice found
                             job.update_info(job_information)
                             logging.info(f"UPDATED INFO! USER STR: {getattr(job, 'user_str', None)}")
                     

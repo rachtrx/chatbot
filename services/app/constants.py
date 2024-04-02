@@ -40,7 +40,7 @@ DECISIONS = {
 }
 
 leave_types = {
-    "Medical": ["medical leave", "ml"],
+    "Medical": ["medical leave", "ml", "mc", "medical cert", "medical certificate", "sick", "medical appointment"],
     "Childcare": ["childcare leave", "child care leave", "ccl"],
     "Parentcare": ["parentcare leave", "parent care leave", "pcl"],
     "Hospitalisation": ["hospitalisation leave", "hospitalization leave", "hl"],
@@ -60,7 +60,7 @@ MC_DECISIONS = {str(index + 1): key for index, key in enumerate(leave_types.keys
 
 
 leave_keywords = r'(' + '|'.join([keyword for keywords in leave_types.values() for keyword in keywords]) + ')'
-leave_alt_words = r'(leave|mc|appointment|sick|doctor|medical cert|medical certificate)'
+leave_alt_words = r'(leave|appointment|mc|ml|sick|medical certificate|medical cert|ccl|pcl|hl|cl)'
 
 intents = {
     "TAKE_LEAVE": 1,

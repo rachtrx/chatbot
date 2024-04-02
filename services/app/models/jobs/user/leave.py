@@ -256,7 +256,7 @@ class JobLeave(JobUser):
                 # if there are specified dates and duration is wrong
                 elif self.duration and self.duration != duration_c:
 
-                    body = f'The duration from {self.start_date} to {self.end_date} ({duration_c}) days) do not match with {self.duration} days. Please send another message in the form "MC from dd/mm to dd/mm" to indicate the MC dates. Thank you!'
+                    body = f'The duration from {datetime.strftime(self.start_date, "%d/%m/%Y")} to {datetime.strftime(self.end_date, "%d/%m/%Y")} ({duration_c}) days) do not match with {self.duration} days. Please send another message with the form "from dd/mm to dd/mm" to indicate the MC dates. Thank you!'
 
                     raise DurationError(body)
                 
@@ -322,12 +322,12 @@ class JobLeave(JobUser):
 
         if len(start_dates) > 1:
 
-            body = f'Conflicting start dates {", ".join(str(date) for date in start_dates)}. Please send another message in the form "MC from dd/mm to dd/mm" to indicate the MC dates. Thank you!'
+            body = f'Conflicting start dates {join_with_commas_and(datetime.strptime(date, "%d/%m/%Y") for date in start_dates)}. Please send another message with the form "from dd/mm to dd/mm" to indicate the MC dates. Thank you!'
 
             raise DurationError(body)
         if len(end_dates) > 1:
             
-            body = f'Conflicting end dates {", ".join(str(date) for date in end_dates)}. Please send another message in the form "MC from dd/mm to dd/mm" to indicate the MC dates. Thank you!'
+            body = f'Conflicting end dates {join_with_commas_and(datetime.strptime(date, "%d/%m/%Y") for date in end_dates)}. Please send another message with the form "from dd/mm to dd/mm" to indicate the MC dates. Thank you!'
 
             raise DurationError(body)
         
@@ -358,7 +358,7 @@ class JobLeave(JobUser):
         if self.start_date < earliest_possible_date:
             if self.end_date < earliest_possible_date:
                 self.logger.info("date is too early cannot be fixed")
-                body = f"Hi {self.user.name}, I am no longer able to add your MC if it is past 8am today, and no other days could be extracted. Please only send dates after today if it is past 8am, thank you!"
+                body = f"Hi {self.user.alias}, I am no longer able to add your leave if it is past 8am today, and no other days could be extracted. Please only send dates after today if it is past 8am, thank you!"
                 raise DurationError(body)
             else:
                 self.logger.info("date is too early but can be fixed")

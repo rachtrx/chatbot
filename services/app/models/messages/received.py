@@ -12,7 +12,7 @@ from config import twilio_client
 from models.exceptions import ReplyError
 from .abstract import Message
 from .sent import MessageSent
-from constants import leave_keywords, leave_alt_words, leave_types
+from constants import leave_alt_words
 import logging
 
 from logs.config import setup_logger

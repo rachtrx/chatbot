@@ -12,7 +12,7 @@ services:
     expose: 
       - 5001
     environment:
-      - LIVE=1
+      - LIVE=0
       - PYTHONUNBUFFER=1
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD} # is this needed if its already in my flask .env file?
       # - ENV_FILE=.env.dev

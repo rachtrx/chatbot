@@ -22,7 +22,7 @@ load_dotenv(dotenv_path=env_path)
 
 def main(jobs_to_run=[]):
 
-    send_message = True
+    send_message = False
 
     jobs = [system["ACQUIRE_TOKEN"], system["SYNC_USERS"], system["SYNC_LEAVE_RECORDS"], system["AM_REPORT"]]
 
@@ -86,9 +86,10 @@ def main(jobs_to_run=[]):
                     cv[str(cv_index)] = job.reply
 
                 except AzureSyncError as e:
+                    logging.error(traceback.format_exc())
                     session.rollback()
                     job.commit_status(SERVER_ERROR)
-                    job.body = cv[str(cv_index)] = f"Failed: {e.message}"
+                    cv[str(cv_index)] = f"Failed: {e.message}"
 
                 except Exception as e:
                     logging.error(traceback.format_exc())
