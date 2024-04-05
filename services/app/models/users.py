@@ -80,13 +80,15 @@ class User(db.Model):
             return None
         
     def get_ro(self):
+        self.logger.info(f"RO: {self.reporting_officer}")
         return [self.reporting_officer] if self.reporting_officer else []
 
-    def get_dept_admins(self):
+    @classmethod
+    def get_dept_admins(cls, dept):
         session = get_session()
-        query = session.query(User).filter(
+        query = session.query(cls).filter(
             User.is_dept_admin == True,
-            User.dept == self.dept
+            User.dept == dept
         )
         dept_admins = query.all()
         return dept_admins if dept_admins else []
@@ -100,7 +102,7 @@ class User(db.Model):
 
     def get_relations(self):
         # Using list unpacking to handle both list and empty list cases
-        all_relations = list(set(self.get_ro()) | set(self.get_dept_admins()) | set(self.get_global_admins()))
-        # relations = [user for user in all_relations if user.name != self.name]
+        all_relations = list(set(self.get_ro()) | set(self.get_dept_admins(self.dept)) | set(self.get_global_admins()))
+        relations = [user for user in all_relations if user.name != self.name]
         # self.logger.info(f"Final relations: {relations}")
-        return all_relations
+        return relations

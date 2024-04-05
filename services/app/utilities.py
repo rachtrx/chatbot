@@ -20,6 +20,22 @@ else:
 
 singapore_tz = ZoneInfo('Asia/Singapore')
 
+def combine_with_key_increment(original_dict, new_dict):
+    # Convert all keys to integers for processing
+    temp_original = {int(k): v for k, v in original_dict.items()}
+    temp_new = {int(k): v for k, v in new_dict.items()}
+    
+    for new_key, new_value in temp_new.items():
+        # If the key exists in the original dictionary, resolve conflicts
+        while new_key in temp_original:
+            # Shift the existing value to the next key
+            temp_original = {k + 1 if k >= new_key else k: v for k, v in temp_original.items()}
+        # Insert the new item
+        temp_original[new_key] = new_value
+    
+    # convert numbers to strings
+    return {str(k): v for k, v in temp_original.items()}
+
 def log_instances(session, func_name):
     logging.info(f'printing instances in {func_name}, session id = {id(session)}')
     for instance in session.identity_map.values():
@@ -51,13 +67,13 @@ def current_sg_time(dt_type=None, day_offset = 0): # removed hour_offset
     else:
         return dt
     
-def get_latest_date_past_8am():
+def get_latest_date_past_9am():
 
     timenow = current_sg_time()
 
     logging.info(f"TIMENOW: {timenow}")
 
-    if timenow.hour >= 8:
+    if timenow.hour >= 9:
         tomorrow = timenow + timedelta(days=1)
         return tomorrow.date()
     else:

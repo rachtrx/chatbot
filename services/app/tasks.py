@@ -42,7 +42,7 @@ def main(jobs_to_run=[]):
             if minute % 30 == 0:
                 jobs_to_run.append(system["ACQUIRE_TOKEN"])
             
-        if minute == 0 and cur_datetime.hour == 8 and cur_datetime.weekday() not in [5, 6]: # bool
+        if minute == 0 and cur_datetime.hour == 9 and cur_datetime.weekday() not in [5, 6]: # bool
             send_message = True
             jobs_to_run.append(system["AM_REPORT"])
 

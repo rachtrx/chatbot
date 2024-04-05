@@ -1,12 +1,12 @@
 from extensions import db
 from sqlalchemy import func
 from logs.config import setup_logger
-from utilities import get_latest_date_past_8am, print_all_dates
+from utilities import get_latest_date_past_9am, print_all_dates
 import json
 import time
 import shortuuid
 from datetime import timedelta, datetime
-from utilities import get_latest_date_past_8am, get_session, current_sg_time
+from utilities import get_latest_date_past_9am, get_session, current_sg_time
 
 class LeaveRecord(db.Model):
 
@@ -91,7 +91,7 @@ class LeaveRecord(db.Model):
         session = get_session()
         records = session.query(cls).filter(
             cls.job_no == job.original_job.job_no,
-            cls.date >= get_latest_date_past_8am(),
+            cls.date >= get_latest_date_past_9am(),
             cls.is_cancelled == False
         ).all()
 

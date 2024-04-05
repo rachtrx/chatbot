@@ -82,6 +82,7 @@ class JobSyncUsers(JobSystem):
             nan_names = az_users.loc[nan_mask, 'name']
             names_arr = nan_names.values
             self.failed_users = join_with_commas_and(names_arr)
+            self.logger.error(f"Failed to sync because of: {self.failed_users}")
             raise Exception
 
         az_users['is_global_admin'] = (az_users['access'] == 'GLOBAL')
@@ -94,14 +95,16 @@ class JobSyncUsers(JobSystem):
         db_users = session.query(User).order_by(User.name).all()  # ORM way to fetch users
         db_users_list = [[user.name, user.alias, user.number, user.dept, user.reporting_officer_name, user.is_global_admin, user.is_dept_admin] for user in db_users]
         column_names = [column.name for column in User.__table__.columns]
-        logging.info("%s %s", column_names, db_users_list)
+        self.logger.info("%s %s", column_names, db_users_list)
 
         db_users = pd.DataFrame(db_users_list, columns=column_names)
-        logging.info(db_users.dtypes)
+        self.logger.info(db_users.dtypes)
         db_users.sort_values(by="name", inplace=True)
         db_users = db_users[col_order]
-        logging.info(db_users)
-        logging.info(az_users)
+
+        pd.set_option('display.max_columns', None)
+        self.logger.info(db_users)
+        self.logger.info(az_users)
 
         # SECTION check for exact match
         exact_match = az_users.equals(db_users)
@@ -113,15 +116,21 @@ class JobSyncUsers(JobSystem):
             self.logger.info("changes made")
         
             # create 2 dataframes to compare
-            old_users = pd.merge(az_users, db_users, how="outer", indicator=True).query('_merge == "right_only"').drop(columns='_merge')
-            new_users = pd.merge(az_users, db_users, how="outer", indicator=True).query('_merge == "left_only"').drop(columns='_merge')
+            merged_data = pd.merge(az_users, db_users, how="outer", indicator=True)
+            old_data_names = merged_data[merged_data['_merge'] == 'right_only']['name']
+            new_data_names = merged_data[merged_data['_merge'] == 'left_only']['name']
 
-            old_users = old_users.replace({np.nan: None})
-            new_users = new_users.replace({np.nan: None})
+            old_data = db_users.loc[(db_users['name'].isin(old_data_names) | db_users['reporting_officer_name'].isin(old_data_names))]
+            old_data = old_data.replace({np.nan: None})
 
-            old_users_tuples = [name for name in old_users['name']]
-            new_users_tuples = [tuple(new_user) for new_user in new_users.values]
+            new_data = az_users.loc[(az_users['name'].isin(new_data_names) | az_users['reporting_officer_name'].isin(new_data_names))]
+            new_data = new_data.replace({np.nan: None})
+
+            old_users_tuples = [name for name in old_data['name']]
+            new_users_tuples = [tuple(new_user) for new_user in new_data.values]
             
+            self.logger.info(f"Old users: {old_data['name'].values}")
+            self.logger.info(f"New users: {new_data['name'].values}")
             # NEED APP CONTEXT
 
             for name in old_users_tuples:

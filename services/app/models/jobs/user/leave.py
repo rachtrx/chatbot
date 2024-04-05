@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta, date
 from extensions import db, get_session
-from constants import errors, OK, CHANGED, DECISIONS, intents, MC_DECISIONS
+from constants import errors, OK, NONE, UPDATED, LATE, OVERLAP, DECISIONS, intents, MC_DECISIONS, leave_issues
 from dateutil.relativedelta import relativedelta
 import os
 import logging
 import json
 import threading
-from utilities import current_sg_time, print_all_dates, join_with_commas_and, get_latest_date_past_8am, log_instances
+from utilities import current_sg_time, print_all_dates, join_with_commas_and, get_latest_date_past_9am, combine_with_key_increment
 from overrides import overrides
 
 from logs.config import setup_logger
@@ -92,7 +92,6 @@ class JobLeave(JobUser):
         # if it has the user string, its the first msg, or a retry message. user_str attribute it set either in update_info or during job initialisation
         if getattr(self, "user_str", None):
 
-
             if getattr(self.received_msg, 'decision', None):
                 self.logger.info(f"Checking for decision in handle request with user string: {self.received_msg.decision}")
 
@@ -107,6 +106,7 @@ class JobLeave(JobUser):
             if not self.leave_type:
                 raise ReplyError(errors['UNKNOWN_ERROR'])
 
+            self.is_expecting_user_reply = True
             self.received_msg.reply = self.handle_user_entry_action()
 
         elif isinstance(self.received_msg, MessageConfirm) and getattr(self.received_msg, "decision", None):
@@ -129,7 +129,6 @@ class JobLeave(JobUser):
     def handle_user_reply_action(self):
         updated_db_msg = LeaveRecord.insert_local_db(self)
         self.content_sid = os.environ.get("LEAVE_NOTIFY_SID")
-        self.set_cv_func = self.get_forward_leave_cv # must set here because Cancel will also call super().. if set in forward_messages(), then McCancel will use the same cv
         self.forward_messages()
         reply = f"{updated_db_msg}, messages have been forwarded. Pending success..."
         return reply
@@ -141,32 +140,26 @@ class JobLeave(JobUser):
 
         self.logger.info(f"STATUSES: {start_date_status}, {overlap_status}")
 
-        if overlap_status == CHANGED and start_date_status == CHANGED:
-            self.set_cv_func = self.get_later_start_date_and_overlap_confirm_leave_cv
-            content_sid = os.environ.get("LEAVE_LATER_START_DATE_AND_OVERLAP_CONFIRMATION_CHECK_SID")
-        elif overlap_status == CHANGED: # check that it is an leave message
-            self.set_cv_func = self.get_overlap_confirm_leave_cv
-            content_sid = os.environ.get("LEAVE_OVERLAP_CONFIRMATION_CHECK_SID")
-        elif start_date_status == CHANGED:
-            self.set_cv_func = self.get_later_start_date_confirm_leave_cv
-            content_sid = os.environ.get("LEAVE_LATER_START_DATE_CONFIRMATION_CHECK_SID")
-        elif start_date_status == OK and overlap_status == OK: # status is OK
-            self.set_cv_func = self.get_confirm_leave_cv
-            content_sid = os.environ.get("LEAVE_CONFIRMATION_CHECK_SID")
-        else:
-            self.logger.error(f"UNCAUGHT STATUS {start_date_status}, {overlap_status}")
-            raise ReplyError(errors['UNKNOWN_ERROR'])
-
         self.printed_name_and_no_list = self.print_relations_list() # no need names list
-        
-        cv = self.set_cv()
 
-        self.is_expecting_user_reply = True
+        self.set_dates_str()
 
-        return (content_sid, cv)
+        self.get_leave_confirmation_sid_and_cv(start_date_status+overlap_status)
+
+        return (self.content_sid, self.cv)
     
+    def set_dates_str(self):
+        self.dates_str = print_all_dates(self.dates_to_update, date_obj=True)
+        cur_date = current_sg_time().date()
+        cur_date_str = cur_date.strftime('%d/%m/%Y')
+
+        if get_latest_date_past_9am() > cur_date:
+            self.dates_str = re.sub(cur_date_str, cur_date_str + ' (*LATE*)', self.dates_str)
+
     @overrides
     def forward_messages(self):
+        self.set_dates_str()
+        self.cv_list = self.get_forward_leave_cv()
         super().forward_messages()
 
         if len(self.successful_forwards) > 0:
@@ -348,27 +341,33 @@ class JobLeave(JobUser):
         return None
         
     def validate_start_date(self):
-        session = get_session()
         '''Checks if start date is valid, otherwise tries to set the start date and duration'''
-        earliest_possible_date = current_sg_time().date()
-        earliest_possible_date = get_latest_date_past_8am()
+        status = NONE
+        session = get_session()
+        cur_sg_date = current_sg_time().date()
+        earliest_possible_date = get_latest_date_past_9am()
         
         self.logger.info(earliest_possible_date)
         self.logger.info(f"{self.start_date}, {self.end_date}")
-        if self.start_date < earliest_possible_date:
-            if self.end_date < earliest_possible_date:
-                self.logger.info("date is too early cannot be fixed")
-                body = f"Hi {self.user.alias}, I am no longer able to add your leave if it is past 8am today, and no other days could be extracted. Please only send dates after today if it is past 8am, thank you!"
-                raise DurationError(body)
-            else:
+        # if end date is earlier than today, immediately reject
+        if self.end_date < cur_sg_date:
+            self.logger.info("date is too early cannot be fixed")
+            body = f"Hi {self.user.alias}, I am no longer able to add your leave if you take it before today, sorry about the inconvenience."
+            raise DurationError(body)
+        # the start date is before today, but end date is at least today
+        elif self.start_date < earliest_possible_date:
+            # if start date is before today, definitely need to reset it to at least today
+            if self.start_date < cur_sg_date:
                 self.logger.info("date is too early but can be fixed")
-                self.start_date = earliest_possible_date
+                self.start_date = cur_sg_date
                 self.duration = (self.end_date - self.start_date).days + 1
                 session.commit()
                 logging.info(f"committed in validate_start_date in session {id(session)}")
-                status = CHANGED
-        else:
-            status = OK
+                status += UPDATED
+
+            # the start date is now at least today, but we need to inform the user if it is already past 9am
+            if earliest_possible_date > cur_sg_date:
+                status += LATE
         
         return status
 
@@ -378,16 +377,18 @@ class JobLeave(JobUser):
         checks if the dates overlap, sets self.duplicate_dates, self.dates_to_update, and self.duration
         '''
         # IMPT This is the very last validation. If the user confirms, it bypasses another validation check!
+        status = NONE
+        
         self.check_for_duplicates() # sets the duplicate dates
 
         if len(self.duplicate_dates) != 0 and len(self.dates_to_update) != 0:
             self.logger.info("duplicates but can be fixed")
-            status = CHANGED
+            status += OVERLAP
         elif len(self.duplicate_dates) != 0:
             self.logger.info("duplicates cannot be fixed")
             raise DurationError(errors["ALL_DUPLICATE_DATES"])
         else:
-            status = OK
+            pass
         
         return status
 
@@ -425,7 +426,55 @@ class JobLeave(JobUser):
     #################################
     # CV TEMPLATES FOR MANY MESSAGES
     #################################
+        
+    def get_leave_confirmation_sid_and_cv(self, status):
+
+        base_cv = {
+            1: self.user.alias,
+            2: self.leave_type.lower(),
+            3: self.dates_str,
+            4: str(self.duration),
+            5: self.printed_name_and_no_list,
+            6: str(DECISIONS['CONFIRM']),
+            7: str(DECISIONS['CANCEL'])
+        }
+
+        if status == OVERLAP + UPDATED + LATE:
+            issues = {
+                2: self.print_overlap_dates(),
+                3: leave_issues['updated'],
+                4: leave_issues['late']
+            }
+            self.content_sid = os.environ.get("LEAVE_CONFIRMATION_CHECK_3_ISSUES_SID")
+        elif status == OVERLAP + UPDATED or status == OVERLAP + UPDATED:
+            issues = {
+                2: self.print_overlap_dates(),
+                3: leave_issues['updated'] if status == OVERLAP + UPDATED else leave_issues['late'],
+            }
+            self.content_sid = os.environ.get("LEAVE_CONFIRMATION_CHECK_2_ISSUES_SID")
+        elif status == UPDATED + LATE:
+            issues = {
+                2: leave_issues['updated'],
+                3: leave_issues['late']
+            }
+            self.content_sid = os.environ.get("LEAVE_CONFIRMATION_CHECK_2_ISSUES_SID")
+        elif status == OVERLAP or status == UPDATED or status == LATE:
+            issues = {
+                2: self.print_overlap_dates() if status == OVERLAP else leave_issues['updated'] if status == UPDATED else leave_issues['late'],
+            }
+            self.content_sid = os.environ.get("LEAVE_CONFIRMATION_CHECK_1_ISSUE_SID")
+        elif status == NONE:
+            issues = {}
+            self.content_sid = os.environ.get("LEAVE_CONFIRMATION_CHECK_SID")
+        else:
+            self.logger.error(f"UNCAUGHT STATUS IN CV: {status}")
+            raise ReplyError(errors['UNKNOWN_ERROR'])
+        
+        self.cv = json.dumps(combine_with_key_increment(base_cv, issues))
     
+    def print_overlap_dates(self):
+        return leave_issues['overlap'] + print_all_dates(self.duplicate_dates, date_obj=True)
+
     @JobUser.loop_relations # just need to pass in the user when calling get_forward_leave_cv
     def get_forward_leave_cv(self, relation):
         '''LEAVE_NOTIFY_SID; The decorator is for SENDING MESSAGES TO ALL RELATIONS OF ONE PERSON'''
@@ -435,61 +484,8 @@ class JobLeave(JobUser):
             '2': self.user.alias,
             '3': self.leave_type.lower(),
             '4': f"{str(self.duration)} {'day' if self.duration == 1 else 'days'}",
-            '5': print_all_dates(self.dates_to_update, date_obj=True)
+            '5': self.dates_str
         }
-        
-    def get_confirm_leave_cv(self):
-
-        return {
-            '1': self.user.alias,
-            '2': self.leave_type.lower(),
-            '3': datetime.strftime(self.start_date, '%d/%m/%Y'),
-            '4': datetime.strftime(self.end_date, '%d/%m/%Y'),
-            '5': str(self.duration),
-            '6': self.printed_name_and_no_list,
-            '7': DECISIONS['CONFIRM'],
-            '8': DECISIONS['CANCEL']
-        }
-
-    def get_later_start_date_confirm_leave_cv(self):
-
-        return {
-            '1': self.user.alias,
-            '2': self.leave_type.lower(),
-            '3': datetime.strftime(self.start_date, '%d/%m/%Y'),
-            '4': datetime.strftime(self.end_date, '%d/%m/%Y'),
-            '5': str(self.duration),
-            '6': self.printed_name_and_no_list,
-            '7': DECISIONS['CONFIRM'],
-            '8': DECISIONS['CANCEL']
-        }
-
-    def get_overlap_confirm_leave_cv(self):
-
-        return {
-            '1': self.user.alias,
-            '2': print_all_dates(self.duplicate_dates, date_obj=True),
-            '3': self.leave_type.lower(),
-            '4': print_all_dates(self.dates_to_update, date_obj=True),
-            '5': str(self.duration),
-            '6': self.printed_name_and_no_list,
-            '7': DECISIONS['CONFIRM'],
-            '8': DECISIONS['CANCEL']
-        }
-
-    def get_later_start_date_and_overlap_confirm_leave_cv(self):
-        
-        return {
-            '1': self.user.alias,
-            '2': print_all_dates(self.duplicate_dates, date_obj=True),
-            '3': self.leave_type.lower(),
-            '4': print_all_dates(self.dates_to_update, date_obj=True),
-            '5': str(self.duration),
-            '6': self.printed_name_and_no_list,
-            '7': DECISIONS['CONFIRM'],
-            '8': DECISIONS['CANCEL']
-        }
-
 
 class JobLeaveCancel(JobLeave):
     __tablename__ = "job_leave_cancel"
@@ -530,6 +526,7 @@ class JobLeaveCancel(JobLeave):
         
     @overrides
     def forward_messages(self):
+        self.cv_list = self.get_forward_cancel_leave_cv()
         super().forward_messages()
 
         if len(self.successful_forwards) > 0:
@@ -543,12 +540,11 @@ class JobLeaveCancel(JobLeave):
         if updated_db_msg == None:
             raise ReplyError(errors['NO_DEL_DATE'])
         self.content_sid = os.environ.get("LEAVE_NOTIFY_CANCEL_SID")
-        self.set_cv_func = self.get_forward_CANCEL_LEAVE_cv
         self.forward_messages()
         return f"{updated_db_msg}, messages have been forwarded. Pending success..."
     
     @JobUser.loop_relations # just need to pass in the user when calling get_forward_leave_cv
-    def get_forward_CANCEL_LEAVE_cv(self, relation):
+    def get_forward_cancel_leave_cv(self, relation):
         '''LEAVE_NOTIFY_CANCEL_SID'''
 
         return {

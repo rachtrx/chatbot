@@ -356,29 +356,6 @@ class Job(db.Model): # system jobs
     ######################################################
     # FOR SENDING SINGLE REPLY MSG ABT ALL THEIR RELATIONS
     ######################################################
-
-    def set_cv(self, in_json=True): 
-        '''Ensure self has the following attributes: set_cv_func.
-
-        For forward messages to relations:
-        a) in_json=False so that cv will be zipped with users list and can json.dumps() from there
-        b) set_cv_func must have the Job.loop_relations decorator
-        '''
-        
-        if hasattr(self, 'set_cv_args'):
-            cv = self.set_cv_func(*self.set_cv_args)
-        else:
-            cv = self.set_cv_func()
-
-        if in_json:
-            cv = json.dumps(cv)
-
-        self.logger.info(json.dumps(cv, indent=4))
-
-        self.set_cv_func = None
-        self.set_cv_args = None
-
-        return cv
     
     def print_relations_list(self):
         user_list = []
@@ -400,12 +377,14 @@ class Job(db.Model): # system jobs
 
 
     def forward_messages(self):
-        '''Ensure self has the following attributes: set_cv_func. Optionally, self.set_cv_args'''
+        '''
+        Ensure self has the following attributes: cv_list, which is usually created with a function under a @JobUser.loop_relations decorator
+        It is also within loop_relations that relations_list is set
+        '''
 
         from models.messages.sent import MessageForward
 
-        self.cv = self.set_cv(in_json=False) # sets self.cv as a list
-        self.cv_and_users_list = list(zip(self.cv, self.relations_list)) # relations list is set in the loop relations decorator
+        self.cv_and_users_list = list(zip(self.cv_list, self.relations_list)) # relations list is set in the loop relations decorator
         
         for i, (cv, user) in enumerate(self.cv_and_users_list):
             self.cv_and_users_list[i] = (json.dumps(cv), user)

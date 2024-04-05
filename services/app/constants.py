@@ -1,7 +1,10 @@
 MAX_UNBLOCK_WAIT = 30
 
 # OTHER STATUSES
-CHANGED = 5 # changed dates and start date for MC
+NONE = 0
+UPDATED = 2 # start date was even before today and was accepted nonetheless; need to inform user about dates change
+LATE = 3 # start date was today, need to inform user about missed morning report
+OVERLAP = 4
 
 ##################################
 # JOB STATUSES
@@ -50,8 +53,15 @@ leave_types = {
     # "Anniversary": ['birthday leave', 'wedding leave', 'anniversary leave'],
     # "Marriage": ['marriage leave']
 }
-
 MC_DECISIONS = {str(index + 1): key for index, key in enumerate(leave_types.keys())}
+
+leave_issues = {
+    "updated": "I am unable to add leaves before today; the earliest date is today.",
+    "late": "You have missed out the morning report for today's leave as it has already been sent out at 9am, but I am still able to update the records and inform your reporting contacts.",
+    "overlap": "There are overlapping dates on "
+}
+
+
 
 
 # MC_DECISIONS[str(len(leave_types) + 1)] = 'Others'
