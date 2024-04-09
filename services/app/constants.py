@@ -1,9 +1,9 @@
 MAX_UNBLOCK_WAIT = 30
 
-# OTHER STATUSES
+# OTHER STATUSES. Use 2^n to get unique values
 NONE = 0
-UPDATED = 2 # start date was even before today and was accepted nonetheless; need to inform user about dates change
-LATE = 3 # start date was today, need to inform user about missed morning report
+UPDATED = 1 # start date was even before today and was accepted nonetheless; need to inform user about dates change
+LATE = 2 # start date was today, need to inform user about missed morning report
 OVERLAP = 4
 
 ##################################

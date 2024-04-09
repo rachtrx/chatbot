@@ -275,6 +275,10 @@ class JobLeave(JobUser):
         
             overlap_status = self.validate_overlap()
 
+            if overlap_status == OVERLAP and (start_date_status == LATE + UPDATED or start_date_status == LATE):
+                if current_sg_time().date() in self.duplicate_dates:
+                    start_date_status -= LATE
+
             self.logger.info(f"Dates validated")
             
             return start_date_status, overlap_status
@@ -446,7 +450,7 @@ class JobLeave(JobUser):
                 4: leave_issues['late']
             }
             self.content_sid = os.environ.get("LEAVE_CONFIRMATION_CHECK_3_ISSUES_SID")
-        elif status == OVERLAP + UPDATED or status == OVERLAP + UPDATED:
+        elif status == OVERLAP + UPDATED or status == OVERLAP + LATE:
             issues = {
                 2: self.print_overlap_dates(),
                 3: leave_issues['updated'] if status == OVERLAP + UPDATED else leave_issues['late'],

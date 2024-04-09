@@ -117,23 +117,36 @@ class JobSyncUsers(JobSystem):
         
             # create 2 dataframes to compare
             merged_data = pd.merge(az_users, db_users, how="outer", indicator=True)
-            old_data_names = merged_data[merged_data['_merge'] == 'right_only']['name']
-            new_data_names = merged_data[merged_data['_merge'] == 'left_only']['name']
+            old_data = merged_data[merged_data['_merge'] == 'right_only']
+            new_data = merged_data[merged_data['_merge'] == 'left_only']
 
-            old_data = db_users.loc[(db_users['name'].isin(old_data_names) | db_users['reporting_officer_name'].isin(old_data_names))]
-            old_data = old_data.replace({np.nan: None})
+            old_names = [name for name in old_data['name']]
+            new_names = [name for name in new_data['name']]
+            updated_names = list(set(old_names).intersection(set(new_names)))
 
-            new_data = az_users.loc[(az_users['name'].isin(new_data_names) | az_users['reporting_officer_name'].isin(new_data_names))]
-            new_data = new_data.replace({np.nan: None})
+            updated_data = new_data.loc[new_data['name'].isin(updated_names)]
+            updated_data = updated_data.replace({pd.NA: None, pd.NaT: None, "": None})
 
-            old_users_tuples = [name for name in old_data['name']]
+            old_data = old_data.loc[(old_data['name'].isin(old_names)) & ~(old_data['name'].isin(updated_names))]
+            old_data = old_data.replace({pd.NA: None, pd.NaT: None, "": None})
+
+            new_data = new_data.loc[(new_data['name'].isin(new_names)) & ~(new_data['name'].isin(updated_names))]
+            new_data = new_data.replace({pd.NA: None, pd.NaT: None, "": None})
+
+            updated_data = updated_data.drop(columns=['_merge'])
+            old_data = old_data.drop(columns=['_merge'])
+            new_data = new_data.drop(columns=['_merge'])
+
+            updated_users_tuples = [tuple(updated_user) for updated_user in updated_data.values]
+            old_users = [name for name in old_data['name']]
             new_users_tuples = [tuple(new_user) for new_user in new_data.values]
             
+            self.logger.info(f"Updated users: {updated_data['name'].values}")
             self.logger.info(f"Old users: {old_data['name'].values}")
             self.logger.info(f"New users: {new_data['name'].values}")
             # NEED APP CONTEXT
 
-            for name in old_users_tuples:
+            for name in old_users:
                 try:
                     session.query(User).filter_by(name=name).delete()
                 except Exception as e:
@@ -144,10 +157,32 @@ class JobSyncUsers(JobSystem):
 
             self.logger.info("removed old")
 
+            for name, alias, number, dept, _, is_global_admin, is_dept_admin in updated_users_tuples:
+                try:
+                    existing_user = session.query(User).filter(User.name == name).first()
+                    
+                    if existing_user:
+                        existing_user.alias = alias
+                        existing_user.number = number
+                        existing_user.dept = dept
+                        existing_user.is_global_admin = is_global_admin
+                        existing_user.is_dept_admin = is_dept_admin
+                    else:
+                        self.logger.info(f"User {name} not found for update.")
+                    session.commit()
+                except Exception as e:
+                    self.logger.error(traceback.format_exc())
+                    session.rollback()
+                    new_affected_users = list(az_users.loc[az_users.reporting_officer_name == name, "name"])
+                    self.failed_users.extend([name])
+                    self.affected_users.extend(new_affected_users)
+                    self.error = True
+
             for name, alias, number, dept, _, is_global_admin, is_dept_admin in new_users_tuples:
                 new_user = User(name=name, alias=alias, number=number, dept=dept, is_global_admin=is_global_admin, is_dept_admin=is_dept_admin)
                 try:
                     session.add(new_user)
+                    session.commit()
                 except Exception as e:
                     self.logger.error(traceback.format_exc())
                     session.rollback()
@@ -155,17 +190,18 @@ class JobSyncUsers(JobSystem):
                     self.failed_users.extend(name)
                     self.affected_users.extend(new_affected_users)
                     self.error = True
-            session.commit()
+            
+            new_users_tuples.extend(updated_users_tuples)
 
             for name, _, _, _, reporting_officer, _, _ in new_users_tuples:
                 user = session.query(User).filter_by(name=name).first()
                 try:
                     user.reporting_officer_name = reporting_officer
+                    session.commit()
                 except Exception as e:
                     self.logger.error(traceback.format_exc())
                     session.rollback()
                     self.error = True
-            session.commit()
 
             self.logger.info("added new")
 
