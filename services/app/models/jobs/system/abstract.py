@@ -4,13 +4,17 @@ from logs.config import setup_logger
 from constants import OK, system, PROCESSING
 from overrides import overrides
 from models.users import User
+from datetime import datetime, timedelta
+from sqlalchemy import not_, exists, and_
+import logging
+from sqlalchemy.orm import aliased
 
 class JobSystem(Job):
 
     logger = setup_logger('models.job_system')
     __tablename__ = 'job_system'
 
-    job_no = db.Column(db.ForeignKey("job.job_no"), primary_key=True)
+    job_no = db.Column(db.ForeignKey("job.job_no", ondelete='CASCADE'), primary_key=True)
     root_name = db.Column(db.String(80), nullable=True)
 
     __mapper_args__ = {
@@ -66,3 +70,40 @@ class JobSystem(Job):
         session.add(new_job)
         session.commit()
         return new_job
+    
+    @classmethod
+    def delete_old_jobs(cls):
+        from models.messages.abstract import Message
+        from models.metrics import Metric
+        from .am_report import JobAmReport
+        session = get_session()
+        threshold = datetime.now() - timedelta(days=180)  # temporary
+
+        job_system_alias = aliased(JobSystem, flat=True)
+
+        # Subqueries for checking references
+        message_subquery = session.query(Message.job_no).filter(Message.job_no == Job.job_no).subquery()
+        metric_successful_subquery = session.query(Metric.last_successful_job_no).filter(Metric.last_successful_job_no == Job.job_no).subquery()
+        metric_subquery = session.query(Metric.last_job_no).filter(Metric.last_job_no == Job.job_no).subquery()
+        job_am_report_subquery = session.query(JobAmReport.job_no).filter(JobAmReport.job_no == Job.job_no).subquery()
+
+        # Main query to select job numbers using aliased JobSystem
+        job_nos = session.query(Job.job_no).join(job_system_alias).\
+            filter(
+                and_(
+                    Job.created_at < threshold,
+                    not_(exists().where(message_subquery.c.job_no == Job.job_no)),  # No reference in Message
+                    not_(exists().where(metric_successful_subquery.c.last_successful_job_no == Job.job_no)),  # No reference in Metric
+                    not_(exists().where(metric_subquery.c.last_job_no == Job.job_no)),
+                    not_(exists().where(job_am_report_subquery.c.job_no == Job.job_no))  # No reference in JobAmReport
+                )
+            ).all()
+
+        # print(f"Job nos to delete: {job_nos}")
+        # logging.info(f"Job nos to delete: {job_nos}")
+
+        # Delete the jobs based on the fetched IDs
+        if job_nos:
+            session.query(Job).filter(Job.job_no.in_([id[0] for id in job_nos])).delete(synchronize_session=False) # This setting tells SQLAlchemy to perform the delete operation directly in the database and not to bother updating the state of the session. This is faster and less resource-intensive if you know you won’t be using the session further or if you handle session consistency manually.
+
+        session.commit()

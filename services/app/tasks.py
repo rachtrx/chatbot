@@ -58,6 +58,9 @@ def main(jobs_to_run=[]):
     main_job.background_tasks = []
     cv = {}
 
+    if send_message: # Temporary
+        JobSystem.delete_old_jobs()
+
     for i, _type in enumerate(jobs, 1):
 
         cv_index = 1 + (i - 1) * 3 # arithmetic progression

@@ -24,20 +24,10 @@ else
     psql -h $SQL_HOST -U $SQL_USER -c "CREATE DATABASE chatbot"
 fi
 
-echo "LIVE: " $LIVE
-
-if [ "$LIVE" == 0 ]; then
-    flask create_db
-else
-    if [[ -n "$NEW_MIGRATION_MESSAGE" && "$LIVE" == "1" ]]; then
-        cd ${FLASK_APP_DIR}
-        alembic revision --autogenerate -m "${NEW_MIGRATION_MESSAGE}"
-        alembic upgrade head
-        echo "Database setup and migrations complete."
-    else
-        echo "skipping migrations."
-    fi
-fi
+cd ${FLASK_APP_DIR}
+# alembic revision --autogenerate -m "${NEW_MIGRATION_MESSAGE}" # IMPT RUN URSELF FIRST!
+alembic upgrade head
+echo "Migrations complete."
 
 host="$1"
 shift

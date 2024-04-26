@@ -24,7 +24,7 @@ class JobSyncRecords(JobSystem):
 
     __tablename__ = 'job_sync_records'
 
-    job_no = db.Column(db.ForeignKey("job_system.job_no"), primary_key=True)
+    job_no = db.Column(db.ForeignKey("job_system.job_no", ondelete='CASCADE'), primary_key=True)
     forwards_status = db.Column(db.Integer, default=None, nullable=True)
     
     __mapper_args__ = {

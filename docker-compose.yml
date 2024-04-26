@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   nginx:
     build: ./services/nginx
@@ -27,7 +25,9 @@ services:
       - db
       - redis
   db:
-    image: postgres:14
+    build:
+      context: ./services/db
+      dockerfile: Dockerfile
     volumes:
       - postgres_chatbot:/var/lib/postgresql/data/
     env_file:

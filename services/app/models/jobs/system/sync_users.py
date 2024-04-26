@@ -21,7 +21,7 @@ class JobSyncUsers(JobSystem):
 
     __tablename__ = 'job_sync_users'
 
-    job_no = db.Column(db.ForeignKey("job_system.job_no"), primary_key=True)
+    job_no = db.Column(db.ForeignKey("job_system.job_no", ondelete='CASCADE'), primary_key=True)
     
     __mapper_args__ = {
         "polymorphic_identity": "job_sync_users",
@@ -58,9 +58,10 @@ class JobSyncUsers(JobSystem):
 
     @staticmethod
     def df_replace_spaces(df):
-        '''removes the blank rows in the dataframe'''
-        df.replace('', np.nan, inplace=True)
-        df = df.dropna(how="all", inplace=True)
+        '''Replaces empty strings with NaN, removes entirely blank rows, and sets empty aliases to names.'''
+        df = df.replace('', np.nan)
+        df = df.dropna(how="all")
+        df['alias'] = df.apply(lambda x: x['name'] if x['alias'] == '' else x['alias'], axis=1)
         return df
 
     def update_user_database(self):
@@ -73,7 +74,8 @@ class JobSyncUsers(JobSystem):
         data = self.sync_user_info()
 
         az_users = pd.DataFrame(data=data, columns=["name", "alias", "number", "dept", "reporting_officer_name", "access"])
-        self.df_replace_spaces(az_users)
+        az_users = self.df_replace_spaces(az_users)
+
         # logging.info(users)
         try:
             az_users['number'] = az_users["number"].astype(int)

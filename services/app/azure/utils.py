@@ -49,7 +49,7 @@ def loop_leave_files(url=os.environ.get('LEAVE_FOLDER_URL'), latest_date=None):
                 sheets_resp = requests.get(url=new_url, headers=header)
                 if not 200 <= sheets_resp.status_code < 300:
                     logging.info("something went wrong when getting sheets")
-                    return
+                    raise AzureSyncError("Connection to Azure failed")
                 for obj in sheets_resp.json()['value']:
                     month = obj['name']
                     month_int = int(datetime.strptime(month, "%B").month)

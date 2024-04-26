@@ -213,8 +213,6 @@ class Job(db.Model): # system jobs
             for f_msg in forwarded_msgs:
                 if alias:
                     to_name = f_msg.to_user.alias
-                else:
-                    to_name = f_msg.to_name
 
                 if f_msg.status == OK:
                     success.append(to_name)

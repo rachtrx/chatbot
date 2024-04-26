@@ -18,7 +18,7 @@ class JobAcqToken(JobSystem):
     logger = setup_logger('az.acq_token')
 
     __tablename__ = 'job_acq_token'
-    job_no = db.Column(db.ForeignKey("job_system.job_no"), primary_key=True)
+    job_no = db.Column(db.ForeignKey("job_system.job_no", ondelete='CASCADE'), primary_key=True)
 
     __mapper_args__ = {
         "polymorphic_identity": "job_acq_token"

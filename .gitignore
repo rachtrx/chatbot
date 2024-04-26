@@ -4,9 +4,6 @@
 **/*.env.db
 **/*.env.dev
 
-extras/
-services/app/token.txt
-
+excel_files/
 token.txt
-notes
-**/__pycache__
+__pycache__/

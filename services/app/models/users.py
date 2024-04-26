@@ -47,10 +47,6 @@ class User(db.Model):
 
     def __init__(self, name, alias, number, dept, is_global_admin, is_dept_admin, reporting_officer=None):
         self.name = name
-        if alias == None or alias == "":
-            self.alias = name
-        else:
-            self.alias = alias
         self.number = number
         self.dept = dept
         self.reporting_officer = reporting_officer

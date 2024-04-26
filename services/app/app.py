@@ -71,23 +71,6 @@ def loop_files():
 def log_table_creation(target, connection, **kw):
     logging.info(f"Creating table: {target.name}")
 
-@app.cli.command("create_db")
-@with_appcontext
-def create_db():
-
-    # Get a list of existing tables before any creation
-    inspector = inspect(db.engine)
-    existing_tables = inspector.get_table_names()
-    for table in existing_tables:
-        logging.info(f"Table {table} already exists.")
-
-    # Bind the event listeners to log table creation
-    for table in db.Model.metadata.tables.values():
-        event.listen(table, 'before_create', log_table_creation)
-
-    # Create all tables that do not exist
-    db.Model.metadata.create_all(db.engine)
-
 @app.cli.command("remove_db")
 @with_appcontext
 def remove_db():

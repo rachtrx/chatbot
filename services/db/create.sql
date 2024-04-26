@@ -1,2 +1,2 @@
-CREATE DATABASE chatbot;
+-- CREATE DATABASE chatbot;
 
