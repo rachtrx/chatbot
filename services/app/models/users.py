@@ -59,10 +59,8 @@ class User(db.Model):
 
     @classmethod
     def get_user(cls, from_number):
-
         session = get_session()
-
-        user = session.query(cls).filter_by(number=from_number).first()
+        user = session.query(cls).filter_by(number=from_number[-8:]).first()
         if user:
             return user
         else:

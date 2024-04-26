@@ -153,8 +153,6 @@ class Job(db.Model): # system jobs
         if complete:
             self.commit_status(OK)
         session.commit()
-
-        return self.get_cache_data()
         
 
     def commit_status(self, status, _forwards=False):

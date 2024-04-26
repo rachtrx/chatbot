@@ -8,7 +8,7 @@ from models.exceptions import ReplyError
 from models.users import User
 from constants import errors
 import redis
-import time
+import traceback
 
 class Redis():
 
@@ -39,7 +39,7 @@ class Redis():
                 if not user:
                     re.err_message = errors['USER_NOT_FOUND']
                 user_or_no = user if user else job_info['from_no']
-                re.send_error_msg(sid=job_info['user_str'], user_str=job_info['user_str'], user_or_no=user_or_no)
+                re.send_error_msg(sid=job_info['sid'], user_str=job_info['user_str'], user_or_no=user_or_no)
                 return False
         return wrapper
 
@@ -125,12 +125,11 @@ class Redis():
 
                     # Proceed with setting the job in progress and starting it
                     self.client.set(f"user_job:{user_id}", "in_progress", ex=JobUser.max_pending_duration)
-                    try:
-                        logging.info("JOB STARTED")
-                        job_info = JobUser.general_workflow(new_job_info)
-                        self.job_completed(job_info, user_id)  # Assuming job_completed does not require parameters, or pass them if it does
-                    except Exception as e:
-                        logging.error(f"Error during job execution: {e}")
+
+                    logging.info("JOB STARTED")
+                    job_info = JobUser.general_workflow(new_job_info)
+                    self.job_completed(job_info, user_id)  # Assuming job_completed does not require parameters, or pass them if it does
+
                     return "job started", new_job_info
         # If there's already an job in progress or no jobs in the queue
         else:
@@ -138,6 +137,7 @@ class Redis():
             return None
 
     def update_job_status(self, user_id, message):
+        '''updates job status to pending user reply in the cache as soon as the callback has been confirmed'''
         encrypted_data = self.client.hget(f"user_job_data:{user_id}", "job_information")
         if encrypted_data:
             logging.info("Encrypted data found!")

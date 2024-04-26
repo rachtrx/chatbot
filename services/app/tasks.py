@@ -35,7 +35,7 @@ def main(jobs_to_run=[]):
 
         logging.info(f"{minute}, {cur_datetime.hour}")
 
-        if minute % 5 == 0:
+        if minute % 15 == 0:
             jobs_to_run.append(system["SYNC_LEAVE_RECORDS"])
             jobs_to_run.append(system["SYNC_USERS"]) # this should be more regular than acquire
 

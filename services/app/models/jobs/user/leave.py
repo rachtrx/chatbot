@@ -42,23 +42,30 @@ class JobLeave(JobUser):
     def __init__(self, name):
         super().__init__(name)
         self.local_db_updated = False
-
-    def set_leave_type(self):
-        leave_keyword_patterns = re.compile(leave_keywords, re.IGNORECASE)
-        leave_match = leave_keyword_patterns.search(self.user_str)
-
-        if leave_match:
-            matched_term = leave_match.group(0) if leave_match else None
-            for leave_type, phrases in leave_types.items():
-                if matched_term.lower() in [phrase.lower() for phrase in phrases]:
-                    return leave_type
-            # UNKNOWN ERROR... keyword found but couldnt lookup
+        self.duplicate_dates = []
         
-        content_sid = os.environ.get('SELECT_LEAVE_TYPE_SID')
-        cv = None
-        self.is_expecting_user_reply = True
-        raise ReplyError(err_message=(content_sid, cv), job_status=None)
-    
+
+    def get_cache_data(self):
+        if getattr(self, 'is_expecting_user_reply', False) and getattr(self, 'dates_to_update'):
+            return {
+                # actual job information
+                # created by generate base
+                "dates": [date.strftime("%d-%m-%Y") for date in self.dates_to_update],
+                "duplicate_dates": [date.strftime("%d-%m-%Y") for date in self.duplicate_dates],
+                # returned by generate base
+                "validation_status": self.validation_status,
+                # can be blank after genenrate base
+                "leave_type": getattr(self, 'leave_type'),
+
+                # job identifiers in cache upon callback
+                "status": self.status, # passed to redis, which updates to PENDING_USER_REPLY once callback is received
+                "job_no": self.job_no, # passed to redis, which is used when updating status to PENDING_USER_REPLY once callback is received
+                
+                "sent_sid": self.sent_msg.sid # passed to redis, which is used to check that the last message sent out is the message that is being replied to, when updating status to PENDING_USER_REPLY once callback is received. Also used to ensure that in general_workflow, the sent_sid matches the replied to of the new message
+            }
+        else:
+            return None
+
     @overrides
     def bypass_validation(self, decision):
         if self.local_db_updated and decision == DECISIONS['CANCEL']:
@@ -72,15 +79,10 @@ class JobLeave(JobUser):
         return False
     
     def update_info(self, job_information):
-        if "dates" in job_information:
-            job_information['dates'] = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in job_information['dates']]
-            self.dates_to_update = job_information['dates']
-            self.duration = len(self.dates_to_update)
-            self.leave_type = job_information['leave_type']
-        elif "initial_msg" in job_information:
-            self.user_str = job_information['initial_msg']
-        else:
-            raise ReplyError("Either the initial message or the dates were lost")
+        self.dates_to_update = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in job_information['dates']]
+        self.duplicate_dates = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in job_information['duplicate_dates']]
+        self.validation_status = job_information.get('validation_status')
+        self.leave_type = job_information.get('leave_type')
 
     
     def handle_request(self):
@@ -90,71 +92,57 @@ class JobLeave(JobUser):
         # self.background_tasks = []
 
         # if it has the user string, its the first msg, or a retry message. user_str attribute it set either in update_info or during job initialisation
-        if getattr(self, "user_str", None):
+        if getattr(self, "leave_type", None) and isinstance(self.received_msg, MessageConfirm):
 
-            if getattr(self.received_msg, 'decision', None):
-                self.logger.info(f"Checking for decision in handle request with user string: {self.received_msg.decision}")
+            self.logger.info(f"Checking for decision in handle request with user string: {self.received_msg.decision}")
 
-            # if not retry message
-            if not getattr(self.received_msg, 'decision', None):
-                logging.info("using regex to set leave type")
-                self.leave_type = self.set_leave_type()
-            else:
-                # retry message
-                self.leave_type = MC_DECISIONS.get(self.received_msg.decision, None) # previously had bus sometimes when not using str()
-            
-            if not self.leave_type:
-                raise ReplyError(errors['UNKNOWN_ERROR'])
-
-            self.is_expecting_user_reply = True
-            self.received_msg.reply = self.handle_user_entry_action()
-
-        elif isinstance(self.received_msg, MessageConfirm) and getattr(self.received_msg, "decision", None):
             # these 2 functions are implemented with method overriding
             decision = self.received_msg.decision
             if decision != DECISIONS['CONFIRM']:
                 logging.error(f"UNCAUGHT DECISION {decision}")
                 raise ReplyError(errors['UNKNOWN_ERROR'])
             self.validate_confirm_message() # checks for ReplyErrors based on state
-            self.received_msg.reply = self.handle_user_reply_action()
-                
+
+            updated_db_msg = LeaveRecord.insert_local_db(self)
+            self.content_sid = os.environ.get("LEAVE_NOTIFY_SID")
+            self.forward_messages()
+            self.received_msg.reply = f"{updated_db_msg}, messages have been forwarded. Pending success..."
+
         else:
-           raise ReplyError(errors['UNKNOWN_ERROR'])
+            self.is_expecting_user_reply = True # important for getting cached data when catching no leave type error; otherwise no data returned
+
+            if isinstance(self.received_msg, MessageConfirm): # retry message
+                self.leave_type = MC_DECISIONS.get(self.received_msg.decision, None) # previously had bus sometimes when not using str()
+                if not self.leave_type:
+                    raise ReplyError(errors['UNKNOWN_ERROR'])
+
+            else: # first message
+                self.validation_status = self.generate_base()
+                # CATCH LEAVE TYPE ERRORS
+                self.leave_type = self.set_leave_type()
+
+            self.is_expecting_user_reply = True
+            self.get_leave_confirmation_sid_and_cv()
+            self.received_msg.reply = (self.content_sid, self.cv)
 
     @overrides
     def validate_confirm_message(self):
         pass
-
-    @overrides
-    def handle_user_reply_action(self):
-        updated_db_msg = LeaveRecord.insert_local_db(self)
-        self.content_sid = os.environ.get("LEAVE_NOTIFY_SID")
-        self.forward_messages()
-        reply = f"{updated_db_msg}, messages have been forwarded. Pending success..."
-        return reply
-
-    @overrides
-    def handle_user_entry_action(self):
-
-        start_date_status, overlap_status = self.generate_base()
-
-        self.logger.info(f"STATUSES: {start_date_status}, {overlap_status}")
-
-        self.printed_name_and_no_list = self.print_relations_list() # no need names list
-
-        self.set_dates_str()
-
-        self.get_leave_confirmation_sid_and_cv(start_date_status+overlap_status)
-
-        return (self.content_sid, self.cv)
     
-    def set_dates_str(self):
-        self.dates_str = print_all_dates(self.dates_to_update, date_obj=True)
-        cur_date = current_sg_time().date()
-        cur_date_str = cur_date.strftime('%d/%m/%Y')
+    def set_leave_type(self):
+        leave_keyword_patterns = re.compile(leave_keywords, re.IGNORECASE)
+        leave_match = leave_keyword_patterns.search(self.user_str)
 
-        if get_latest_date_past_9am() > cur_date:
-            self.dates_str = re.sub(cur_date_str, cur_date_str + ' (*LATE*)', self.dates_str)
+        if leave_match:
+            matched_term = leave_match.group(0) if leave_match else None
+            for leave_type, phrases in leave_types.items():
+                if matched_term.lower() in [phrase.lower() for phrase in phrases]:
+                    return leave_type
+            # UNKNOWN ERROR... keyword found but couldnt lookup
+        
+        content_sid = os.environ.get('SELECT_LEAVE_TYPE_SID')
+        cv = None
+        raise ReplyError(err_message=(content_sid, cv), job_status=None)
 
     @overrides
     def forward_messages(self):
@@ -178,47 +166,6 @@ class JobLeave(JobUser):
                 return True
         self.logger.info("all messages not successful")
         return False
-    
-    def get_cache_data(self):
-        if getattr(self, 'is_expecting_user_reply', False) and getattr(self, 'dates_to_update') and getattr(self, 'leave_type'):
-            return {
-                "status": self.status,
-                "dates": [date.strftime("%d-%m-%Y") for date in self.dates_to_update],
-                "sent_sid": self.sent_msg.sid,
-                "leave_type": self.leave_type,
-                "job_no": self.job_no
-            }
-        else:
-            return None
-    
-    # def run_background_tasks(self):
-    #     '''implement handle_replied_future_results and check_for_complete in child class'''
-    #     session = get_session()
-    #     future_results = super().run_background_tasks()
-    #     if future_results and len(future_results) > 0:
-         
-    #         logging.info(f"background tasks done")
-    #         log_instances(session, "run_replied_background_tasks")
-    #         self.handle_future_results(future_results)
-    #         logging.info(f"messages forwarded: {self.forwards_status}")
-    #         self.check_for_complete()
-
-    #     if getattr(self, 'is_expecting_user_reply', False) and getattr(self, 'dates_to_update') and getattr(self, 'leave_type'):
-    #         return {
-    #             "status": self.status,
-    #             "dates": [date.strftime("%d-%m-%Y") for date in self.dates_to_update],
-    #             "sent_sid": self.sent_msg.sid,
-    #             "leave_type": self.leave_type,
-    #             "job_no": self.job_no
-    #         }
-    #     else:
-    #         return None
-        
-
-    # def handle_future_results(self, future_results):
-    #     self.logger.info("IN HANDLE FUTURE RESULTS")
-    #     forwards_status = future_results[0]
-    #     self.commit_status(forwards_status, _forwards=True)
 
     ########
     # ENTRY
@@ -279,9 +226,9 @@ class JobLeave(JobUser):
                 if current_sg_time().date() in self.duplicate_dates:
                     start_date_status -= LATE
 
-            self.logger.info(f"Dates validated")
+            self.logger.info(f"STATUSES: {start_date_status}, {overlap_status}")
             
-            return start_date_status, overlap_status
+            return start_date_status + overlap_status
                 
         except DurationError as e:
             logging.error(f"error message is {e.message}")
@@ -431,14 +378,26 @@ class JobLeave(JobUser):
     # CV TEMPLATES FOR MANY MESSAGES
     #################################
         
-    def get_leave_confirmation_sid_and_cv(self, status):
+    def set_dates_str(self):
+        dates_str = print_all_dates(self.dates_to_update, date_obj=True)
+        cur_date = current_sg_time().date()
+        cur_date_str = cur_date.strftime('%d/%m/%Y')
+
+        if get_latest_date_past_9am() > cur_date:
+            dates_str = re.sub(cur_date_str, cur_date_str + ' (*LATE*)', dates_str)
+
+        return dates_str
+
+    def get_leave_confirmation_sid_and_cv(self):
+
+        status = self.validation_status
 
         base_cv = {
             1: self.user.alias,
             2: self.leave_type.lower(),
-            3: self.dates_str,
-            4: str(self.duration),
-            5: self.printed_name_and_no_list,
+            3: self.set_dates_str(),
+            4: str(len(self.dates_to_update)),
+            5: self.print_relations_list(),
             6: str(DECISIONS['CONFIRM']),
             7: str(DECISIONS['CANCEL'])
         }
@@ -482,13 +441,13 @@ class JobLeave(JobUser):
     @JobUser.loop_relations # just need to pass in the user when calling get_forward_leave_cv
     def get_forward_leave_cv(self, relation):
         '''LEAVE_NOTIFY_SID; The decorator is for SENDING MESSAGES TO ALL RELATIONS OF ONE PERSON'''
-
+        duration = len(self.dates_to_update)
         return {
             '1': relation.alias,
             '2': self.user.alias,
             '3': self.leave_type.lower(),
-            '4': f"{str(self.duration)} {'day' if self.duration == 1 else 'days'}",
-            '5': self.dates_str
+            '4': f"{str(duration)} {'day' if duration == 1 else 'days'}",
+            '5': self.set_dates_str()
         }
 
 class JobLeaveCancel(JobLeave):

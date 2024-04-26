@@ -1,20 +1,12 @@
-*.ipynb
-.env
-.env.db
-.env.dev
-azure_urls.log
-app.log
-cron.log
-cron2.log
+**/*.ipynb
+**/*.log
+**/*.env
+**/*.env.db
+**/*.env.dev
 
 extras/
 services/app/token.txt
-services/app/.env
-
-services/app/notebooks/cc0003.pdf
-services/app/notebooks/output.txt
-services/app/logs
-services/es/.env
 
 token.txt
 notes
+**/__pycache__
