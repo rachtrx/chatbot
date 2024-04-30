@@ -124,7 +124,7 @@ def upgrade() -> None:
     )
     op.create_table('message_sent',
     sa.Column('sid', sa.String(length=80), nullable=False),
-    sa.Column('is_expecting_reply', sa.Boolean(), nullable=False),
+    sa.Column('selection_type', sa.Boolean(), nullable=False),
     sa.Column('status', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['sid'], ['message.sid'], ),
     sa.PrimaryKeyConstraint('sid')
@@ -140,7 +140,7 @@ def upgrade() -> None:
     op.create_table('message_confirm',
     sa.Column('sid', sa.String(length=80), nullable=False),
     sa.Column('ref_msg_sid', sa.String(length=80), nullable=False),
-    sa.Column('_decision', sa.Integer(), nullable=False),
+    sa.Column('_selection', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['sid'], ['message_received.sid'], ),
     sa.PrimaryKeyConstraint('sid')
     )

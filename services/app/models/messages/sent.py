@@ -1,5 +1,5 @@
 from extensions import db, get_session
-from constants import messages, intents, PENDING_CALLBACK, OK, MAX_UNBLOCK_WAIT
+from constants import MessageType, SentMessageStatus
 import os
 import json
 from config import twilio_client
@@ -14,6 +14,7 @@ from models.users import User
 from models.exceptions import ReplyError
 
 from logs.config import setup_logger
+from sqlalchemy import Enum as SQLEnum
 
 
 # SECTION PROBLEM: If i ondelete=CASCADE, if a hod no longer references a user the user gets deleted
@@ -25,8 +26,8 @@ class MessageSent(Message):
     __tablename__ = "message_sent"
 
     sid = db.Column(db.ForeignKey("message.sid"), primary_key=True)
-    is_expecting_reply = db.Column(db.Boolean, nullable=False)
-    status = db.Column(db.Integer(), nullable=False)
+    selection_type = db.Column(db.Boolean, nullable=False)
+    status = db.Column(SQLEnum(SentMessageStatus), nullable=False)
     
     # job = db.relationship('Job', backref='sent_messages', lazy='select')
 
@@ -34,9 +35,10 @@ class MessageSent(Message):
         "polymorphic_identity": "message_sent",
     }
 
-    def __init__(self, job_no, sid, is_expecting_reply, seq_no=None, body=None):
+    def __init__(self, job_no, sid, selection_type, seq_no=None, body=None):
         super().__init__(job_no, sid, body, seq_no) # initialise message
-        self.is_expecting_reply = is_expecting_reply
+        self.status = SentMessageStatus.PROCESSING
+        self.selection_type = selection_type
 
     def commit_message_body(self, body):
         session = get_session()
@@ -61,13 +63,13 @@ class MessageSent(Message):
 
         '''kwargs supplies the init variables to Message.create_messages() which call the following init functions based on the msg_type: 
         
-        msg_type == messages['SENT']:
-        MessageSent.__init__(self, job_no, sid, is_expecting_reply, seq_no=None, body=None): 
+        msg_type == MessageType.SENT:
+        MessageSent.__init__(self, job_no, sid, selection_type, seq_no=None, body=None): 
 
-        msg_type == messages['FORWARD']:
-        MessageForward.__init__(self, job_no, sid, is_expecting_reply, seq_no, to_name):
+        msg_type == MessageType.FORWARD:
+        MessageForward.__init__(self, job_no, sid, selection_type, seq_no, to_name):
 
-        job_no, sid, and is_expecting_reply are updated; the rest has to be passed as kwargs.
+        job_no, sid, and selection_type are updated; the rest has to be passed as kwargs.
 
         For MessageSent, additional kwargs is not required (min total 3 args)
         For MessageForward, additional kwargs is required for seq_no and relation (min total 5 args)
@@ -75,9 +77,10 @@ class MessageSent(Message):
         for template messages, sid and cv are passed through reply as a tuple
         '''
 
-        if msg_type == messages['FORWARD']:
+        # kwargs["selection_type"] sets the MessageSent.selection_type col. job.selection_type is used to save into cache later on and not needed to be stored in JobUser or ReceivedMessage table...
+        if msg_type == MessageType.FORWARD:
             to_no = kwargs['to_user'].sg_number # forward message
-            kwargs["is_expecting_reply"] = getattr(job, 'is_expecting_relations_reply', False)
+            kwargs["selection_type"] = getattr(job, 'selection_type', False)
         else: # SENT
             from models.jobs.user.abstract import JobUser
             from models.jobs.unknown.unknown import JobUnknown
@@ -88,7 +91,7 @@ class MessageSent(Message):
                 to_no = job.user.sg_number # user number
             elif isinstance(job, JobSystem):
                 to_no = job.root_user.sg_number # user number
-            kwargs["is_expecting_reply"] = getattr(job, 'is_expecting_user_reply', False)
+            kwargs["selection_type"] = getattr(job, 'selection_type', False)
 
         # Send the message
         if isinstance(reply, tuple):
@@ -103,7 +106,7 @@ class MessageSent(Message):
 
         sent_msg = Message.create_message(msg_type, **kwargs)
 
-        sent_msg.commit_status(PENDING_CALLBACK)
+        sent_msg.commit_status(SentMessageStatus.PENDING_CALLBACK)
         return sent_msg
 
     @staticmethod
@@ -168,13 +171,13 @@ class MessageForward(MessageSent):
         'inherit_condition': sid == MessageSent.sid
     }
 
-    def __init__(self, job_no, sid, is_expecting_reply, seq_no, to_user):
+    def __init__(self, job_no, sid, selection_type, seq_no, to_user):
         self.logger.info(f"forward message created for {to_user.name}")
-        super().__init__(job_no, sid, is_expecting_reply, seq_no) # initialise message, body is always none since need templates to forward
+        super().__init__(job_no, sid, selection_type, seq_no) # initialise message, body is always none since need templates to forward
         self.to_name = to_user.name
     
     @staticmethod
-    def acknowledge_decision():
+    def acknowledge_selection():
         return f"All messages have been sent successfully."
 
     ########################
@@ -191,7 +194,7 @@ class MessageForward(MessageSent):
         for content_variables, to_user in job.cv_and_users_list:
             try:
                 cls.send_msg(
-                    msg_type=messages['FORWARD'],
+                    msg_type=MessageType.FORWARD,
                     reply=(job.content_sid, content_variables), 
                     job=job, 
                     seq_no=job.forwards_seq_no,

@@ -4,9 +4,10 @@ from extensions import db, get_session
 # from sqlalchemy.orm import 
 from sqlalchemy import ForeignKey
 from logs.config import setup_logger
-from constants import metric_names, OK, SERVER_ERROR, PROCESSING, METRIC_MAPPING
+from constants import SystemOperation, MetricStatus
 from utilities import current_sg_time
 import logging
+from sqlalchemy import Enum as SQLEnum
 
 class Metric(db.Model):
 
@@ -14,30 +15,30 @@ class Metric(db.Model):
 
     __tablename__ = "metrics"
     
-    _type = db.Column(db.String(30), primary_key=True, nullable=False)
-    status = db.Column(db.Integer, nullable=True)
+    operation = db.Column(SQLEnum(SystemOperation), primary_key=True, nullable=False)
+    status = db.Column(SQLEnum(MetricStatus), nullable=True)
     last_update = db.Column(db.DateTime(timezone=True), default=None, nullable=True)
     last_successful_update = db.Column(db.DateTime(timezone=True), default=None, nullable=True)
     last_job_no = db.Column(db.ForeignKey("job.job_no"), nullable = True)
     last_successful_job_no = db.Column(db.ForeignKey("job.job_no"), nullable = True)
 
-    def __init__(self, _type):
+    def __init__(self, operation):
         session = get_session()
-        self._type = _type
+        self.operation = operation
         session.add(self)
         session.commit()
 
     @classmethod
-    def get_metric(cls, _type):
+    def get_metric(cls, operation):
         session = get_session()
-        metric = session.query(cls).filter_by(_type = METRIC_MAPPING[_type]).first()
+        metric = session.query(cls).filter_by(operation=operation).first()
         if not metric:
-            metric = cls(METRIC_MAPPING[_type])
+            metric = cls(operation)
         return metric
     
     def set_metric_start(self):
         session = get_session()
-        self.status = PROCESSING
+        self.status = MetricStatus.PROCESSING
         session.commit()
 
     def set_metric_status(self, job):
@@ -47,7 +48,7 @@ class Metric(db.Model):
         updates_match = self.last_successful_update == self.last_update
         self.status = job.status
 
-        if self.status == OK:
+        if self.status == MetricStatus.OK:
             self.last_successful_update = cur_time
             self.last_successful_job_no = job.job_no
         self.last_update = cur_time
@@ -55,7 +56,7 @@ class Metric(db.Model):
         session.commit()
 
         # both last update and last successful update are the same, and suddenly status not ok; or last update not last usccessful update but it didnt fail
-        if updates_match and self.status != OK or not updates_match and self.status != SERVER_ERROR:
+        if updates_match and self.status != MetricStatus.OK or not updates_match and self.status != MetricStatus.SERVER_ERROR:
             return True
         
         return False

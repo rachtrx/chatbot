@@ -2,7 +2,7 @@ from extensions import db, get_session, remove_thread_session
 from sqlalchemy import inspect
 import shortuuid
 import logging
-from constants import PROCESSING, OK, SERVER_ERROR, messages, CLIENT_ERROR, PENDING_CALLBACK, errors
+from constants import MessageType, errors, JobStatus, SentMessageStatus
 from utilities import current_sg_time, join_with_commas_and, log_instances
 import json
 import os
@@ -16,9 +16,12 @@ import time
 from models.users import User
 
 from models.messages.sent import MessageSent, MessageForward
-from models.messages.received import MessageConfirm
+from models.messages.received import MessageSelection
 
 from functools import wraps
+from sqlalchemy import Enum as SQLEnum
+
+
 
 class Job(db.Model): # system jobs
 
@@ -28,7 +31,7 @@ class Job(db.Model): # system jobs
 
     job_no = db.Column(db.String, primary_key=True)
     type = db.Column(db.String(50))
-    status = db.Column(db.Integer(), nullable=False)
+    status = db.Column(SQLEnum(JobStatus), nullable=False)
     created_at = db.Column(db.DateTime(timezone=True))
     locked = db.Column(db.Boolean(), nullable=False)
     
@@ -42,7 +45,7 @@ class Job(db.Model): # system jobs
         self.job_no = shortuuid.ShortUUID().random(length=8)
         self.logger.info(f"new job: {self.job_no}")
         self.created_at = current_sg_time()
-        self.status = PROCESSING
+        self.status = JobStatus.PROCESSING
         self.locked = False
 
     def unlock(self, session):
@@ -129,7 +132,7 @@ class Job(db.Model): # system jobs
         for i, msg in enumerate(all_msgs):
             if isinstance(msg, MessageSent):
                 self.logger.info(f"Message {i+1}: {msg.body}, status={msg.status}")
-                if msg.status != OK: # TODO decide on whether to check for NOT OK instead!
+                if msg.status != SentMessageStatus.OK: # TODO decide on whether to check for NOT OK instead!
                     all_replied = False
                     break
             
@@ -146,12 +149,12 @@ class Job(db.Model): # system jobs
 
     def check_for_complete(self):
         session = get_session()
-        if self.status == OK:
+        if self.status == JobStatus.OK:
             return
         complete = self.validate_complete()
         self.logger.info(f"complete: {complete}")
         if complete:
-            self.commit_status(OK)
+            self.commit_status(JobStatus.OK)
         session.commit()
         
 
@@ -163,7 +166,7 @@ class Job(db.Model): # system jobs
 
         if status is None:
             return
-        elif status is SERVER_ERROR or status is CLIENT_ERROR:
+        elif status is JobStatus.SERVER_ERROR or status is JobStatus.CLIENT_ERROR:
             self.logger.info(traceback.format_exc())
         
         if not _forwards:
@@ -214,9 +217,9 @@ class Job(db.Model): # system jobs
                 if alias:
                     to_name = f_msg.to_user.alias
 
-                if f_msg.status == OK:
+                if f_msg.status == SentMessageStatus.OK:
                     success.append(to_name)
-                elif f_msg.status == SERVER_ERROR:
+                elif f_msg.status == SentMessageStatus.SERVER_ERROR:
                     failed.append(to_name)
                 else:
                     unknown.append(to_name)
@@ -232,14 +235,14 @@ class Job(db.Model): # system jobs
 
             reply = (os.environ.get("FORWARD_MESSAGES_CALLBACK_SID"), content_variables)
 
-            MessageForward.send_msg(messages['SENT'], reply, self)
+            MessageForward.send_msg(MessageType.SENT, reply, self)
 
             if not len(failed) > 0 and not len(unknown) > 0: 
-                self.commit_status(OK, _forwards=True)
+                self.commit_status(JobStatus.OK, _forwards=True)
             elif len(unknown) > 0:
-                self.commit_status(PROCESSING, _forwards=True)
+                self.commit_status(JobStatus.PROCESSING, _forwards=True)
             else:
-                self.commit_status(SERVER_ERROR, _forwards=True)
+                self.commit_status(JobStatus.SERVER_ERROR, _forwards=True)
             
         except Exception as e:
             logging.error(traceback.format_exc())
@@ -250,7 +253,7 @@ class Job(db.Model): # system jobs
 
         from models.messages.abstract import Message
         
-        if (message.status != PENDING_CALLBACK):
+        if (message.status != SentMessageStatus.PENDING_CALLBACK):
             logging.info("message was not expecting a reply")
             return None
         
@@ -261,10 +264,10 @@ class Job(db.Model): # system jobs
 
         elif status == "delivered":
 
-            message.commit_status(OK)
+            message.commit_status(SentMessageStatus.OK)
             logging.info(f"message {sid} committed with ok")
 
-            if message.is_expecting_reply == True: # update redis
+            if message.selection_type: # update redis to PENDING_DECISION?
                 logging.info(f"expected reply message {sid} was sent successfully")
                 return message
             
@@ -280,16 +283,16 @@ class Job(db.Model): # system jobs
         
         elif status == "failed":
             # job immediately fails
-            message.commit_status(SERVER_ERROR)
+            message.commit_status(SentMessageStatus.SERVER_ERROR)
 
             if message.type == "message_forward" and self.forward_status_not_null():
                 self.check_message_forwarded(message.seq_no, self.map_job_type())
             else:
-                self.commit_status(SERVER_ERROR) # forward message failed is still ok to some extent, especially if the user cancels afterwards. It's better to inform about the cancel
+                self.commit_status(JobStatus.SERVER_ERROR) # forward message failed is still ok to some extent, especially if the user cancels afterwards. It's better to inform about the cancel
 
 
             if self.type == "job_es": # TODO should probably send to myself
-                Message.send_msg(messages['SENT'], (os.environ.get("ERROR_SID"), None), self)
+                Message.send_msg(MessageType.SENT, (os.environ.get("ERROR_SID"), None), self)
 
         return None
     

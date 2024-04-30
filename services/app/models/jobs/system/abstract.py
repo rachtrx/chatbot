@@ -1,7 +1,7 @@
 from extensions import db, get_session
 from models.jobs.abstract import Job
 from logs.config import setup_logger
-from constants import OK, system, PROCESSING
+from constants import system, JobStatus
 from overrides import overrides
 from models.users import User
 from datetime import datetime, timedelta
@@ -25,7 +25,7 @@ class JobSystem(Job):
     def __init__(self, root_name="ICT Hotline"):
         super().__init__()
         self.root_name = root_name
-        self.status = PROCESSING
+        self.status = JobStatus.PROCESSING
 
     @property
     def root_user(self):
@@ -40,7 +40,7 @@ class JobSystem(Job):
 
     @overrides
     def validate_complete(self):
-        if self.status == OK and self.all_messages_successful():
+        if self.status == JobStatus.OK and self.all_messages_successful():
             return True
         return False
         

@@ -45,7 +45,7 @@ Currently, the only [user job](./services/app/models/jobs/user/) that exist is f
 Messages are sent and received through a Twilio number. Read Twilio's [Documentation](https://www.twilio.com/docs). It uses Programmable Messaging through a Messaging Service which allows for Content Template Builders.
 
 ### Incoming
-Incoming messages are either stored as a [MessageReceived or MessageConfirm](./services/app/models/messages/received.py) 
+Incoming messages are either stored as a [MessageReceived or MessageSelection](./services/app/models/messages/received.py) 
 - MessageReceiveds are the initial messages
 - MessageConfirms are replies to the system after the system has generated its own message
 

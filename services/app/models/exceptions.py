@@ -1,6 +1,5 @@
-from constants import intents, SERVER_ERROR, OK
+from constants import Intent, JobStatus
 from extensions import get_session
-from constants import messages
 import logging
 import traceback
 
@@ -15,8 +14,7 @@ class DurationError(Exception):
 class ReplyError(Exception):
     """throws error when trying to reply but message not found"""
 
-    def __init__(self, err_message, intent=intents['OTHERS'], job_status=SERVER_ERROR):
-
+    def __init__(self, err_message, intent=Intent.OTHERS, job_status=JobStatus.SERVER_ERROR):
         self.err_message = err_message
         super().__init__(self.err_message)
         self.intent = intent

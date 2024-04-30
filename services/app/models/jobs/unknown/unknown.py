@@ -3,9 +3,7 @@ from datetime import timedelta
 
 from logs.config import setup_logger
 from extensions import db
-from models.exceptions import ReplyError
 
-from constants import PROCESSING
 from utilities import get_session, current_sg_time
 
 class JobUnknown(Job):

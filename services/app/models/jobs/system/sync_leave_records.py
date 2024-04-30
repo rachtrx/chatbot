@@ -9,9 +9,8 @@ from logs.config import setup_logger
 from extensions import db, get_session
 import pandas as pd
 from models.exceptions import AzureSyncError, ReplyError
-from constants import messages, intents, OK, SERVER_ERROR, PROCESSING
+from constants import Intent, JobStatus
 import os
-from constants import metric_names
 import traceback
 from utilities import print_all_dates
 from models.users import User
@@ -40,8 +39,8 @@ class JobSyncRecords(JobSystem):
         self.cur_manager = None
         self.content_sid = os.environ.get('SHAREPOINT_LEAVE_SYNC_NOTIFY_SID')
         self.records = {
-            intents['SHAREPOINT_ADD_RECORD']: {SERVER_ERROR: {}, OK: {}},
-            intents['SHAREPOINT_DEL_RECORD']: {SERVER_ERROR: {}, OK: {}}
+            Intent.SHAREPOINT_ADD_RECORD: {JobStatus.SERVER_ERROR: {}, JobStatus.OK: {}},
+            Intent.SHAREPOINT_DEL_RECORD: {JobStatus.SERVER_ERROR: {}, JobStatus.OK: {}}
         }
         self.cv_and_users_list = []
         self.content_sid = os.environ.get('SHAREPOINT_LEAVE_SYNC_NOTIFY_SID')
@@ -134,8 +133,8 @@ class JobSyncRecords(JobSystem):
                             continue
 
                         cv = {
-                            '1': "Addition" if action == intents['SHAREPOINT_ADD_RECORD'] else "Deletion",
-                            '2': "successful" if status == OK else "unsuccessful",
+                            '1': "Addition" if action == Intent.SHAREPOINT_ADD_RECORD else "Deletion",
+                            '2': "successful" if status == JobStatus.OK else "unsuccessful",
                             '3': print_all_dates(dates, date_obj=True),
                         }
 
@@ -183,19 +182,19 @@ class JobSyncRecords(JobSystem):
             self.logger.info(combined_df.dtypes)
 
             if combined_df.empty:
-                self.commit_status(OK, _forwards=True)
+                self.commit_status(JobStatus.OK, _forwards=True)
                 self.reply = "Nothing to sync"
                 return
 
             # both but cancelled or az only (no record ever made in local db) means have to del from Sharepoint
-            combined_df.loc[(((combined_df._merge == "both") & (combined_df.is_cancelled == True)) | (combined_df._merge == "az_only")), "action"] = intents['SHAREPOINT_DEL_RECORD']
+            combined_df.loc[(((combined_df._merge == "both") & (combined_df.is_cancelled == True)) | (combined_df._merge == "az_only")), "action"] = Intent.SHAREPOINT_DEL_RECORD
             # PASS: both and not cancelled means updated on both sides
             # db only and not cancelled means need to add to Sharepoint
-            combined_df.loc[((combined_df._merge == "db_only") & (combined_df.is_cancelled == False)), "action"] = intents['SHAREPOINT_ADD_RECORD']
+            combined_df.loc[((combined_df._merge == "db_only") & (combined_df.is_cancelled == False)), "action"] = Intent.SHAREPOINT_ADD_RECORD
             # PASS: right only and cancelled means updated on both sides
 
-            dates_to_del = combined_df.loc[combined_df.action == intents['SHAREPOINT_DEL_RECORD']].copy()
-            dates_to_update = combined_df.loc[combined_df.action == intents['SHAREPOINT_ADD_RECORD']].copy()
+            dates_to_del = combined_df.loc[combined_df.action == Intent.SHAREPOINT_DEL_RECORD].copy()
+            dates_to_update = combined_df.loc[combined_df.action == Intent.SHAREPOINT_ADD_RECORD].copy()
 
             # self.logger.info("Printing dates to del and add")
             # self.logger.info(dates_to_del)
@@ -204,7 +203,7 @@ class JobSyncRecords(JobSystem):
             self.logger.info(f"length of data to add: {dates_to_update.shape}")
 
             if dates_to_del.empty and dates_to_update.empty:
-                self.commit_status(OK, _forwards=True)
+                self.commit_status(JobStatus.OK, _forwards=True)
                 self.reply = "Nothing to sync"
                 return
             
@@ -216,10 +215,10 @@ class JobSyncRecords(JobSystem):
                 # cancel MCs
                 try:
                     self.cur_manager.delete_from_excel(indexes_to_rm)
-                    del_status = OK
+                    del_status = JobStatus.OK
                 except AzureSyncError as e:
                     self.error = True
-                    del_status = SERVER_ERROR
+                    del_status = JobStatus.SERVER_ERROR
                     self.logger.error(e.message)
                 
                 del_grouped = dates_to_del.groupby(['_merge', 'name'], observed=True)
@@ -237,7 +236,7 @@ class JobSyncRecords(JobSystem):
                         record = session.query(LeaveRecord).filter_by(id=id).first()
                         if record and record.sync_status != del_status: 
                             record.sync_status = del_status
-                            self.update_records(intents['SHAREPOINT_DEL_RECORD'], del_status, name, record.date)
+                            self.update_records(Intent.SHAREPOINT_DEL_RECORD, del_status, name, record.date)
 
             # Add MCs
             # add to excel
@@ -246,10 +245,10 @@ class JobSyncRecords(JobSystem):
                 data_to_add = list(dates_to_update.apply(self.format_row, axis=1))
                 try:
                     self.cur_manager.upload_data(data_to_add)
-                    add_status = OK
+                    add_status = JobStatus.OK
                 except AzureSyncError as e:
                     self.error = True
-                    add_status = SERVER_ERROR
+                    add_status = JobStatus.SERVER_ERROR
                     self.logger.error(e.message)
 
                 add_grouped = dates_to_update.groupby(['_merge', 'name'], observed=True)
@@ -258,8 +257,8 @@ class JobSyncRecords(JobSystem):
                         record = session.query(LeaveRecord).filter_by(id=id).first()
                         if record and record.sync_status != add_status: 
                             record.sync_status = add_status
-                            self.logger.info(f"add record number: {intents['SHAREPOINT_ADD_RECORD']}")
-                            self.update_records(intents['SHAREPOINT_ADD_RECORD'], add_status, name, record.date)
+                            self.logger.info(f"add record number: {Intent.SHAREPOINT_ADD_RECORD}")
+                            self.update_records(Intent.SHAREPOINT_ADD_RECORD, add_status, name, record.date)
             session.commit()
 
         if len(self.records) > 0:

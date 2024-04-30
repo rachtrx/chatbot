@@ -1,7 +1,7 @@
 from extensions import db, get_session
 # from sqlalchemy.orm import 
 from sqlalchemy import desc, JSON
-from constants import intents, errors, DECISIONS, OK
+from constants import errors, Decision, JobStatus
 import logging
 import traceback
 import json
@@ -36,9 +36,9 @@ class JobEs(JobUser):
     @overrides
     def validate_confirm_message(self):
 
-        decision = self.received_msg.decision
+        selection = self.received_msg.selection
 
-        if decision == DECISIONS['CANCEL'] or decision == DECISIONS['CONFIRM']:
+        if selection == Decision.CANCEL or selection == Decision.CONFIRM:
         # TODO CANCEL THE MC
             return
         else:
@@ -59,15 +59,15 @@ class JobEs(JobUser):
     @overrides
     def handle_user_reply_action(self):
 
-        decision = self.received_msg.decision
+        selection = self.received_msg.selection
 
-        if decision == DECISIONS['CANCEL'] or decision == DECISIONS['CONFIRM']:
+        if selection == Decision.CANCEL or selection == Decision.CONFIRM:
         # TODO CANCEL THE MC
-            self.commit_helpful(decision)
+            self.commit_helpful(selection)
 
             body = "Thank you for the feedback!"
             
-            if decision == DECISIONS['CANCEL']:
+            if selection == Decision.CANCEL:
                 body += " We will try our best to improve the search :)"
 
             return body
@@ -75,7 +75,7 @@ class JobEs(JobUser):
     def check_for_complete(self):
         last_message_replied = self.all_messages_successful()
         if self.answered and last_message_replied:
-            self.commit_status(OK)
+            self.commit_status(JobStatus.OK)
             self.logger.info("job complete")
 
     def get_es_reply(self):
@@ -119,8 +119,8 @@ class JobEs(JobUser):
                 content_variables[str(count + 1)] = f"[{filename}]({url})"
                 count += 2
 
-            content_variables[str(count)] = DECISIONS['CONFIRM']
-            content_variables[str(count + 1)] = DECISIONS['CANCEL']
+            content_variables[str(count)] = Decision.CONFIRM
+            content_variables[str(count + 1)] = Decision.CANCEL
 
             content_variables = json.dumps(content_variables)
 

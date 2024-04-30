@@ -3,7 +3,6 @@ from .abstract import JobSystem
 from logs.config import setup_logger
 import os
 import msal
-from constants import OK, SERVER_ERROR
 from azure.utils import generate_header
 import requests
 import traceback

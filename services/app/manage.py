@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 
 from models.users import User
 from models.messages.sent import MessageSent, MessageForward
-from models.messages.received import MessageReceived, MessageConfirm
+from models.messages.received import MessageReceived, MessageSelection
 from models.messages.abstract import Message
 
 from models.jobs.abstract import Job

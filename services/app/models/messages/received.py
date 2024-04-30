@@ -1,19 +1,12 @@
-from datetime import datetime, timedelta, date
 from extensions import db, get_session
-# from sqlalchemy.orm import 
-from sqlalchemy import desc, union_all
 from typing import List
-from constants import intents, messages, OK
 import re
 from dateutil.relativedelta import relativedelta
-import os
-import json
-from config import twilio_client
-from models.exceptions import ReplyError
 from .abstract import Message
 from .sent import MessageSent
-from constants import leave_alt_words
+from constants import leave_alt_words, Decision, AuthorizedDecision, LeaveType, Intent, MessageType
 import logging
+from sqlalchemy import Enum as SQLEnum
 
 from logs.config import setup_logger
 
@@ -41,9 +34,9 @@ class MessageReceived(Message):
                 
         leave_alt_words_pattern = re.compile(leave_alt_words, re.IGNORECASE)
         if leave_alt_words_pattern.search(message):
-            return intents['TAKE_LEAVE']
+            return Intent.TAKE_LEAVE
             
-        return intents['ES_SEARCH']
+        return Intent.ES_SEARCH
     
     @staticmethod
     def get_message(request):
@@ -80,14 +73,14 @@ class MessageReceived(Message):
 
         self.logger.info(f"message status: {self.status}, job status: {job.status}")
 
-        sent_msg = MessageSent.send_msg(messages['SENT'], self.reply, job)
+        sent_msg = MessageSent.send_msg(MessageType.SENT, self.reply, job)
 
         self.commit_reply_sid(sent_msg.sid)
         # self.commit_status(OK)
 
         return sent_msg
 
-class MessageConfirm(MessageReceived):
+class MessageSelection(MessageReceived):
 
     logger = setup_logger('models.message_confirm')
 
@@ -96,25 +89,25 @@ class MessageConfirm(MessageReceived):
 
     #for comparison with the latest confirm message. sid is of the prev message, not the next reply
     ref_msg_sid = db.Column(db.String(80), nullable=False)
-    _decision = db.Column(db.Integer, nullable=False)
+    selection = db.Column(SQLEnum(Decision, AuthorizedDecision, LeaveType), nullable=False)
 
     __mapper_args__ = {
         "polymorphic_identity": "message_confirm",
         'inherit_condition': sid == MessageReceived.sid
     }
 
-    def __init__(self, job_no, sid, body, ref_msg_sid, decision):
+    def __init__(self, job_no, sid, body, ref_msg_sid, selection):
         super().__init__(job_no, sid, body) # initialise message
         self.ref_msg_sid = ref_msg_sid
-        self.decision = decision
+        self.selection = selection
 
-    @property
-    def decision(self):
-        return str(self._decision) if self._decision else None
+    # @property
+    # def selection(self):
+    #     return str(self._selection) if self._selection else None
     
-    @decision.setter
-    def decision(self, value):
-        self._decision = int(value)
+    # @selection.setter
+    # def selection(self, value):
+    #     self._selection = int(value)
         
     @classmethod
     def get_latest_sent_message(cls, job_no):
@@ -122,24 +115,24 @@ class MessageConfirm(MessageReceived):
         latest_message = session.query(MessageSent) \
                         .filter(
                             MessageSent.job_no == job_no,
-                            MessageSent.is_expecting_reply == True
+                            MessageSent.selection_type != None
                         ).order_by(cls.timestamp.desc()) \
                         .first()
 
         return latest_message if latest_message else None
     
-    def check_for_other_decision(self):
+    def check_for_other_selection(self):
         
-        # other_decision = CANCEL if self.decision == CONFIRM else CANCEL
+        # other_selection = CANCEL if self.selection == CONFIRM else CANCEL
         session = get_session()
 
-        other_message = session.query(MessageConfirm) \
+        other_message = session.query(MessageSelection) \
                         .filter(
-                            MessageConfirm.ref_msg_sid == self.ref_msg_sid,
-                            MessageConfirm.sid != self.sid,
-                            # MessageConfirm.decision == other_decision
+                            MessageSelection.ref_msg_sid == self.ref_msg_sid,
+                            MessageSelection.sid != self.sid,
+                            # MessageSelection.selection == other_selection
                         ).first()
         
-        # TODO not sure why other_decision doesnt work
+        # TODO not sure why other_selection doesnt work
         
         return other_message

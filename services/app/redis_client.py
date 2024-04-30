@@ -1,12 +1,12 @@
 import json
 import logging
 from logs.config import setup_logger
-from constants import PROCESSING, PENDING_USER_REPLY
+from constants import JobStatus
 from concurrent.futures import ThreadPoolExecutor
 from models.jobs.user.abstract import JobUser
 from models.exceptions import ReplyError
 from models.users import User
-from constants import errors
+from constants import errors, SelectionType
 import redis
 import traceback
 
@@ -46,11 +46,11 @@ class Redis():
     @catch_reply_errors
     def enqueue_job(self, user_id, new_job_info):
         # Use a list as a queue for each user's jobs
-        enqueue_job = False
+        job_enqueued = False
 
         # if the message was a reply, enqueue first
         if new_job_info.get('replied_msg_sid', None):
-            enqueue_job = True
+            job_enqueued = True
             
         # not a reply
         else:
@@ -62,14 +62,14 @@ class Redis():
                 last_job_info = self.get_last_job_info(user_id)
                 if last_job_info:
                     # no process running, last job exists, user didn't send a reply
-                    raise ReplyError(errors['PENDING_USER_REPLY'])
+                    raise ReplyError(errors['JobStatus.PENDING_DECISION'])
                 # not a reply, no process running, no last job
-                enqueue_job = True
+                job_enqueued = True
         
-        if enqueue_job:
+        if job_enqueued:
             self.client.rpush(f"user_jobs_queue:{user_id}", json.dumps(new_job_info))
         
-        return enqueue_job
+        return job_enqueued
 
     def job_completed(self, job_details, user_id):
 
@@ -99,7 +99,7 @@ class Redis():
         Called from 
         a) main thread when msg enqueued (new msg)
         b) after finish job (in case user double clicks confirm and cancel),
-        c) after Twilio's callback whr msg has been updated to PENDING_USER_REPLY
+        c) after Twilio's callback whr msg has been updated to JobStatus.PENDING_DECISION
 
         possible jobs that have been enqueued: reply messages, new messages sent when no other job running or job pending
         '''
@@ -109,7 +109,7 @@ class Redis():
             # check for pending job
             last_job_info = self.get_last_job_info(user_id)
             # new message must be a reply. dont start job if its not pending reply; the callback will start it
-            if last_job_info and last_job_info['status'] != PENDING_USER_REPLY: 
+            if last_job_info and last_job_info['status'] != JobStatus.PENDING_DECISION: 
                 return None
             
             # msg must be completely new / last job exists and is pending reply / user double clicks but the last_job_info has been deleted
@@ -145,11 +145,14 @@ class Redis():
             decrypted_data_json = self.cipher_suite.decrypt(encrypted_data).decode()
             last_job_info = json.loads(decrypted_data_json)
             if isinstance(last_job_info, dict):
-                if last_job_info.get("sent_sid", None) == message.sid and last_job_info.get("job_no", None) == message.job_no:
-                    last_job_info['status'] = PENDING_USER_REPLY
+                if last_job_info.get("sent_sid", None) == message.sid and last_job_info.get("job_no", None) == message.job_no: # if current data found
+                    if last_job_info['selected_type'] == SelectionType.DECISION:
+                        last_job_info['status'] = JobStatus.PENDING_DECISION
+                    elif last_job_info['selected_type'] == SelectionType.AUTHORISED_DECISION:
+                        last_job_info['status'] = JobStatus.PENDING_AUTHORIZED_DECISION
                     logging.info("updated job status to pending user reply")
                     # Convert updated dictionary back to JSON and then encrypt it before storing
                     updated_data_json = json.dumps(last_job_info)
                     encrypted_updated_data = self.cipher_suite.encrypt(updated_data_json.encode())
                     self.client.hset(f"user_job_data:{user_id}", "job_information", encrypted_updated_data)
-                    self.start_next_job(user_id)
+                    return last_job_info['status']

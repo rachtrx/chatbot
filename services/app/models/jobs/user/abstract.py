@@ -1,23 +1,20 @@
 from datetime import datetime, timedelta, date
-
 from twilio.base.exceptions import TwilioRestException
-
 from extensions import db, get_session
 # from sqlalchemy.orm import 
 from sqlalchemy import desc
 from typing import List
 import logging
-from constants import intents,messages, PENDING_USER_REPLY, OK, PROCESSING, DECISIONS, SERVER_ERROR, CLIENT_ERROR
+from constants import errors, Decision, JobStatus, SelectionType, Intent, MessageType, AuthorizedDecision
 import re
 from dateutil.relativedelta import relativedelta
 from utilities import current_sg_time, log_instances
-from constants import intents, errors
 from models.exceptions import ReplyError
 from models.jobs.abstract import Job
 from models.jobs.unknown.unknown import JobUnknown
 from models.messages.abstract import Message
 
-from models.messages.received import MessageReceived, MessageConfirm
+from models.messages.received import MessageReceived, MessageSelection
 import traceback
 
 from models.users import User
@@ -61,17 +58,17 @@ class JobUser(Job): # Abstract class
     @classmethod
     def create_job(cls, intent, user_str, *args, **kwargs):
         '''args is typically "user" and "options"'''
-        if intent == intents['TAKE_LEAVE']:
+        if intent == Intent.TAKE_LEAVE:
             from .leave import JobLeave
             new_job = JobLeave(*args, **kwargs)
-        elif intent == intents['CANCEL_LEAVE']:
+        elif intent == Intent.CANCEL_LEAVE:
             from .leave import JobLeaveCancel
             new_job = JobLeaveCancel(*args, **kwargs)
         # Add conditions for other subclasses
-        elif intent == intents['ES_SEARCH']:
+        elif intent == Intent.ES_SEARCH:
             from .es import JobEs
             new_job =  JobEs(*args, **kwargs)
-        elif intent == intents['OTHERS']:
+        elif intent == Intent.OTHERS:
             new_job =  cls(*args, **kwargs)
         else:
             raise ValueError(f"Unknown intent ID: {intent}")
@@ -97,15 +94,22 @@ class JobUser(Job): # Abstract class
     def handle_user_entry_action(self):
         pass
 
-    def bypass_validation(self, decision):
+    def is_partially_completed(self):
         return False
     
-    def is_cancel_job(self, decision):
-        return False
+    @classmethod
+    def create_new_job(cls, user_str, name):
+        intent = MessageReceived.check_for_intent(user_str)
+        if intent == Intent.ES_SEARCH or intent == None:
+            raise ReplyError(errors['ES_REPLY_ERROR'])
+
+        job = cls.create_job(intent, user_str, name)
+        return job
 
     @classmethod
     def general_workflow(cls, job_information):
-        job = received_msg = user = None
+        from models.messages.sent import MessageSent
+        job = user = None
 
         logging.info(f"Job information passed to general workflow from app.py and redis: {job_information}")
         sid = job_information['sid']
@@ -118,75 +122,89 @@ class JobUser(Job): # Abstract class
                 if not user:
                     raise ReplyError(errors['USER_NOT_FOUND'])
                 
-                # NEW JOB WILL BE CREATED
-                if "choice" not in job_information and "decision" not in job_information:
-                    intent = MessageReceived.check_for_intent(user_str)
-                    if intent == intents['ES_SEARCH'] or intent == None:
-                        raise ReplyError(errors['ES_REPLY_ERROR'])
-
-                    job = JobUser.create_job(intent, user_str, user.name)
-                    job.received_msg = Message.create_message(messages['RECEIVED'], job.job_no, sid, user_str)
+                # SECTION NEW JOB
+                if not job_information.get('replied_msg_sid', None):
+                    job = cls.create_new_job(user_str, user.name)
+                    job.received_msg = Message.create_message(MessageType.RECEIVED, job.job_no, sid, user_str)
                     
-                else:
+                else: # selection message
                     sent_sid = job_information.get("sent_sid", None)
-                    decision = job_information.get("decision", None)
-                    choice = job_information.get("choice", None)
-                    replied_msg_sid = job_information.get('replied_msg_sid', None)
+                    selection_type = job_information.get("selection_type", None)
 
-                    from models.messages.sent import MessageSent
+                    rawSelection = job_information.get("selection", None) # numeric val
+                    if not rawSelection:
+                        raise ReplyError(errors['UNKNOWN_ERROR']) # IMPT SELECTION BUT NO SELECTION_TYPE IS A LATE MSG
+
+                    replied_msg_sid = job_information.get('replied_msg_sid', None) # IMPT need to compare with sent_sid
+
                     ref_msg = MessageSent.get_message_by_sid(replied_msg_sid) # try to check the database
                     if not ref_msg:
                         raise ReplyError(errors['SENT_MESSAGE_MISSING']) # no ref msg
+                    
+                    if not selection_type: # LATE MSG
+                        selection_type = ref_msg.selection_type
+                    if not selection_type:
+                        raise ReplyError(errors['UNKNOWN_ERROR'])
 
+                    selection = selection_type.value[int(rawSelection)]
+                    
                     job = ref_msg.job
 
-                    # CHECK if there was a decision. # IMPT bypass_validation is currently ensuring that the user doesnt cancel when clicking on a list item
-                    if decision and job.bypass_validation(decision) and job.is_cancel_job(decision): 
-                        job.commit_cancel()
-                        job = job.create_cancel_job(user_str)
-                        job.received_msg = Message.create_message(messages['CONFIRM'], job.job_no, sid, user_str, replied_msg_sid, decision)
+                    if job.user.number != user.number and job.status == JobStatus.PENDING_AUTHORISED_DECISION:
+                        # IMPT is a authorised user!
+                        pass
 
-                    else: # Confirm
-                        job.received_msg = Message.create_message(messages['CONFIRM'], job.job_no, sid, user_str, replied_msg_sid, decision or choice)
-                        
-                        if sent_sid == replied_msg_sid:
-                            logging.info(f"STATUS IN VALIDATION: {job.status}")
-                            if job.status != PENDING_USER_REPLY:
-                                raise ReplyError(errors['UNKNOWN_ERROR'])
-                            job.commit_status(PROCESSING)
-
-                            if decision:
-                                if decision == DECISIONS['CANCEL']:
-                                    raise ReplyError(job.cancel_msg, job_status=CLIENT_ERROR)
-                                if decision == DECISIONS['CONFIRM']:
-                                    job.update_info(job_information)
-                                else:
-                                    raise ReplyError(errors['UNKNOWN_ERROR'])
-                            else: # IMPT choice found
-                                job.update_info(job_information)
-                                logging.info(f"UPDATED INFO")
-                        
-                        elif not sent_sid:
-                            if job.status == PENDING_USER_REPLY: # no recent job in cache
-                                raise ReplyError(job.timeout_msg)
-                            elif decision and job.status == CLIENT_ERROR and decision == DECISIONS['CONFIRM']:
-                                raise ReplyError(job.confirm_after_cancel_msg)
-                            elif decision and job.status == CLIENT_ERROR and decision == DECISIONS['CANCEL']:
-                                raise ReplyError(job.cancel_after_fail_msg)
-                            else:
-                                raise ReplyError(errors['JOB_COMPLETED']) # likely because job is completed / failed / waiting for completion already
-                        
-                        # recent messsage with job_no and sent_sid but they dont match
-                        elif sent_sid != replied_msg_sid:
-                            if job.status == PENDING_USER_REPLY:
-                                latest_sent_msg = MessageConfirm.get_latest_sent_message(job.job_no)
-                                if sent_sid and sent_sid != latest_sent_msg.sid:
-                                    raise ReplyError(job.not_replying_to_last_msg) # TODO CAN CONSIDDER USER RETRYING
-                            else:
-                                raise ReplyError(errors['JOB_LEAVE_FAILED'])
-                            
+                    # SECTION By now, all messages HAVE selection.
+                    # IMPT First handle msges whose cache has been cleared → missing sent_sid → valid only if cancelling/approving/rejecting, which are all DECISIONS. They MUST BE CLEARED in order to unblock the user.
+                    if not sent_sid:
+                        if (selection == Decision.CONFIRM or selection == Decision.CANCEL) and job.status == JobStatus.PENDING_DECISION:
+                            raise ReplyError(job.timeout_msg)
+                        elif selection == Decision.CANCEL:
+                            if job.status == JobStatus.PENDING_AUTHORISED_DECISION:
+                                # inform RO of cancellation
+                                # remove from database
+                                pass
+                            elif job.status == JobStatus.REJECTED:
+                                # throw error that cannot cancel when rejected
+                                pass
+                            elif job.is_partially_completed():
+                                job.commit_cancel()
+                                job = job.create_cancel_job(user_str)
+                        elif selection == Decision.APPROVE and job.status == JobStatus.PENDING_AUTHORISED_DECISION:
+                            job.approve()
+                        elif selection == Decision.REJECT and job.status == JobStatus.PENDING_AUTHORISED_DECISION:
+                            job.reject()
                         else:
+                            raise ReplyError(errors['JOB_COMPLETED']) # likely because job is completed / failed / waiting for completion already
+
+                    elif sent_sid != replied_msg_sid:
+                        if job.status == JobStatus.PENDING_DECISION:
+                            latest_sent_msg = MessageSelection.get_latest_sent_message(job.job_no) # probably not needed
+                            if sent_sid != latest_sent_msg.sid:
+                                raise ReplyError(job.not_replying_to_last_msg) # TODO CAN CONSIDDER USER RETRYING
+                            else:
+                                raise ReplyError(errors['UNKNOWN_ERROR']) # shouldnt happen but...
+                        else:
+                            raise ReplyError(errors['JOB_LEAVE_FAILED']) # TODO really?
+                    
+                    else: # IMPT by now, sent_sid == replied_msg_sid. only can allow for confirm, cancel, or listitem
+                        if job.status != JobStatus.PENDING_DECISION:
                             raise ReplyError(errors['UNKNOWN_ERROR'])
+                        job.commit_status(JobStatus.PROCESSING)
+
+                        if selection == Decision.CANCEL:
+                            raise ReplyError(job.cancel_msg, job_status=JobStatus.CLIENT_ERROR)
+                        if selection == Decision.CONFIRM:
+                            job.update_info(job_information)
+                        elif selection == AuthorizedDecision.APPROVE or selection == AuthorizedDecision.REJECT:
+                            raise ReplyError(errors['UNKNOWN_ERROR'])
+                        else: # IMPT choice found
+                            job.update_info(job_information, selection_type, selection) # TODO # IMPT SEE constants.py SelectionType ... IMPT
+                            logging.info(f"UPDATED INFO")
+                    
+                    # CHECK if there was a cancel. # IMPT bypass_validation is currently ensuring that the user doesnt cancel when clicking on a list item
+                    job.received_msg = Message.create_message(MessageType.CONFIRM, job.job_no, sid, user_str, replied_msg_sid, selection)
+                        
                             
                 job.background_tasks = []
                 job.user_str = user_str
@@ -221,12 +239,12 @@ class JobUser(Job): # Abstract class
                         job = JobUnknown(raw_from_no)
                     job.commit_status(re.job_status)
                 if not hasattr(job, 'received_msg'):
-                    job.received_msg = Message.create_message(messages['RECEIVED'], job.job_no, sid, user_str)
+                    job.received_msg = Message.create_message(MessageType.RECEIVED, job.job_no, sid, user_str)
 
                 job.received_msg.reply = re.err_message
                 job.sent_msg = job.received_msg.create_reply_msg()
 
-            if job and job.status == PROCESSING: # may throw error due to leave_type empty but still processing
+            if job and job.status == JobStatus.PROCESSING: # may throw error due to leave_type empty but still processing
                 return job.get_cache_data()
             return None
    

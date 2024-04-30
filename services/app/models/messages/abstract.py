@@ -1,7 +1,7 @@
 from extensions import db, get_session
 # from sqlalchemy.orm import 
 from typing import List
-from constants import messages, PROCESSING
+from constants import MessageType
 from dateutil.relativedelta import relativedelta
 from utilities import current_sg_time
 from config import twilio_client
@@ -35,7 +35,6 @@ class Message(db.Model):
         self.sid = sid
         self.body = body
         self.timestamp = current_sg_time()
-        self.status = PROCESSING
         if seq_no is not None:
             self.seq_no = seq_no
         else:
@@ -51,17 +50,17 @@ class Message(db.Model):
     
     @staticmethod
     def create_message(msg_type, *args, **kwargs):
-        if msg_type == messages['SENT']:
+        if msg_type == MessageType.SENT:
             from .sent import MessageSent
             new_message =  MessageSent(*args, **kwargs)
         # Add conditions for other subclasses
-        elif msg_type == messages['RECEIVED']:
+        elif msg_type == MessageType.RECEIVED:
             from .received import MessageReceived
             new_message =  MessageReceived(*args, **kwargs)
-        elif msg_type == messages['CONFIRM']:
-            from .received import MessageConfirm
-            new_message =  MessageConfirm(*args, **kwargs)
-        elif msg_type == messages['FORWARD']:
+        elif msg_type == MessageType.CONFIRM:
+            from .received import MessageSelection
+            new_message =  MessageSelection(*args, **kwargs)
+        elif msg_type == MessageType.FORWARD:
             from .sent import MessageForward
             new_message =  MessageForward(*args, **kwargs)
         else:

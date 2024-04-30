@@ -22,7 +22,7 @@ from tasks import main as create_task
 
 from es.manage import loop_through_files, create_index
 
-from constants import system, PROCESSING, PENDING_USER_REPLY, OK
+from constants import system, SelectionType, JobStatus
 
 import os
 from sqlalchemy import create_engine
@@ -106,15 +106,15 @@ def sms_reply():
         }
         
         if request.form.get('OriginalRepliedMessageSid'):
-            logging.info(f"User made a decision: {request.form.get('Body')}")
+            logging.info(f"User made a selection: {request.form.get('Body')}")
             replied_msg_sid = request.form.get('OriginalRepliedMessageSid')
             new_job_info["replied_msg_sid"] = replied_msg_sid
 
             # CONFIRM/CANCEL
             if request.form.get('ButtonPayload', None):
-                new_job_info["decision"] = request.form.get('ButtonPayload', None)
+                new_job_info["selection"] = int(request.form['ButtonPayload'])
             elif request.form.get('ListId', None):
-                new_job_info["choice"] = request.form.get('ListId', None)
+                new_job_info["selection"] = int(request.form['ListId'])
             else:
                 raise Exception
 
@@ -127,12 +127,12 @@ def sms_reply():
             result = app.redis_client.start_next_job(encoded_no)
 
             if result:
-                return result[0], OK  # job started
+                return result[0], JobStatus.OK.value  # job started
             else:
-                return "job not started", OK  # Accepted but queued
+                return "job not started", JobStatus.OK.value  # Accepted but queued
         else:
             logging.info("job not queued")
-            return "job not queued", OK
+            return "job not queued", JobStatus.OK.value
     except Exception:
         logging.error(traceback.format_exc())
         app.twilio_client.messages.create(
@@ -170,10 +170,11 @@ def sms_reply_callback():
             message_pendiing_reply = job.update_with_msg_callback(status, sid, message) # pending callback
             if message_pendiing_reply:
                 to_no = request.form.get("To")
-                encoded_no = app.hash_identifier(str(to_no))
-                app.redis_client.update_job_status(encoded_no, message_pendiing_reply)
-                job.commit_status(PENDING_USER_REPLY)
-
+                user_id = app.hash_identifier(str(to_no))
+                updated_status = app.redis_client.update_job_status(user_id, message_pendiing_reply) # update redis
+                if updated_status:
+                    job.commit_status(updated_status) # then update the database
+                    app.redis_client.start_next_job(user_id)
                         
     except Exception as e:
         logging.error(traceback.format_exc())

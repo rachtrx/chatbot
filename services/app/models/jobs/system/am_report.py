@@ -5,7 +5,8 @@ from azure.utils import generate_header
 
 from logs.config import setup_logger
 
-from constants import OK
+from constants import SentMessageStatus
+from sqlalchemy import enum as SQLEnum
 
 import os
 import pandas as pd
@@ -25,7 +26,7 @@ class JobAmReport(JobSystem):
 
     __tablename__ = 'job_am_report'
     job_no = db.Column(db.ForeignKey("job_system.job_no"), primary_key=True)
-    forwards_status = db.Column(db.Integer, default=None, nullable=True)
+    forwards_status = db.Column(SQLEnum(SentMessageStatus), default=None, nullable=True)
 
     dept_order = ('Corporate', 'ICT', 'AP', 'Voc Ed', 'Lower Pri', 'Upper Pri', 'Secondary', 'High School', 'Relief')
     
@@ -48,7 +49,7 @@ class JobAmReport(JobSystem):
         self.global_cv = {}
 
     def validate_complete(self):
-        if self.forwards_status == OK:
+        if self.forwards_status == SentMessageStatus.OK:
             messages_sent = super().validate_complete()
             if messages_sent:
                 return True
