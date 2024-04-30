@@ -125,7 +125,7 @@ class JobUser(Job): # Abstract class
                         raise ReplyError(errors['ES_REPLY_ERROR'])
 
                     job = JobUser.create_job(intent, user_str, user.name)
-                    received_msg = Message.create_message(messages['RECEIVED'], job.job_no, sid, user_str)
+                    job.received_msg = Message.create_message(messages['RECEIVED'], job.job_no, sid, user_str)
                     
                 else:
                     sent_sid = job_information.get("sent_sid", None)
@@ -144,10 +144,10 @@ class JobUser(Job): # Abstract class
                     if decision and job.bypass_validation(decision) and job.is_cancel_job(decision): 
                         job.commit_cancel()
                         job = job.create_cancel_job(user_str)
-                        received_msg = Message.create_message(messages['CONFIRM'], job.job_no, sid, user_str, replied_msg_sid, decision)
+                        job.received_msg = Message.create_message(messages['CONFIRM'], job.job_no, sid, user_str, replied_msg_sid, decision)
 
                     else: # Confirm
-                        received_msg = Message.create_message(messages['CONFIRM'], job.job_no, sid, user_str, replied_msg_sid, decision or choice)
+                        job.received_msg = Message.create_message(messages['CONFIRM'], job.job_no, sid, user_str, replied_msg_sid, decision or choice)
                         
                         if sent_sid == replied_msg_sid:
                             logging.info(f"STATUS IN VALIDATION: {job.status}")
@@ -190,7 +190,6 @@ class JobUser(Job): # Abstract class
                             
                 job.background_tasks = []
                 job.user_str = user_str
-                job.received_msg = received_msg
                 job.handle_request() # TODO check if need job = job.handle_request()
                     
                 job.sent_msg = job.received_msg.create_reply_msg()
@@ -208,7 +207,24 @@ class JobUser(Job): # Abstract class
                 logging.info(f"In General Workflow {job.status}, {job.sent_msg.sid}")
 
             except ReplyError as re: # problem
-                job.sent_msg = re.send_error_msg(sid, user_str, user if user else raw_from_no)
+
+                if not job:
+                    if user:
+                        name = user.name
+                        job = JobUser.create_job(re.intent, user_str, name)
+                    else:
+                        logging.info(f"unknown number: {raw_from_no}")
+                        prev_job = JobUnknown.check_for_prev_job(raw_from_no)
+                        if prev_job:
+                            logging.info("doing nothing")
+                            return
+                        job = JobUnknown(raw_from_no)
+                    job.commit_status(re.job_status)
+                if not hasattr(job, 'received_msg'):
+                    job.received_msg = Message.create_message(messages['RECEIVED'], job.job_no, sid, user_str)
+
+                job.received_msg.reply = re.err_message
+                job.sent_msg = job.received_msg.create_reply_msg()
 
             if job and job.status == PROCESSING: # may throw error due to leave_type empty but still processing
                 return job.get_cache_data()

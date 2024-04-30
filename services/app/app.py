@@ -1,5 +1,8 @@
-import os
 from dotenv import load_dotenv
+env_path = f"/etc/environment"
+load_dotenv(dotenv_path=env_path)
+
+import os
 from datetime import datetime
 
 from flask import Flask, request, Response
@@ -24,9 +27,6 @@ from constants import system, PROCESSING, PENDING_USER_REPLY, OK
 import os
 from sqlalchemy import create_engine
 from extensions import init_thread_session
-
-env_path = f"/etc/environment"
-load_dotenv(dotenv_path=env_path)
 
 from utilities import log_level
 

@@ -123,8 +123,8 @@ class JobSyncUsers(JobSystem):
             old_data = merged_data[merged_data['_merge'] == 'right_only']
             new_data = merged_data[merged_data['_merge'] == 'left_only']
 
-            self.logger.error(f"Old data: {old_data[['name', 'alias']]}")
-            self.logger.error(f"New data: {new_data[['name', 'alias']]}")
+            self.logger.info(f"Old data: {old_data[['name', 'alias']]}")
+            self.logger.info(f"New data: {new_data[['name', 'alias']]}")
 
             old_names = [name for name in old_data['name']]
             new_names = [name for name in new_data['name']]
@@ -146,6 +146,7 @@ class JobSyncUsers(JobSystem):
             updated_users_tuples = [tuple(updated_user) for updated_user in updated_data.values]
             old_users = [name for name in old_data['name']]
             new_users_tuples = [tuple(new_user) for new_user in new_data.values]
+            self.logger.info(f"new_users_tuples: {new_users_tuples}")
             
             self.logger.info(f"Updated users: {updated_data[['name', 'alias']]}")
             
@@ -184,6 +185,7 @@ class JobSyncUsers(JobSystem):
                     self.error = True
 
             for name, alias, number, dept, _, is_global_admin, is_dept_admin in new_users_tuples:
+                # self.logger.info(f"alias: {alias}")
                 new_user = User(name=name, alias=alias, number=number, dept=dept, is_global_admin=is_global_admin, is_dept_admin=is_dept_admin)
                 try:
                     session.add(new_user)

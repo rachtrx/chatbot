@@ -1,6 +1,5 @@
 from sqlalchemy import select, func, extract, cast, Integer
 from azure.sheet_manager import SpreadsheetManager
-from dotenv import load_dotenv
 import requests
 from utilities import current_sg_time
 from datetime import datetime, timedelta

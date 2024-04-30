@@ -1,11 +1,7 @@
 import os
-from dotenv import load_dotenv
 
 from twilio.rest import Client
 import logging
-
-env_path = f"/etc/environment"
-load_dotenv(dotenv_path=env_path)
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 

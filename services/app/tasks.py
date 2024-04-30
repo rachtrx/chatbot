@@ -1,10 +1,13 @@
+from dotenv import load_dotenv
+env_path = f"/etc/environment"
+load_dotenv(dotenv_path=env_path)
+
 from manage import create_app
 from constants import system
 from models.jobs.system.abstract import JobSystem
 from constants import messages
 from extensions import init_thread_session, get_session, remove_thread_session
 
-from dotenv import load_dotenv
 from models.messages.sent import MessageSent
 from models.exceptions import AzureSyncError
 from utilities import current_sg_time, convert_utc_to_sg_tz
@@ -16,9 +19,6 @@ from sqlalchemy import create_engine
 import os
 import json
 from models.metrics import Metric
-
-env_path = f"/etc/environment"
-load_dotenv(dotenv_path=env_path)
 
 def main(jobs_to_run=[]):
 

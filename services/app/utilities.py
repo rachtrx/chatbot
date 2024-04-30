@@ -10,9 +10,6 @@ import threading
 import os
 from dotenv import load_dotenv
 
-env_path = f"/etc/environment"
-load_dotenv(dotenv_path=env_path)
-
 if os.environ.get('LIVE') == "1":
     log_level = logging.ERROR
 else:

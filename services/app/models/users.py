@@ -3,8 +3,7 @@ from extensions import db, get_session
 from sqlalchemy import ForeignKey
 from logs.config import setup_logger
 from constants import MAX_UNBLOCK_WAIT
-import json
-import time
+import os
 
 class User(db.Model):
 
@@ -47,6 +46,7 @@ class User(db.Model):
 
     def __init__(self, name, alias, number, dept, is_global_admin, is_dept_admin, reporting_officer=None):
         self.name = name
+        self.alias = alias
         self.number = number
         self.dept = dept
         self.reporting_officer = reporting_officer
@@ -57,6 +57,7 @@ class User(db.Model):
     def get_user(cls, from_number):
         session = get_session()
         user = session.query(cls).filter_by(number=from_number[-8:]).first()
+        print(f"User: {user}")
         if user:
             return user
         else:
@@ -96,7 +97,8 @@ class User(db.Model):
 
     def get_relations(self):
         # Using list unpacking to handle both list and empty list cases
-        all_relations = list(set(self.get_ro()) | set(self.get_dept_admins(self.dept)) | set(self.get_global_admins()))
-        relations = [user for user in all_relations if user.name != self.name]
+        relations = list(set(self.get_ro()) | set(self.get_dept_admins(self.dept)) | set(self.get_global_admins()))
+        if os.environ.get('LIVE') == "1":
+            relations = [user for user in relations if user.name != self.name]
         # self.logger.info(f"Final relations: {relations}")
         return relations
