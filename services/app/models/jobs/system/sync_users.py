@@ -21,7 +21,7 @@ class JobSyncUsers(JobSystem):
 
     __tablename__ = 'job_sync_users'
 
-    job_no = db.Column(db.ForeignKey("job_system.job_no", ondelete='CASCADE'), primary_key=True)
+    job_no = db.Column(db.ForeignKey("job_system.job_no"), primary_key=True)
     
     __mapper_args__ = {
         "polymorphic_identity": "job_sync_users",
@@ -59,9 +59,9 @@ class JobSyncUsers(JobSystem):
     @staticmethod
     def df_replace_spaces(df):
         '''Replaces empty strings with NaN, removes entirely blank rows, and sets empty aliases to names.'''
-        df = df.replace('', np.nan)
+        df = df.replace({np.nan: None, '': None })
         df = df.dropna(how="all")
-        df['alias'] = df.apply(lambda x: x['name'] if x['alias'] == '' else x['alias'], axis=1)
+        df['alias'] = df.apply(lambda x: x['name'] if x['alias'] == None else x['alias'], axis=1)
         return df
 
     def update_user_database(self):
@@ -75,6 +75,7 @@ class JobSyncUsers(JobSystem):
 
         az_users = pd.DataFrame(data=data, columns=["name", "alias", "number", "dept", "reporting_officer_name", "access"])
         az_users = self.df_replace_spaces(az_users)
+        # logging.info(az_users[['name', 'alias']])
 
         # logging.info(users)
         try:
@@ -105,8 +106,8 @@ class JobSyncUsers(JobSystem):
         db_users = db_users[col_order]
 
         pd.set_option('display.max_columns', None)
-        self.logger.info(db_users)
-        self.logger.info(az_users)
+        self.logger.info(db_users[(db_users['name'] == 'ICT Hotline')])
+        self.logger.info(az_users[(az_users['name'] == 'ICT Hotline')])
 
         # SECTION check for exact match
         exact_match = az_users.equals(db_users)
@@ -121,6 +122,9 @@ class JobSyncUsers(JobSystem):
             merged_data = pd.merge(az_users, db_users, how="outer", indicator=True)
             old_data = merged_data[merged_data['_merge'] == 'right_only']
             new_data = merged_data[merged_data['_merge'] == 'left_only']
+
+            self.logger.error(f"Old data: {old_data[['name', 'alias']]}")
+            self.logger.error(f"New data: {new_data[['name', 'alias']]}")
 
             old_names = [name for name in old_data['name']]
             new_names = [name for name in new_data['name']]
@@ -143,9 +147,8 @@ class JobSyncUsers(JobSystem):
             old_users = [name for name in old_data['name']]
             new_users_tuples = [tuple(new_user) for new_user in new_data.values]
             
-            self.logger.info(f"Updated users: {updated_data['name'].values}")
-            self.logger.info(f"Old users: {old_data['name'].values}")
-            self.logger.info(f"New users: {new_data['name'].values}")
+            self.logger.info(f"Updated users: {updated_data[['name', 'alias']]}")
+            
             # NEED APP CONTEXT
 
             for name in old_users:
