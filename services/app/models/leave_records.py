@@ -7,6 +7,8 @@ import time
 import shortuuid
 from datetime import timedelta, datetime
 from utilities import get_latest_date_past_9am, get_session, current_sg_time
+from constants import LeaveStatus
+from sqlalchemy import Enum as SQLEnum
 
 class LeaveRecord(db.Model):
 
@@ -22,14 +24,14 @@ class LeaveRecord(db.Model):
     sync_status = db.Column(db.Integer, default=None, nullable=True)
 
     job = db.relationship('JobLeave', backref=db.backref('leave_records'), lazy='select')
-    is_cancelled = db.Column(db.Boolean, nullable=False)
+    leave_status = db.Column(SQLEnum(LeaveStatus), nullable=False)
 
-    def __init__(self, job, date):
+    def __init__(self, job, date, leave_status=LeaveStatus.PENDING):
         self.id = shortuuid.ShortUUID().random(length=8)
         # self.name = user.name
         self.job_no = job.job_no
         self.date = date
-        self.is_cancelled = False
+        self.leave_status = leave_status
         session = get_session()
         session.add(self)
         session.commit()

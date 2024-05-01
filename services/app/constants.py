@@ -55,10 +55,18 @@ class LeaveType(Enum):
     # Anniversary = 8
     # Marriage = 9
 
-class SelectionType(Enum): # i dont think this is allowed...
-    DECISION = Decision
-    LEAVE_TYPE = LeaveType
-    AUTHORISED_DECISION = AuthorizedDecision
+class SelectionType:
+    enums = {
+        'DECISION': Decision,
+        'LEAVE_TYPE': LeaveType,
+        'AUTHORIZED_DECISION': AuthorizedDecision
+    }
+
+    @classmethod
+    def get_value(cls, enum_type, value):
+        return cls.enums[enum_type](value).name
+    
+# use case: print(SelectionType.get_value('DECISION', 2))
 
 leave_keywords = {
     LeaveType.MEDICAL: ["medical leave", "ml", "mc", "medical cert", "medical certificate", "sick", "medical appointment"],

@@ -9,7 +9,7 @@ from logs.config import setup_logger
 from extensions import db, get_session
 import pandas as pd
 from models.exceptions import AzureSyncError, ReplyError
-from constants import Intent, JobStatus
+from constants import Intent, JobStatus, LeaveStatus
 import os
 import traceback
 from utilities import print_all_dates
@@ -67,19 +67,20 @@ class JobSyncRecords(JobSystem):
             User.name,
             User.dept,
             JobLeave.leave_type,
-            JobLeave.is_cancelled,
+            JobLeave.leave_status,
             LeaveRecord.sync_status
         ).join(
             LeaveRecord, JobLeave.job_no == LeaveRecord.job_no
         ).join(
             User, JobLeave.name == User.name
         ).filter(
+            JobLeave.leave_status != LeaveStatus.PENDING,
             extract('month', LeaveRecord.date) == mm,
             extract('year', LeaveRecord.date) == yy,
             LeaveRecord.date >= self.latest_date
         ).all()
 
-        db_df = pd.DataFrame(rows, columns=['record_id', 'date', 'name', 'dept', 'leave_type', 'is_cancelled', 'sync_status'])
+        db_df = pd.DataFrame(rows, columns=['record_id', 'date', 'name', 'dept', 'leave_type', 'leave_status', 'sync_status'])
         # self.logger.info("printing db dtypes")
         # self.logger.info(db_df.info())
         # self.logger.info(db_df.dtypes)
@@ -187,10 +188,10 @@ class JobSyncRecords(JobSystem):
                 return
 
             # both but cancelled or az only (no record ever made in local db) means have to del from Sharepoint
-            combined_df.loc[(((combined_df._merge == "both") & (combined_df.is_cancelled == True)) | (combined_df._merge == "az_only")), "action"] = Intent.SHAREPOINT_DEL_RECORD
+            combined_df.loc[(((combined_df._merge == "both") & (combined_df.leave_status == LeaveStatus.CANCELLED)) | (combined_df._merge == "az_only")), "action"] = Intent.SHAREPOINT_DEL_RECORD
             # PASS: both and not cancelled means updated on both sides
             # db only and not cancelled means need to add to Sharepoint
-            combined_df.loc[((combined_df._merge == "db_only") & (combined_df.is_cancelled == False)), "action"] = Intent.SHAREPOINT_ADD_RECORD
+            combined_df.loc[((combined_df._merge == "db_only") & (combined_df.leave_status == LeaveStatus.APPROVED)), "action"] = Intent.SHAREPOINT_ADD_RECORD
             # PASS: right only and cancelled means updated on both sides
 
             dates_to_del = combined_df.loc[combined_df.action == Intent.SHAREPOINT_DEL_RECORD].copy()
