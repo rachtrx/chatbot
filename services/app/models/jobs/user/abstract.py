@@ -219,7 +219,8 @@ class JobUser(Job): # Abstract class
                             logging.info("doing nothing")
                             return
                         job = JobUnknown(raw_from_no)
-                    job.commit_status(re.job_status)
+                        
+                job.commit_status(re.job_status)
                 if not hasattr(job, 'received_msg'):
                     job.received_msg = Message.create_message(messages['RECEIVED'], job.job_no, sid, user_str)
 
