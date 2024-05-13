@@ -1,7 +1,7 @@
 from extensions import db, get_session
 # from sqlalchemy.orm import 
 from sqlalchemy import desc, JSON
-from constants import errors, Decision, JobStatus
+from constants import Error, Decision, JobStatus
 import logging
 import traceback
 import json
@@ -42,7 +42,7 @@ class JobEs(JobUser):
         # TODO CANCEL THE MC
             return
         else:
-            raise ReplyError(errors['UNKNOWN_ERROR'])
+            raise ReplyError(Error.UNKNOWN_ERROR)
         
     @overrides
     def handle_user_entry_action(self):
@@ -52,7 +52,7 @@ class JobEs(JobUser):
         except Exception as e:
             # logging.info(e)
             logging.error(f"An error occurred: {e}", exc_info=True)
-            raise ReplyError(errors['ES_REPLY_ERROR'])
+            raise ReplyError(Error.ES_REPLY_ERROR)
 
         return reply
 

@@ -6,7 +6,7 @@ from azure.utils import generate_header
 from logs.config import setup_logger
 
 from constants import SentMessageStatus
-from sqlalchemy import enum as SQLEnum
+from sqlalchemy.types import Enum as SQLEnum
 
 import os
 import pandas as pd

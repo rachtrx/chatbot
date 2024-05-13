@@ -6,7 +6,7 @@ from .abstract import Message
 from .sent import MessageSent
 from constants import leave_alt_words, Decision, AuthorizedDecision, LeaveType, Intent, MessageType
 import logging
-from sqlalchemy import Enum as SQLEnum
+from sqlalchemy.types import Enum as SQLEnum
 
 from logs.config import setup_logger
 

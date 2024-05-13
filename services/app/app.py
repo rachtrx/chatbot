@@ -22,7 +22,7 @@ from tasks import main as create_task
 
 from es.manage import loop_through_files, create_index
 
-from constants import system, SelectionType, JobStatus
+from constants import SystemOperation, SelectionType, JobStatus
 
 import os
 from sqlalchemy import create_engine
@@ -49,11 +49,10 @@ logging.getLogger('twilio.http_client').setLevel(logging.WARNING)
 
 app = create_app()
 
-
 @app.cli.command("setup_azure")
 @with_appcontext
 def setup_azure():
-    create_task([system['ACQUIRE_TOKEN'], system['SYNC_USERS'], system['SYNC_LEAVE_RECORDS']])
+    create_task([SystemOperation.ACQUIRE_TOKEN, SystemOperation.SYNC_USERS, SystemOperation.SYNC_LEAVE_RECORDS])
     # create_task([system['ACQUIRE_TOKEN'], system['SYNC_USERS']])
 
 @app.cli.command("create_new_index")

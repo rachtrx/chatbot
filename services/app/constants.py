@@ -125,6 +125,32 @@ class LeaveStatus(Enum):
     APPROVED = 2
     CANCELLED = 3
 
+class LeaveError(Enum):
+    CANCEL_MSG = "I'm sorry, if I got the dates and duration wrong, please send it to me again!"
+    CONFIRMING_CANCELLED_MSG = "Leave has already been cancelled!"
+    NOT_LAST_MSG = "To confirm or cancel the leave, please only reply to the latest message!"
+    ALL_DUPLICATE_DATES = "You are already on leave for all these dates"
+
+
+class Error(Enum):
+    USER_NOT_FOUND = "I'm sorry, your contact is not in our database. Please check with HR and try again in an hour."
+    PENDING_DECISION = "Please reply to the previous message first, thank you!"
+    DOUBLE_MESSAGE = "The previous job has not completed or there was an error completing it. If the problem persists, please try again in 2 minutes, thank you!"
+    UNKNOWN_ERROR = "Something went wrong, please send the message again"
+    NO_RECENT_MSG = "I'm sorry, we could not find any messages from you in the past 5 minutes, could you send it again?",
+    DATES_NOT_FOUND = "The chatbot is still in development, we regret that we could not determine your period of MC, could you specify the dates/duration again?"
+    NO_RELATIONS = "Really sorry, there doesn't seem to be anyone to inform about your MC. Please contact the school HR."
+    ES_REPLY_ERROR = "The chatbot is still in development, we regret that we could not determine your intent. If you need additional help, please reach out to our new helpline 87178103."
+    AZURE_SYNC_ERROR = "I'm sorry, something went wrong with the code, please check with ICT."
+    MESSAGE_STILL_PENDING = "Sorry, please try again in a few seconds, a message sent to you is still pending success confirmation."
+    JOB_NOT_FOUND = "Sorry, it seems like there are no records of this job in the database."
+    MC_WRONG_SYNTAX = "Sorry, the message should specify the type of leave. Possible values: medical leave, ml, childcare leave, child care leave, ccl, parentcare leave, parent care leave, pcl, hospitalization leave, hospitalisation leave, hl, compassionate leave, cl"
+    NO_DEL_DATE = "Sorry, there are no dates left to delete."
+    TIMEOUT_MSG = "Sorry, it seems like the previous message timed out."
+    JOB_FAILED_MSG = "Sorry, the previous job has failed."
+    SENT_MESSAGE_MISSING = "Sorry, it seems like we could not find the relavant job"
+    JOB_COMPLETED = "Sorry, the job has either completed or has failed."
+
 ####################################
 # leave_job_status = {
 #     "JobStatus.PROCESSING": JobStatus.PROCESSING, 
@@ -196,29 +222,29 @@ leave_alt_words = r'(leave|appointment|mc|ml|sick|medical certificate|medical ce
 #     "LAST_LOCAL_DB_UPDATE": "LAST_LOCAL_DB_UPDATE"
 # }
 
-errors = {
-    "USER_NOT_FOUND": "I'm sorry, your contact is not in our database. Please check with HR and try again in an hour.",
-    "JobStatus.PENDING_DECISION": "Please reply to the previous message first, thank you!",
-    "DOUBLE_MESSAGE": "The previous job has not completed or there was an error completing it. If the problem persists, please try again in 2 minutes, thank you!",
-    "UNKNOWN_ERROR": "Something went wrong, please send the message again",
-    "NO_RECENT_MSG": "I'm sorry, we could not find any messages from you in the past 5 minutes, could you send it again?",
-    "DATES_NOT_FOUND": "The chatbot is still in development, we regret that we could not determine your period of MC, could you specify the dates/duration again?",
-    "CONFIRMING_CANCELLED_MSG": "MC has already been cancelled!",
-    "NO_RELATIONS": "Really sorry, there doesn't seem to be anyone to inform about your MC. Please contact the school HR.",
-    "WRONG_DATE": "I'm sorry, if I got the dates and duration wrong, please send it to me again!",
-    "ES_REPLY_ERROR": "The chatbot is still in development, we regret that we could not determine your intent. If you need additional help, please reach out to our new helpline 87178103.",
-    "AZURE_SYNC_ERROR": "I'm sorry, something went wrong with the code, please check with ICT.",
-    "ALL_DUPLICATE_DATES": "You are already on leave for all these dates",
-    "NOT_LAST_MSG": "To confirm or cancel the leave, please only reply to the latest message!",
-    "MESSAGE_STILL_PENDING": "Sorry, please try again in a few seconds, a message sent to you is still pending success confirmation.",
-    "JOB_LEAVE_FAILED": "Sorry, it seems like there is no records of this job in the database.",
-    "MC_WRONG_SYNTAX": "Sorry, the message should specify the type of leave. Possible values: medical leave, ml, childcare leave, child care leave, ccl, parentcare leave, parent care leave, pcl, hospitalization leave, hospitalisation leave, hl, compassionate leave, cl",
-    "NO_DEL_DATE": "Sorry, there are no dates left to delete.",
-    "TIMEOUT_MSG": "Sorry, it seems like the previous message timed out.",
-    "JOB_FAILED_MSG": "Sorry, the previous job has failed.",
-    "SENT_MESSAGE_MISSING": "Sorry, it seems like we could not find the relavant job",
-    "JOB_COMPLETED": "Sorry, the job has either completed or has failed."
-}
+# errors = {
+#     "USER_NOT_FOUND": "I'm sorry, your contact is not in our database. Please check with HR and try again in an hour.",
+#     "JobStatus.PENDING_DECISION": "Please reply to the previous message first, thank you!",
+#     "DOUBLE_MESSAGE": "The previous job has not completed or there was an error completing it. If the problem persists, please try again in 2 minutes, thank you!",
+#     "UNKNOWN_ERROR": "Something went wrong, please send the message again",
+#     "NO_RECENT_MSG": "I'm sorry, we could not find any messages from you in the past 5 minutes, could you send it again?",
+#     "DATES_NOT_FOUND": "The chatbot is still in development, we regret that we could not determine your period of MC, could you specify the dates/duration again?",
+#     "CONFIRMING_CANCELLED_MSG": "MC has already been cancelled!",
+#     "NO_RELATIONS": "Really sorry, there doesn't seem to be anyone to inform about your MC. Please contact the school HR.",
+#     "WRONG_DATE": "I'm sorry, if I got the dates and duration wrong, please send it to me again!",
+#     "ES_REPLY_ERROR": "The chatbot is still in development, we regret that we could not determine your intent. If you need additional help, please reach out to our new helpline 87178103.",
+#     "AZURE_SYNC_ERROR": "I'm sorry, something went wrong with the code, please check with ICT.",
+#     "ALL_DUPLICATE_DATES": "You are already on leave for all these dates",
+#     "NOT_LAST_MSG": "To confirm or cancel the leave, please only reply to the latest message!",
+#     "MESSAGE_STILL_PENDING": "Sorry, please try again in a few seconds, a message sent to you is still pending success confirmation.",
+#     "JOB_NOT_FOUND": "Sorry, it seems like there is no records of this job in the database.",
+#     "MC_WRONG_SYNTAX": "Sorry, the message should specify the type of leave. Possible values: medical leave, ml, childcare leave, child care leave, ccl, parentcare leave, parent care leave, pcl, hospitalization leave, hospitalisation leave, hl, compassionate leave, cl",
+#     "NO_DEL_DATE": "Sorry, there are no dates left to delete.",
+#     "TIMEOUT_MSG": "Sorry, it seems like the previous message timed out.",
+#     "JOB_FAILED_MSG": "Sorry, the previous job has failed.",
+#     "SENT_MESSAGE_MISSING": "Sorry, it seems like we could not find the relavant job",
+#     "JOB_COMPLETED": "Sorry, the job has either completed or has failed."
+# }
 
 # SECTION proper months
 month_mapping = {

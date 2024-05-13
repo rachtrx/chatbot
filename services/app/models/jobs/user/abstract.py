@@ -5,7 +5,7 @@ from extensions import db, get_session
 from sqlalchemy import desc
 from typing import List
 import logging
-from constants import errors, Decision, JobStatus, SelectionType, Intent, MessageType, AuthorizedDecision
+from constants import Error, Decision, JobStatus, SelectionType, Intent, MessageType, AuthorizedDecision
 import re
 # from dateutil.relativedelta import relativedelta
 from utilities import current_sg_time, log_instances
@@ -102,7 +102,7 @@ class JobUser(Job): # Abstract class
     def create_new_job(cls, user_str, name):
         intent = MessageReceived.check_for_intent(user_str)
         if intent == Intent.ES_SEARCH or intent == None:
-            raise ReplyError(errors['ES_REPLY_ERROR'])
+            raise ReplyError(Error.ES_REPLY_ERROR)
 
         job = cls.create_job(intent, user_str, name)
         return job
@@ -121,7 +121,7 @@ class JobUser(Job): # Abstract class
             try:
                 user = User.get_user(raw_from_no)
                 if not user:
-                    raise ReplyError(errors['USER_NOT_FOUND'])
+                    raise ReplyError(Error.USER_NOT_FOUND)
                 
                 # SECTION NEW JOB
                 if not job_information.get('replied_msg_sid', None):
@@ -134,18 +134,18 @@ class JobUser(Job): # Abstract class
 
                     rawSelection = job_information.get("selection", None) # numeric val
                     if not rawSelection:
-                        raise ReplyError(errors['UNKNOWN_ERROR']) # IMPT SELECTION BUT NO SELECTION_TYPE IS A LATE MSG
+                        raise ReplyError(Error.UNKNOWN_ERROR) # IMPT SELECTION BUT NO SELECTION_TYPE IS A LATE MSG
 
                     replied_msg_sid = job_information.get('replied_msg_sid', None) # IMPT need to compare with sent_sid
 
                     ref_msg = MessageSent.get_message_by_sid(replied_msg_sid) # try to check the database
                     if not ref_msg:
-                        raise ReplyError(errors['SENT_MESSAGE_MISSING']) # no ref msg
+                        raise ReplyError(Error.SENT_MESSAGE_MISSING) # no ref msg
                     
                     if not selection_type: # LATE MSG
                         selection_type = ref_msg.selection_type
                         if not selection_type:
-                            raise ReplyError(errors['UNKNOWN_ERROR'])
+                            raise ReplyError(Error.UNKNOWN_ERROR)
 
                     selection = selection_type.value[int(rawSelection)]
                 
@@ -159,7 +159,7 @@ class JobUser(Job): # Abstract class
                     # IMPT First handle msges whose cache has been cleared → missing sent_sid → valid only if cancelling/approving/rejecting, which are all DECISIONS. They MUST BE CLEARED in order to unblock the user.
                     if not sent_sid:
                         if (selection == Decision.CONFIRM or selection == Decision.CANCEL) and job.status == JobStatus.PENDING_DECISION:
-                            raise ReplyError(job.timeout_msg)
+                            raise ReplyError(Error.TIMEOUT_MSG)
                         elif selection == Decision.CANCEL:
                             if job.status == JobStatus.PENDING_AUTHORISED_DECISION:
                                 # inform RO of cancellation
@@ -176,29 +176,29 @@ class JobUser(Job): # Abstract class
                         elif selection == Decision.REJECT and job.status == JobStatus.PENDING_AUTHORISED_DECISION:
                             job.reject()
                         else:
-                            raise ReplyError(errors['JOB_COMPLETED']) # likely because job is completed / failed / waiting for completion already
+                            raise ReplyError(Error.JOB_COMPLETED) # likely because job is completed / failed / waiting for completion already
 
                     elif sent_sid != replied_msg_sid:
                         if job.status == JobStatus.PENDING_DECISION:
                             latest_sent_msg = MessageSelection.get_latest_sent_message(job.job_no) # probably not needed
                             if sent_sid != latest_sent_msg.sid:
-                                raise ReplyError(job.not_replying_to_last_msg) # TODO CAN CONSIDDER USER RETRYING
+                                raise ReplyError(job.errors.NOT_LAST_MSG) # TODO CAN CONSIDDER USER RETRYING
                             else:
-                                raise ReplyError(errors['UNKNOWN_ERROR']) # shouldnt happen but...
+                                raise ReplyError(Error.UNKNOWN_ERROR) # shouldnt happen but...
                         else:
-                            raise ReplyError(errors['JOB_LEAVE_FAILED']) # TODO really?
+                            raise ReplyError(Error.JOB_NOT_FOUND) # TODO really?
                     
                     else: # IMPT by now, sent_sid == replied_msg_sid. only can allow for confirm, cancel, or listitem
                         if job.status != JobStatus.PENDING_DECISION:
-                            raise ReplyError(errors['UNKNOWN_ERROR'])
+                            raise ReplyError(Error.UNKNOWN_ERROR)
+                        
+                        # Valid Replies
                         job.commit_status(JobStatus.PROCESSING)
 
                         if selection == Decision.CANCEL:
-                            raise ReplyError(job.cancel_msg, job_status=JobStatus.CLIENT_ERROR)
+                            raise ReplyError(job.errors.CANCEL_MSG, job_status=JobStatus.CLIENT_ERROR)
                         if selection == Decision.CONFIRM:
                             job.update_info(job_information)
-                        elif selection == AuthorizedDecision.APPROVE or selection == AuthorizedDecision.REJECT:
-                            raise ReplyError(errors['UNKNOWN_ERROR'])
                         else: # IMPT choice found
                             job.update_info(job_information, selection_type, selection) # TODO # IMPT SEE constants.py SelectionType ... IMPT
                             logging.info(f"UPDATED INFO")

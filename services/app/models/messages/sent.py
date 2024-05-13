@@ -14,7 +14,7 @@ from models.users import User
 from models.exceptions import ReplyError
 
 from logs.config import setup_logger
-from sqlalchemy import Enum as SQLEnum
+from sqlalchemy.types import Enum as SQLEnum
 
 
 # SECTION PROBLEM: If i ondelete=CASCADE, if a hod no longer references a user the user gets deleted
@@ -42,7 +42,6 @@ class MessageSent(Message):
 
     def get_selection_type(self):
         return types_to_selections[self.selection_type]
-        
 
     def commit_message_body(self, body):
         session = get_session()

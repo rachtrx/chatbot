@@ -1,7 +1,7 @@
 from extensions import db, get_session
 from models.jobs.abstract import Job
 from logs.config import setup_logger
-from constants import system, JobStatus
+from constants import JobStatus, SystemOperation
 from overrides import overrides
 from models.users import User
 from datetime import datetime, timedelta
@@ -46,22 +46,22 @@ class JobSystem(Job):
         
     @classmethod
     def create_job(cls, intent=None, *args, **kwargs):
-        if intent == system['MAIN']:
+        if intent == SystemOperation.MAIN:
             new_job = cls(*args, **kwargs)
-        elif intent == system['ACQUIRE_TOKEN']:
+        elif intent == SystemOperation.ACQUIRE_TOKEN:
             from .acq_token import JobAcqToken
             new_job = JobAcqToken(*args, **kwargs)
-        elif intent == system['AM_REPORT']:
+        elif intent == SystemOperation.AM_REPORT:
             from .am_report import JobAmReport
             new_job = JobAmReport(*args, **kwargs)
         # Add conditions for other subclasses
-        elif intent == system['SYNC_USERS']:
+        elif intent == SystemOperation.SYNC_USERS:
             from .sync_users import JobSyncUsers
             new_job =  JobSyncUsers(*args, **kwargs)
-        elif intent == system['SYNC_LEAVE_RECORDS']:
+        elif intent == SystemOperation.SYNC_LEAVE_RECORDS:
             from .sync_leave_records import JobSyncRecords
             new_job =  JobSyncRecords(*args, **kwargs)
-        elif intent == system['INDEX_DOCUMENT']:
+        elif intent == SystemOperation.INDEX_DOCUMENT:
             pass # TODO
         else:
             raise ValueError(f"Unknown intent ID: {intent}")

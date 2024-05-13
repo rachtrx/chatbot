@@ -2,7 +2,7 @@ from extensions import db, get_session, remove_thread_session
 from sqlalchemy import inspect
 import shortuuid
 import logging
-from constants import MessageType, errors, JobStatus, SentMessageStatus
+from constants import MessageType, Error, JobStatus, SentMessageStatus
 from utilities import current_sg_time, join_with_commas_and, log_instances
 import json
 import os
@@ -19,7 +19,7 @@ from models.messages.sent import MessageSent, MessageForward
 from models.messages.received import MessageSelection
 
 from functools import wraps
-from sqlalchemy import Enum as SQLEnum
+from sqlalchemy.types import Enum as SQLEnum
 
 
 
@@ -337,7 +337,7 @@ class Job(db.Model): # system jobs
             job.relations_list = relations
 
             if all(relation is None for relation in job.relations_list):
-                raise ReplyError(errors['NO_RELATIONS'])
+                raise ReplyError(Error.NO_RELATIONS)
             
             results_list = []
 

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, date
 from extensions import db, get_session
-from constants import errors, LeaveType, LeaveIssue, leave_keywords, SelectionType, Decision, Intent, JobStatus
+from constants import LeaveError, Error, LeaveType, LeaveIssue, leave_keywords, SelectionType, Decision, Intent, JobStatus
 from dateutil.relativedelta import relativedelta
 import os
 import logging
@@ -11,14 +11,13 @@ from overrides import overrides
 
 from logs.config import setup_logger
 
-from models.users import User
 from models.exceptions import ReplyError, DurationError
 from models.jobs.user.abstract import JobUser
 from models.leave_records import LeaveRecord
 import re
 import traceback
 from .utils_leave import dates
-from sqlalchemy import Enum as SQLEnum
+from sqlalchemy.types import Enum as SQLEnum
 
 class JobLeave(JobUser):
     __tablename__ = "job_leave"
@@ -32,11 +31,7 @@ class JobLeave(JobUser):
     }
 
     logger = setup_logger('models.job_leave')
-    cancel_msg = errors['WRONG_DATE']
-    cancel_after_fail_msg = errors['JOB_FAILED_MSG']
-    timeout_msg = errors['TIMEOUT_MSG']
-    confirm_after_cancel_msg = errors['CONFIRMING_CANCELLED_MSG']
-    not_replying_to_last_msg = errors['NOT_LAST_MSG']
+    errors = LeaveError
 
     def __init__(self, name):
         super().__init__(name)
@@ -89,12 +84,6 @@ class JobLeave(JobUser):
         if self.local_db_updated:
             return True
         return False
-
-    @overrides
-    def is_cancel_job(self, selection):
-        if selection == Decision.CANCEL:
-            return True
-        return False
     
     def handle_request(self, selection=None):
         from models.messages.received import MessageSelection
@@ -105,7 +94,7 @@ class JobLeave(JobUser):
         if isinstance(self, JobLeaveCancel):
             if selection != Decision.CANCEL:
                 logging.error(f"UNCAUGHT DECISION {selection}")
-                raise ReplyError(errors['UNKNOWN_ERROR'])
+                raise ReplyError(Error.UNKNOWN_ERROR)
             self.validate_selection_message(selection) # checks for ReplyErrors based on state
             reply = self.handle_user_reply_action()
 
@@ -117,8 +106,8 @@ class JobLeave(JobUser):
             # these 2 functions are implemented with method overriding
             if selection != Decision.CONFIRM:
                 logging.error(f"UNCAUGHT DECISION {selection}")
-                raise ReplyError(errors['UNKNOWN_ERROR'])
-            self.validate_selection_message(selection) # checks for ReplyErrors based on state
+                raise ReplyError(Error.UNKNOWN_ERROR)
+            self.validate_confirm_message() # checks for ReplyErrors based on state
 
             updated_db_msg = LeaveRecord.insert_local_db(self)
             self.content_sid = os.environ.get("LEAVE_NOTIFY_SID")
@@ -132,7 +121,7 @@ class JobLeave(JobUser):
                     if not self.leave_type:
                         raise Exception
                 except:
-                    raise ReplyError(errors['UNKNOWN_ERROR'])
+                    raise ReplyError(Error.UNKNOWN_ERROR)
 
             else: # first message
                 self.generate_base()
@@ -232,7 +221,7 @@ class JobLeave(JobUser):
                 try: # duration specified
                     self.start_date, self.end_date = dates.calc_start_end_date(self.duration) # sets self.start_date, self.end_date
                 except Exception: # start, end dates and duration not specified
-                    raise DurationError(errors['DATES_NOT_FOUND'])
+                    raise DurationError(Error.DATES_NOT_FOUND)
             
             self.logger.info(f"{self.end_date}, {self.duration}, {duration_c}, {self.start_date}")
                 
@@ -470,7 +459,7 @@ class JobLeave(JobUser):
             self.content_sid = os.environ.get("LEAVE_CONFIRMATION_CHECK_SID")
         else:
             self.logger.error(f"UNCAUGHT errors IN CV: {errors}")
-            raise ReplyError(errors['UNKNOWN_ERROR'])
+            raise ReplyError(Error.UNKNOWN_ERROR)
         
         self.cv = json.dumps(combine_with_key_increment(base_cv, issues))
     
@@ -528,7 +517,7 @@ class JobLeaveCancel(JobLeave):
     def handle_user_reply_action(self):
         updated_db_msg = LeaveRecord.update_local_db(self)
         if updated_db_msg == None:
-            raise ReplyError(errors['NO_DEL_DATE'])
+            raise ReplyError(Error.NO_DEL_DATE)
         self.content_sid = os.environ.get("LEAVE_NOTIFY_CANCEL_SID")
         self.forward_messages()
         return f"{updated_db_msg}, messages have been forwarded. Pending success..."

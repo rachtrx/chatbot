@@ -7,7 +7,7 @@ from logs.config import setup_logger
 from constants import SystemOperation, MetricStatus
 from utilities import current_sg_time
 import logging
-from sqlalchemy import Enum as SQLEnum
+from sqlalchemy.types import Enum as SQLEnum
 
 class Metric(db.Model):
 

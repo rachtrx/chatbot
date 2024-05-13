@@ -18,7 +18,7 @@ from models.leave_records import LeaveRecord
 import re
 import traceback
 from .utils_leave import dates
-from sqlalchemy import Enum as SQLEnum
+from sqlalchemy.types import Enum as SQLEnum
 
 class JobAuthorise(JobUser):
     __tablename__ = "job_authorise"

@@ -8,7 +8,7 @@ import shortuuid
 from datetime import timedelta, datetime
 from utilities import get_latest_date_past_9am, get_session, current_sg_time
 from constants import LeaveStatus
-from sqlalchemy import Enum as SQLEnum
+from sqlalchemy.types import Enum as SQLEnum
 
 class LeaveRecord(db.Model):
 

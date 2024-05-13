@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from models.jobs.user.abstract import JobUser
 from models.exceptions import ReplyError
 from models.users import User
-from constants import errors, SelectionType
+from constants import Error, SelectionType
 import redis
 import traceback
 
@@ -37,7 +37,7 @@ class Redis():
 
                 user = User.get_user(job_info['from_no'])
                 if not user:
-                    re.err_message = errors['USER_NOT_FOUND']
+                    re.err_message = Error.USER_NOT_FOUND
                 user_or_no = user if user else job_info['from_no']
                 re.send_error_msg(sid=job_info['sid'], user_str=job_info['user_str'], user_or_no=user_or_no)
                 return False
@@ -56,13 +56,13 @@ class Redis():
         else:
             # else if current process running, raise error
             if self.client.get(f"user_job:{user_id}"):
-                raise ReplyError(errors['DOUBLE_MESSAGE'])
+                raise ReplyError(Error.DOUBLE_MESSAGE)
             # if no current process, check for last job
             else:
                 last_job_info = self.get_last_job_info(user_id)
                 if last_job_info:
                     # no process running, last job exists, user didn't send a reply
-                    raise ReplyError(errors['JobStatus.PENDING_DECISION'])
+                    raise ReplyError(Error.PENDING_DECISION)
                 # not a reply, no process running, no last job
                 job_enqueued = True
         
