@@ -19,7 +19,7 @@ class Redis():
         self.cipher_suite = cipher_suite
 
     def get_last_job_info(self, user_id):
-        encrypted_data = self.client.hget(f"user_job_data:{user_id}", "job_information")
+        encrypted_data = self.client.hget(f"job_data:{user_id}", "job_information")
         if encrypted_data:
             # Decrypt the data back into a JSON string
             decrypted_data_json = self.cipher_suite.decrypt(encrypted_data).decode()
@@ -73,25 +73,36 @@ class Redis():
 
     def job_completed(self, job_details, user_id):
 
-        logging.info(f"job_details: {job_details}")
+        job_no = job_details['job_no']
 
-        if job_details is None:
-            self.finish_job(user_id)
-            logging.info("finished job!")
-        else:
+        if not list(job_details.keys()) == ['job_no']:
+            
+            job_no_json = json.dumps(job_no)
+            job_id = self.cipher_suite.encrypt(job_no_json.encode())
+            
             job_completed_data_json = json.dumps(job_details)
             encrypted_data = self.cipher_suite.encrypt(job_completed_data_json.encode())
-            self.client.hset(f"user_job_data:{user_id}", "job_information", encrypted_data)
-            self.client.expire(f"user_job_data:{user_id}", JobUser.max_pending_duration)
-            logging.info(f"job completed for user {user_id}")
-            self.finish_job(user_id, clear_data=False)
 
-    def finish_job(self, user_id, clear_data=True):
+            if job_details['status'] == JobStatus.PENDING_AUTHORISED_DECISION.value:
+                user_id = app.hash_identifier(str(to_no))
+
+            self.client.hset(f"user_data:{user_id}", "current_job", job_id)
+            self.client.expire(f"user_data:{user_id}", JobUser.max_pending_duration)
+
+            self.client.hset(f"job_data:{job_id}", "job_information", encrypted_data)
+            self.client.expire(f"job_data:{job_id}", JobUser.max_pending_duration)
+
+            logging.info(f"job completed for {job_id}")
+
+        self.finish_job(user_id, job_id, clear_data=False)
+
+    def finish_job(self, user_id, job_id, clear_data=True):
         # Clear the in-progress flag
         self.client.delete(f"user_job:{user_id}")
         if clear_data:
             logging.info("Clearing data for job")
-            self.client.delete(f"user_job_data:{user_id}")
+            self.client.delete(f"job_data:{job_id}")
+            self.client.delete(f"user_data:{user_id}")
         self.start_next_job(user_id)
 
     def start_next_job(self, user_id):
@@ -136,23 +147,26 @@ class Redis():
             logging.info("JOB NOT READY TO START")
             return None
 
-    def update_job_status(self, user_id, message):
+    def update_job_status(self, user_id, callback_msg):
         '''updates job status to pending user reply in the cache as soon as the callback has been confirmed'''
-        encrypted_data = self.client.hget(f"user_job_data:{user_id}", "job_information")
+        encrypted_data = self.client.hget(f"job_data:{user_id}", "job_information")
         if encrypted_data:
             logging.info("Encrypted data found!")
             # Decrypt the data back into a JSON string
             decrypted_data_json = self.cipher_suite.decrypt(encrypted_data).decode()
             last_job_info = json.loads(decrypted_data_json)
             if isinstance(last_job_info, dict):
-                if last_job_info.get("sent_sid", None) == message.sid and last_job_info.get("job_no", None) == message.job_no: # if current data found
+                if last_job_info.get("sent_sid", None) == callback_msg.sid and last_job_info.get("job_no", None) == callback_msg.job_no: # if current data found
                     if last_job_info['selection_type'] == SelectionType.DECISION:
                         last_job_info['status'] = JobStatus.PENDING_DECISION
                     elif last_job_info['selection_type'] == SelectionType.AUTHORISED_DECISION:
                         last_job_info['status'] = JobStatus.PENDING_AUTHORIZED_DECISION
+                        self.move_data_to_ro()
                     logging.info("updated job status to pending user reply")
                     # Convert updated dictionary back to JSON and then encrypt it before storing
                     updated_data_json = json.dumps(last_job_info)
                     encrypted_updated_data = self.cipher_suite.encrypt(updated_data_json.encode())
-                    self.client.hset(f"user_job_data:{user_id}", "job_information", encrypted_updated_data)
+                    self.client.hset(f"job_data:{user_id}", "job_information", encrypted_updated_data)
                     return last_job_info['status']
+                
+    def move_data_to_ro(self, ):

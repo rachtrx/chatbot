@@ -51,15 +51,15 @@ class JobLeave(JobUser):
                 "dates": [date.strftime("%d-%m-%Y") for date in self.dates_to_update],
                 "duplicate_dates": [date.strftime("%d-%m-%Y") for date in self.duplicate_dates],
                 # returned by generate base
-                "validation_errors": list(self.validation_errors),
+                "validation_errors": list(self.validation_errors), # TODO CREATE UTIL FUNCTION
                 # can be blank after genenrate base
                 "leave_type": getattr(self, 'leave_type'),
 
                 # job identifiers in cache upon callback
-                "status": self.status, # passed to redis, which updates to JobStatus.PENDING_DECISION or JobStatus.PENDING_AUTHORISED_DECISION once callback is received
-                "job_no": self.job_no, # passed to redis, which is used when updating status once callback is received
+                "status": self.status.value, # passed to redis, which updates to JobStatus.PENDING_DECISION or JobStatus.PENDING_AUTHORISED_DECISION once callback is received
                 
-                "sent_sid": self.sent_msg.sid # passed to redis, which is used to check that the last message sent out is the message that is being replied to, when updating status to JobStatus.PENDING_DECISION once callback is received. Also used to ensure that in general_workflow, the sent_sid matches the replied to of the new message
+                "sent_sid": self.sent_msg.sid, # passed to redis, which is used to check that the last message sent out is the message that is being replied to, when updating status to JobStatus.PENDING_DECISION once callback is received. Also used to ensure that in general_workflow, the sent_sid matches the replied to of the new message
+                "selection_type": self.selection_type.value
             }
         else:
             return None
@@ -85,56 +85,46 @@ class JobLeave(JobUser):
             return True
         return False
     
-    def handle_request(self, selection=None):
-        from models.messages.received import MessageSelection
-        reply = None
-
-        # HANDLE CANCEL MSG
-        # if it has the user string, its the first msg, or a retry message. user_str attribute it set either in update_info or during job initialisation
-        if isinstance(self, JobLeaveCancel):
-            if selection != Decision.CANCEL:
-                logging.error(f"UNCAUGHT DECISION {selection}")
+    def handle_initial_request(self, selection=None):
+        '''Returns Reply to Initial Message'''
+        if selection: # retry message
+            try:
+                self.leave_type = LeaveType(int(selection)) # previously had bus sometimes when not using str()
+                if not self.leave_type:
+                    raise Exception
+            except:
                 raise ReplyError(Error.UNKNOWN_ERROR)
-            self.validate_selection_message(selection) # checks for ReplyErrors based on state
-            reply = self.handle_user_reply_action()
 
-        # if it has the user string, its the first msg, or a retry message. user_str attribute it set either in update_info or during job initialisation
-        elif getattr(self, "leave_type", None) and selection:
+        else: # first message
+            self.generate_base()
+            self.set_validation_errors()
 
-            self.logger.info(f"Checking for selection in handle request with user string: {received_msg.selection}")
+            # CATCH LEAVE TYPE ERRORS
+            self.leave_type = self.set_leave_type()
 
-            # these 2 functions are implemented with method overriding
-            if selection != Decision.CONFIRM:
-                logging.error(f"UNCAUGHT DECISION {selection}")
-                raise ReplyError(Error.UNKNOWN_ERROR)
-            self.validate_confirm_message() # checks for ReplyErrors based on state
+        self.selection_type = SelectionType.DECISION
+        self.get_leave_confirmation_sid_and_cv()
+        return (self.content_sid, self.cv)
+    
+    def handle_confirm_decision(self):
+        '''Decision.CONFIRM: if it has the user string, its the first msg, or a retry message. user_str attribute it set either in update_info or during job initialisation'''
 
-            updated_db_msg = LeaveRecord.insert_local_db(self)
-            self.content_sid = os.environ.get("LEAVE_NOTIFY_SID")
-            self.forward_messages()
-            reply = f"{updated_db_msg}, messages have been forwarded. Pending success..."
+        # these 2 functions are implemented with method overriding
+        self.validate_confirm_message() # checks for ReplyErrors based on state
 
-        else:
-            if selection: # retry message
-                try:
-                    self.leave_type = LeaveType(int(selection)) # previously had bus sometimes when not using str()
-                    if not self.leave_type:
-                        raise Exception
-                except:
-                    raise ReplyError(Error.UNKNOWN_ERROR)
+        updated_db_msg = LeaveRecord.insert_local_db(self)
+        self.content_sid = os.environ.get("LEAVE_NOTIFY_SID")
+        self.forward_messages()
+        return f"{updated_db_msg}, messages have been forwarded. Pending success..."
+    
+    def handle_cancellation_before_authorisation(self): # TODO
+        pass
 
-            else: # first message
-                self.generate_base()
-                self.set_validation_errors()
+    def handle_approve(self): 
+        pass
 
-                # CATCH LEAVE TYPE ERRORS
-                self.leave_type = self.set_leave_type()
-
-            self.selection_type = SelectionType.DECISION
-            self.get_leave_confirmation_sid_and_cv()
-            reply = (self.content_sid, self.cv)
-
-        return reply
+    def handle_reject(self):
+        pass
 
     def set_validation_errors(self):
         all_errors = set((*self.validate_start_date(), *self.validate_overlap()))
@@ -497,11 +487,11 @@ class JobLeaveCancel(JobLeave):
         self.leave_type = leave_type
 
     @overrides
-    def validate_selection_message(self, selection):        
+    def check_cancel_valid(self, selection):        
         self.logger.info(f"original job status: {self.original_job.status}")
         
         if self.original_job.local_db_updated != True:
-            raise ReplyError(errors['JOB_LEAVE_FAILED'])
+            raise ReplyError(Error.JOB_FAILED_MSG)
         
     @overrides
     def forward_messages(self):
@@ -513,8 +503,15 @@ class JobLeaveCancel(JobLeave):
         else:
             return f"All messages failed to send. You might have to update them manually, sorry about that"
 
-    @overrides
-    def handle_user_reply_action(self):
+    def handle_cancel_request(self, selection=None):
+        # HANDLE CANCEL MSG
+        # if it has the user string, its the first msg, or a retry message. user_str attribute it set either in update_info or during job initialisation
+        if isinstance(self, JobLeaveCancel):
+            if selection != Decision.CANCEL:
+                logging.error(f"UNCAUGHT DECISION {selection}")
+                raise ReplyError(Error.UNKNOWN_ERROR)
+            self.check_cancel_valid(selection) # checks for ReplyErrors based on state
+
         updated_db_msg = LeaveRecord.update_local_db(self)
         if updated_db_msg == None:
             raise ReplyError(Error.NO_DEL_DATE)

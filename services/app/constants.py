@@ -130,6 +130,7 @@ class LeaveError(Enum):
     CONFIRMING_CANCELLED_MSG = "Leave has already been cancelled!"
     NOT_LAST_MSG = "To confirm or cancel the leave, please only reply to the latest message!"
     ALL_DUPLICATE_DATES = "You are already on leave for all these dates"
+    CANCELLED_BEFORE_AUTHORISATION = "Leave has already been cancelled by _____" # TODO
 
 
 class Error(Enum):
