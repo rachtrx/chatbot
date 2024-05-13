@@ -146,9 +146,9 @@ class Redis():
             last_job_info = json.loads(decrypted_data_json)
             if isinstance(last_job_info, dict):
                 if last_job_info.get("sent_sid", None) == message.sid and last_job_info.get("job_no", None) == message.job_no: # if current data found
-                    if last_job_info['selected_type'] == SelectionType.DECISION:
+                    if last_job_info['selection_type'] == SelectionType.DECISION:
                         last_job_info['status'] = JobStatus.PENDING_DECISION
-                    elif last_job_info['selected_type'] == SelectionType.AUTHORISED_DECISION:
+                    elif last_job_info['selection_type'] == SelectionType.AUTHORISED_DECISION:
                         last_job_info['status'] = JobStatus.PENDING_AUTHORIZED_DECISION
                     logging.info("updated job status to pending user reply")
                     # Convert updated dictionary back to JSON and then encrypt it before storing

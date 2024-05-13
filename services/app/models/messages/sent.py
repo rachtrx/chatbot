@@ -1,5 +1,5 @@
 from extensions import db, get_session
-from constants import MessageType, SentMessageStatus
+from constants import MessageType, SentMessageStatus, SelectionType, types_to_selections
 import os
 import json
 from config import twilio_client
@@ -26,7 +26,7 @@ class MessageSent(Message):
     __tablename__ = "message_sent"
 
     sid = db.Column(db.ForeignKey("message.sid"), primary_key=True)
-    selection_type = db.Column(db.Boolean, nullable=False)
+    selection_type = db.Column(SQLEnum(SelectionType), nullable=True)
     status = db.Column(SQLEnum(SentMessageStatus), nullable=False)
     
     # job = db.relationship('Job', backref='sent_messages', lazy='select')
@@ -39,6 +39,10 @@ class MessageSent(Message):
         super().__init__(job_no, sid, body, seq_no) # initialise message
         self.status = SentMessageStatus.PROCESSING
         self.selection_type = selection_type
+
+    def get_selection_type(self):
+        return types_to_selections[self.selection_type]
+        
 
     def commit_message_body(self, body):
         session = get_session()
