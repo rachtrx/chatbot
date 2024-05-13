@@ -42,9 +42,13 @@ class JobLeave(JobUser):
         super().__init__(name)
         self.local_db_updated = False
         self.duplicate_dates = []
+        self.validation_errors = set()
         
+    ###############################
+    # SETTING REDIS DATA
+    ###############################
 
-    def get_cache_data(self):
+    def set_cache_data(self):
         if getattr(self.sent_msg, 'selection_type', False) and getattr(self, 'dates_to_update'):
             return {
                 # actual job information
@@ -52,7 +56,7 @@ class JobLeave(JobUser):
                 "dates": [date.strftime("%d-%m-%Y") for date in self.dates_to_update],
                 "duplicate_dates": [date.strftime("%d-%m-%Y") for date in self.duplicate_dates],
                 # returned by generate base
-                "validation_errors": self.validation_errors,
+                "validation_errors": list(self.validation_errors),
                 # can be blank after genenrate base
                 "leave_type": getattr(self, 'leave_type'),
 
@@ -64,6 +68,21 @@ class JobLeave(JobUser):
             }
         else:
             return None
+    
+    ###############################
+    # RETRIEVING REDIS DATA
+    ###############################
+        
+    def update_info(self, job_information, selection_type, selection): # TODO
+        self.dates_to_update = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in job_information['dates']]
+        self.duplicate_dates = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in job_information['duplicate_dates']]
+        self.validation_errors = set(job_information.get('validation_errors'))
+        if selection_type == SelectionType.LEAVE_TYPE:
+            self.leave_type = selection
+        
+    ##########################
+    # HANDLING INCOMING MSGES
+    ##########################
 
     @overrides
     def is_partially_completed(self):
@@ -77,55 +96,67 @@ class JobLeave(JobUser):
             return True
         return False
     
-    def update_info(self, job_information, selection_type, selection): # TODO
-        self.dates_to_update = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in job_information['dates']]
-        self.duplicate_dates = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in job_information['duplicate_dates']]
-        self.validation_errors = job_information.get('validation_errors')
-        if selection_type == SelectionType.LEAVE_TYPE:
-            self.leave_type = selection
-
-    
-    def handle_request(self):
+    def handle_request(self, selection=None):
         from models.messages.received import MessageSelection
-        self.logger.info("job set with expects")
+        reply = None
 
-        # self.background_tasks = []
+        # HANDLE CANCEL MSG
+        # if it has the user string, its the first msg, or a retry message. user_str attribute it set either in update_info or during job initialisation
+        if isinstance(self, JobLeaveCancel):
+            if selection != Decision.CANCEL:
+                logging.error(f"UNCAUGHT DECISION {selection}")
+                raise ReplyError(errors['UNKNOWN_ERROR'])
+            self.validate_selection_message(selection) # checks for ReplyErrors based on state
+            reply = self.handle_user_reply_action()
 
         # if it has the user string, its the first msg, or a retry message. user_str attribute it set either in update_info or during job initialisation
-        if getattr(self, "leave_type", None) and isinstance(self.received_msg, MessageSelection):
+        elif getattr(self, "leave_type", None) and selection:
 
-            self.logger.info(f"Checking for selection in handle request with user string: {self.received_msg.selection}")
+            self.logger.info(f"Checking for selection in handle request with user string: {received_msg.selection}")
 
             # these 2 functions are implemented with method overriding
-            selection = self.received_msg.selection
             if selection != Decision.CONFIRM:
                 logging.error(f"UNCAUGHT DECISION {selection}")
                 raise ReplyError(errors['UNKNOWN_ERROR'])
-            self.validate_confirm_message() # checks for ReplyErrors based on state
+            self.validate_selection_message(selection) # checks for ReplyErrors based on state
 
             updated_db_msg = LeaveRecord.insert_local_db(self)
             self.content_sid = os.environ.get("LEAVE_NOTIFY_SID")
             self.forward_messages()
-            self.received_msg.reply = f"{updated_db_msg}, messages have been forwarded. Pending success..."
+            reply = f"{updated_db_msg}, messages have been forwarded. Pending success..."
 
         else:
-
-            if isinstance(self.received_msg, MessageSelection): # retry message
+            if selection: # retry message
                 try:
-                    self.leave_type = LeaveType(int(self.received_msg.selection)) # previously had bus sometimes when not using str()
+                    self.leave_type = LeaveType(int(selection)) # previously had bus sometimes when not using str()
                     if not self.leave_type:
                         raise Exception
                 except:
                     raise ReplyError(errors['UNKNOWN_ERROR'])
 
             else: # first message
-                self.validation_errors = self.generate_base()
+                self.generate_base()
+                self.set_validation_errors()
+
                 # CATCH LEAVE TYPE ERRORS
                 self.leave_type = self.set_leave_type()
 
             self.selection_type = SelectionType.DECISION
             self.get_leave_confirmation_sid_and_cv()
-            self.received_msg.reply = (self.content_sid, self.cv)
+            reply = (self.content_sid, self.cv)
+
+        return reply
+
+    def set_validation_errors(self):
+        all_errors = set((*self.validate_start_date(), *self.validate_overlap()))
+
+        if LeaveIssue.OVERLAP in all_errors and LeaveIssue.LATE in all_errors:
+            if current_sg_time().date() in self.duplicate_dates:
+                all_errors.discard(LeaveIssue.LATE)
+
+        self.logger.info(f"ERRORS: {[err for err in all_errors]}")
+        
+        self.validation_errors = all_errors
     
     def set_leave_type(self):
         leave_keyword_patterns = re.compile(leave_keywords, re.IGNORECASE)
@@ -156,7 +187,7 @@ class JobLeave(JobUser):
         return False
 
     ###########################
-    # SECTION ENTRY JobStatus.PROCESSING
+    # SECTION ENTRY JobStatus
     ###########################
 
     def generate_base(self):
@@ -167,7 +198,6 @@ class JobLeave(JobUser):
         self.logger.info(f"User string in generate base: {self.user_str}")
 
         try:
-
             # self.duration is extracted duration
             if dates.duration_extraction(self.user_str):
                 self.duration = int(dates.duration_extraction(self.user_str))
@@ -205,16 +235,6 @@ class JobLeave(JobUser):
                     raise DurationError(errors['DATES_NOT_FOUND'])
             
             self.logger.info(f"{self.end_date}, {self.duration}, {duration_c}, {self.start_date}")
-        
-            all_errors = set((*self.validate_start_date(), *self.validate_overlap()))
-
-            if LeaveIssue.OVERLAP in all_errors and LeaveIssue.LATE in all_errors:
-                if current_sg_time().date() in self.duplicate_dates:
-                    all_errors.discard(LeaveIssue.LATE)
-
-            self.logger.info(f"ERRORS: {[err for err in all_errors]}")
-            
-            return all_errors
                 
         except DurationError as e:
             logging.error(f"error message is {e.message}")
@@ -365,7 +385,7 @@ class JobLeave(JobUser):
     #######################
 
     @overrides
-    def validate_confirm_message(self):
+    def validate_selection_message(self, selection):
         pass
 
     @overrides
@@ -487,23 +507,12 @@ class JobLeaveCancel(JobLeave):
         self.local_db_updated = False
         self.leave_type = leave_type
 
-    def validate_confirm_message(self):        
+    @overrides
+    def validate_selection_message(self, selection):        
         self.logger.info(f"original job status: {self.original_job.status}")
         
         if self.original_job.local_db_updated != True:
-            raise ReplyError(errors['job_leave_FAILED'])
-        
-    def handle_request(self):
-        self.logger.info("job set with expects")
-
-        # if it has the user string, its the first msg, or a retry message. user_str attribute it set either in update_info or during job initialisation
-        
-        selection = self.received_msg.selection
-        if selection != Decision.CANCEL:
-            logging.error(f"UNCAUGHT DECISION {selection}")
-            raise ReplyError(errors['UNKNOWN_ERROR'])
-        self.validate_confirm_message() # checks for ReplyErrors based on state
-        self.received_msg.reply = self.handle_user_reply_action()
+            raise ReplyError(errors['JOB_LEAVE_FAILED'])
         
     @overrides
     def forward_messages(self):

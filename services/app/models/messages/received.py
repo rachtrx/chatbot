@@ -60,26 +60,6 @@ class MessageReceived(Message):
 
         return True
 
-
-    ########################
-    # CHATBOT FUNCTIONALITY
-    ########################
-
-    def create_reply_msg(self):
-
-        '''Attributes to be set: self.reply'''
-
-        job = self.job
-
-        self.logger.info(f"message status: {self.status}, job status: {job.status}")
-
-        sent_msg = MessageSent.send_msg(MessageType.SENT, self.reply, job)
-
-        self.commit_reply_sid(sent_msg.sid)
-        # self.commit_status(OK)
-
-        return sent_msg
-
 class MessageSelection(MessageReceived):
 
     logger = setup_logger('models.message_confirm')
@@ -100,14 +80,6 @@ class MessageSelection(MessageReceived):
         super().__init__(job_no, sid, body) # initialise message
         self.ref_msg_sid = ref_msg_sid
         self.selection = selection
-
-    # @property
-    # def selection(self):
-    #     return str(self._selection) if self._selection else None
-    
-    # @selection.setter
-    # def selection(self, value):
-    #     self._selection = int(value)
         
     @classmethod
     def get_latest_sent_message(cls, job_no):

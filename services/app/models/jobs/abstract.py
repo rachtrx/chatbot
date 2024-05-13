@@ -144,7 +144,7 @@ class Job(db.Model): # system jobs
     def validate_complete(self):
         return True
 
-    def get_cache_data(self):
+    def set_cache_data(self):
         pass
 
     def check_for_complete(self):

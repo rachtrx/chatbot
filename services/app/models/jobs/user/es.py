@@ -34,9 +34,9 @@ class JobEs(JobUser):
         self.category = category
 
     @overrides
-    def validate_confirm_message(self):
+    def validate_selection_message(self, selection):
 
-        selection = self.received_msg.selection
+        selection = selection_msg.selection
 
         if selection == Decision.CANCEL or selection == Decision.CONFIRM:
         # TODO CANCEL THE MC
@@ -57,9 +57,9 @@ class JobEs(JobUser):
         return reply
 
     @overrides
-    def handle_user_reply_action(self):
+    def handle_user_reply_action(self, received_msg):
 
-        selection = self.received_msg.selection
+        selection = received_msg.selection
 
         if selection == Decision.CANCEL or selection == Decision.CONFIRM:
         # TODO CANCEL THE MC
@@ -81,7 +81,7 @@ class JobEs(JobUser):
     def get_es_reply(self):
 
         session = get_session()
-        result = search_for_document(self.received_msg.body)
+        result = search_for_document(received_msg.body)
         # logging.info(f"Main result: {result}")
 
         sid, cv = self.get_query_cv(result)
