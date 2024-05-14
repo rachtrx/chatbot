@@ -44,7 +44,7 @@ class JobLeave(JobUser):
     ###############################
 
     def set_cache_data(self):
-        if getattr(self.sent_msg, 'selection_type', False) and getattr(self, 'dates_to_update'):
+        if getattr(self, 'dates_to_update'):
             return {
                 # actual job information
                 # created by generate base
@@ -53,13 +53,7 @@ class JobLeave(JobUser):
                 # returned by generate base
                 "validation_errors": list(self.validation_errors), # TODO CREATE UTIL FUNCTION
                 # can be blank after genenrate base
-                "leave_type": getattr(self, 'leave_type'),
-
-                # job identifiers in cache upon callback
-                "status": self.status.value, # passed to redis, which updates to JobStatus.PENDING_DECISION or JobStatus.PENDING_AUTHORISED_DECISION once callback is received
-                
-                "sent_sid": self.sent_msg.sid, # passed to redis, which is used to check that the last message sent out is the message that is being replied to, when updating status to JobStatus.PENDING_DECISION once callback is received. Also used to ensure that in general_workflow, the sent_sid matches the replied to of the new message
-                "selection_type": self.selection_type.value
+                "leave_type": getattr(self, 'leave_type')
             }
         else:
             return None
@@ -385,6 +379,9 @@ class JobLeave(JobUser):
         pass
 
     def reject(self):
+        pass
+
+    def handle_job_expiry(self):
         pass
 
     ##########################

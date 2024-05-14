@@ -3,7 +3,14 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from flask import has_request_context, current_app
 import logging
 
+from twilio.rest import Client
+from redis_client import Redis
+from cryptography.fernet import Fernet
+import os
+
 db = SQLAlchemy()
+twilio = Client(os.environ.get('TWILIO_ACCOUNT_SID'), os.environ.get('TWILIO_AUTH_TOKEN'))
+redis = Redis(os.getenv("REDIS_URL"), Fernet(os.getenv("FERNET_KEY"))) # Fernet encryption key setup
 
 ThreadSession = None
 

@@ -114,14 +114,14 @@ class JobUser(Job): # Abstract class
             self.handle_reject()
 
     @classmethod
-    def general_workflow(cls, job_information):
+    def general_workflow(cls, message, job_info):
         from models.messages.sent import MessageSent
         job = user = received_msg = selection = reply = None
 
-        logging.info(f"Job information passed to general workflow from app.py and redis: {job_information}")
-        sid = job_information['sid']
-        user_str = job_information['user_str']
-        raw_from_no = job_information['from_no']
+        logging.info(f"Job information passed to general workflow from app.py and redis: {job_info}")
+        sid = message['sid']
+        user_str = message['user_str']
+        raw_from_no = message['from_no']
 
         try:
             try:
@@ -130,30 +130,28 @@ class JobUser(Job): # Abstract class
                     raise ReplyError(Error.USER_NOT_FOUND)
                 
                 # SECTION NEW JOB
-                if not job_information.get('replied_msg_sid', None):
+                if not job_info:
                     job = cls.create_new_job(user_str, user.name)
                     received_msg = Message.create_message(MessageType.RECEIVED, job.job_no, sid, user_str)
                     
                 else: # selection message
-                    sent_sid = job_information.get("sent_sid", None)
+                    sent_sid = job_info.get("sent_sid", None)
 
-                    replied_msg_sid = job_information.get('replied_msg_sid', None) # IMPT need to compare with sent_sid
+                    replied_msg_sid = message.get('replied_msg_sid', None) # IMPT need to compare with sent_sid
 
                     ref_msg = MessageSent.get_message_by_sid(replied_msg_sid) # try to check the database
-                    if not ref_msg:
-                        raise ReplyError(Error.SENT_MESSAGE_MISSING) # no ref msg
                     
-                    raw_selection_type = job_information.get("selection_type", None)
+                    raw_selection_type = job_info.get("selection_type", None)
 
                     if raw_selection_type:
                         selection_type = SelectionType(int(raw_selection_type))
-                        raw_selection = job_information.get("selection", None) # numeric val
+                        raw_selection = message.get("selection", None) # numeric val
                     else: # LATE MSG
                         selection_type = ref_msg.selection_type
                         if not selection_type:
                             raise ReplyError(Error.UNKNOWN_ERROR)
 
-                    selection = ref_msg.get_selection_type(int(raw_selection))
+                    selection = selection_type(int(raw_selection))
                 
                     job = ref_msg.job # retrieve the job instance from ORM database
 
@@ -179,8 +177,6 @@ class JobUser(Job): # Abstract class
                                 job.commit_cancel()
                                 job = job.create_cancel_job(user_str)
                                 reply = job.handle_cancel_request()
-                        elif job.status == JobStatus.PENDING_AUTHORISED_DECISION:
-                            reply = job.handle_authorisation(selection) # TODO
                         else:
                             raise ReplyError(Error.JOB_COMPLETED) # likely because job is completed / failed / waiting for completion already
 
@@ -195,7 +191,7 @@ class JobUser(Job): # Abstract class
                             raise ReplyError(Error.JOB_NOT_FOUND) # TODO really?
                     
                     else: # IMPT by now, sent_sid == replied_msg_sid. only can allow for confirm, cancel, or listitem
-                        if job.status != JobStatus.PENDING_DECISION:
+                        if job.status != JobStatus.PENDING_DECISION and job.status != JobStatus.PENDING_AUTHORISED_DECISION:
                             raise ReplyError(Error.UNKNOWN_ERROR)
                         
                         # Valid Replies
@@ -203,10 +199,13 @@ class JobUser(Job): # Abstract class
 
                         if selection == Decision.CANCEL:
                             raise ReplyError(job.errors.CANCEL_MSG, job_status=JobStatus.CLIENT_ERROR)
-                        if selection == Decision.CONFIRM or :
-                            job.update_info(job_information)
+                        elif (selection == AuthorizedDecision.APPROVE or selection == AuthorizedDecision.REJECT):
+                            elif 
+                            reply = job.handle_authorisation(selection) # TODO
+                        elif 
+                            job.update_info(job_info)
                              # IMPT SELECTION found
-                            job.update_info(job_information, selection_type, selection) # TODO # IMPT SEE constants.py SelectionType ... IMPT
+                            job.update_info(job_info, selection_type, selection) # TODO # IMPT SEE constants.py SelectionType ... IMPT
                             logging.info(f"UPDATED INFO")
                     
                     # CHECK if there was a cancel. # IMPT bypass_validation is currently ensuring that the user doesnt cancel when clicking on a list item
@@ -245,18 +244,22 @@ class JobUser(Job): # Abstract class
                 if not received_msg:
                     received_msg = Message.create_message(MessageType.RECEIVED, job.job_no, sid, user_str)
 
-                job.sent_msg = job.create_reply_msg(re.err_message, received_msg)
+                sent_msg = job.create_reply_msg(re.err_message, received_msg)
 
-            job_data = {}
-            if job and job.status == JobStatus.PROCESSING: # may throw error due to leave_type empty but still processing
-                job_data = job.set_cache_data()
-            job_data["job_no"] = job.job_no, # passed to redis, which is used when updating status once callback is received
+            job_data = {"job_no": job.job_no}  # passed to redis, which is used when updating status once callback is received
+            if job and job.status == JobStatus.PROCESSING and getattr(sent_msg, 'selection_type', False): # may throw error due to leave_type empty but still processing
+                job_data = {**job_data, **job.set_cache_data()}
+                job_data["selection_type"] = sent_msg.selection_type.value
+                job_data['sent_sid'] = sent_msg.sid # passed to redis, which is used to check that the last message sent out is the message that is being replied to, when updating status to JobStatus.PENDING_DECISION once callback is received. Also used to ensure that in general_workflow, the sent_sid matches the replied to of the new message
+                job_data["status"] = job.status.value # passed to redis, which updates to JobStatus.PENDING_DECISION or JobStatus.PENDING_AUTHORISED_DECISION once callback is received
+                if hasattr(job, 'user'):
+                    job_data["authoriser_number"] = job.user.reporting_officer.sg_number # Possible to have multiple?
             return job_data
    
         except Exception:
             logging.error("Something wrong with application code")
             logging.error(traceback.format_exc())
-            if job and not getattr(job, "local_db_updated", None) and not job.status == OK:
+            if job and not getattr(job, "local_db_updated", None) and not job.status == JobStatus.OK:
                 job.commit_status(JobStatus.SERVER_ERROR)
             raise
 
@@ -279,4 +282,7 @@ class JobUser(Job): # Abstract class
         pass
 
     def set_cache_data(self):
+        pass
+
+    def handle_job_expiry(self):
         pass

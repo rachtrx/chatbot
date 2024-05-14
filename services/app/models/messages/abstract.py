@@ -1,11 +1,10 @@
 from extensions import db, get_session
-# from sqlalchemy.orm import 
-from typing import List
+# from typing import List
 from constants import MessageType
 from dateutil.relativedelta import relativedelta
 from utilities import current_sg_time
-from config import twilio_client
-from sqlalchemy.orm import joinedload
+from config import twilio
+# from sqlalchemy.orm import joinedload
 
 from logs.config import setup_logger
 
@@ -45,7 +44,7 @@ class Message(db.Model):
     
     @staticmethod
     def fetch_message(sid):
-        message = twilio_client.messages(sid).fetch()
+        message = twilio.messages(sid).fetch()
         return message.body
     
     @staticmethod

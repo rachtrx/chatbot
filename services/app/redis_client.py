@@ -2,30 +2,77 @@ import json
 import logging
 from logs.config import setup_logger
 from constants import JobStatus
-from concurrent.futures import ThreadPoolExecutor
+# from concurrent.futures import ThreadPoolExecutor
 from models.jobs.user.abstract import JobUser
 from models.exceptions import ReplyError
 from models.users import User
+from models.messages.sent import MessageSent
 from constants import Error, SelectionType
 import redis
 import traceback
+import threading
+import hashlib
+import shortuuid
+import re
+from utilities import get_session
 
-class Redis():
+# class RedisJob:
+#     redis_client = redis.StrictRedis(host='localhost', port=6379, db=0)
+
+#     def __init__(self, job_no):
+#         self.job_no = job_no
+#         self.job_key = f"job_data:{self.job_no}"
+
+#     def set_job_field(self, field, value):
+#         self.redis_client.hset(self.job_key, field, value)
+
+#     def get_job_field(self, field):
+#         value = self.redis_client.hget(self.job_key, field)
+#         return value.decode('utf-8') if value else None
+
+#     def set_multiple_job_fields(self, fields_values):
+#         self.redis_client.hmset(self.job_key, fields_values)
+
+#     def get_all_job_fields(self):
+#         fields_values = self.redis_client.hgetall(self.job_key)
+#         return {k.decode('utf-8'): v.decode('utf-8') for k, v in fields_values.items()}
+
+#     def expire_job(self, expiration):
+#         self.redis_client.expire(self.job_key, expiration)
+
+#     def set_user_job(self, user_id, job_no, expiration):
+#         user_job_key = f"user_job:{user_id}"
+#         self.redis_client.set(user_job_key, job_no, ex=expiration)
+
+#     def get_user_job(self, user_id):
+#         user_job_key = f"user_job:{user_id}"
+#         job_no = self.redis_client.get(user_job_key)
+#         return job_no.decode('utf-8') if job_no else None
+
+class Redis:
 
     logger = setup_logger('models.redis')
 
     def __init__(self, url, cipher_suite):
         self.client = redis.Redis.from_url(url)
         self.cipher_suite = cipher_suite
+        self.subscriber = RedisSubscriber(self.client)  
 
-    def get_last_job_info(self, user_id):
-        encrypted_data = self.client.hget(f"job_data:{user_id}", "job_information")
-        if encrypted_data:
-            # Decrypt the data back into a JSON string
-            decrypted_data_json = self.cipher_suite.decrypt(encrypted_data).decode()
-            last_job_info = json.loads(decrypted_data_json)
-            return last_job_info
-        return None
+    # Utility function setup
+    def hash_identifier(identifier, salt=''):
+        hasher = hashlib.sha256()
+        hasher.update(f'{salt}{identifier}'.encode())
+        return hasher.hexdigest()
+
+    # def get_current_job_data(self, job_no):
+    #     encrypted_data = self.client.get(f"job_information:{job_no}")
+
+    #     if encrypted_data:
+    #         # Decrypt the data back into a JSON string
+    #         decrypted_data_json = self.cipher_suite.decrypt(encrypted_data).decode()
+    #         last_job_info = json.loads(decrypted_data_json)
+    #         return last_job_info
+    #     return None
     
     @staticmethod
     def catch_reply_errors(func):
@@ -42,67 +89,160 @@ class Redis():
                 re.send_error_msg(sid=job_info['sid'], user_str=job_info['user_str'], user_or_no=user_or_no)
                 return False
         return wrapper
+    
+    def update_user_status(self, user_id, status=1):
+        user_status_key = f"user:{user_id}:status"
+        self.client.setex(user_status_key, JobUser.max_pending_duration, status)
+
+    def get_user_status(self, user_id):
+        user_status_key = f"user:{user_id}:status"
+        status = self.client.get(user_status_key)
+        if status is not None:
+            return int(status)
+        return None
+
+    def add_job_info(self, job_no, job_info={}):
+        job_info_key = f"job:{job_no}:info"
+        # Set job information
+        encrypted_data = self.cipher_suite.encrypt(json.dumps(job_info).encode())
+        self.client.set(job_info_key, encrypted_data)
+        logging.info(f"Added job {job_no} with info {job_info}")
+
+    def add_job(self, user_id, job_no):
+        user_jobs_key = f"user:{user_id}:jobs"
+        messages_key = f"job:{job_no}:messages:{user_id}"
+
+        # Add job to user's job queue
+        self.client.rpush(user_jobs_key, job_no)
+
+        # Initialize messages list
+        self.client.delete(messages_key)
+
+    def get_next_job(self, user_id):
+        user_jobs_key = f"user:{user_id}:jobs"
+        job_no = self.client.lpop(user_jobs_key)
+        if job_no:
+            job_no = job_no.decode('utf-8')
+        return job_no
+    
+    def get_current_job(self, user_id):
+        user_jobs_key = f"user:{user_id}:jobs"
+        job_no = self.client.lindex(user_jobs_key, 0) # most right
+        if job_no:
+            job_no = job_no.decode('utf-8')
+        return job_no
+    
+    def clear_job_info(self, job_no):
+        self.client.delete(f"job:{job_no}:info") # clear job info
+
+    def clear_user_job_data(self, user_id, job_no):
+        self.client.delete(f"job:{job_no}:messages:{user_id}") # clear messages
+        self.client.lrem(f"user:{user_id}:jobs", 1, job_no)
+
+    def add_message(self, user_id, job_no, message):
+        messages_key = f"job:{job_no}:messages:{user_id}"
+        self.client.rpush(messages_key, json.dumps(message))
+        logging.info(f"Added message to job {job_no} for user {user_id}: {message}")
+
+    def get_next_message(self, user_id, job_no):
+        messages_key = f"job:{job_no}:messages:{user_id}"
+        message = self.client.lpop(messages_key)
+        if message:
+            message = json.loads(message)
+            logging.info(f"Dequeued message from job {job_no} for user {user_id}: {message}")
+        return message
+    
+    def push_message_back(self, user_id, job_no, message):
+        queue_key = f"job:{job_no}:messages:{user_id}"
+        self.client.lpush(queue_key, json.dumps(message))
+
+    def get_job_info(self, job_no):
+        job_info_key = f"job:{job_no}:info"
+        
+        encrypted_data = self.client.get(job_info_key)
+        if encrypted_data:
+            # Decrypt the data back into a JSON string
+            decrypted_data_json = self.cipher_suite.decrypt(encrypted_data).decode()
+            last_job_info = json.loads(decrypted_data_json)
+            return last_job_info
+        return None
+    
+    def move_job_to_front(self, user_id, job_no):
+        user_jobs_key = f"user:{user_id}:jobs"
+
+        # Check if the job is already at the front
+        if job_no != self.client.lindex(user_jobs_key, 0).decode('utf-8'):
+            # Retrieve the entire queue
+            queue = self.client.lrange(user_jobs_key, 0, -1)
+            
+            # Convert bytes to strings
+            queue = [item.decode('utf-8') for item in queue]
+
+            # Find and remove the job from the list
+            if job_no in queue:
+                queue.remove(job_no)
+
+            # Start a pipeline to ensure atomicity
+            with self.client.pipeline() as pipe:
+                # Push the job to the front of the queue
+                pipe.lpush(user_jobs_key, job_no)
+
+                # Re-add the remaining items back to the queue
+                for item in reversed(queue):
+                    pipe.rpush(user_jobs_key, item)
+
+                # Execute the pipeline
+                pipe.execute()
 
     @catch_reply_errors
-    def enqueue_job(self, user_id, new_job_info):
+    def enqueue_job(self, user_id, new_message_data):
         # Use a list as a queue for each user's jobs
-        job_enqueued = False
 
         # if the message was a reply, enqueue first
-        if new_job_info.get('replied_msg_sid', None):
-            job_enqueued = True
-            
-        # not a reply
-        else:
-            # else if current process running, raise error
-            if self.client.get(f"user_job:{user_id}"):
+        if new_message_data.replied_msg_sid:
+            ref_msg = MessageSent.get_message_by_sid(new_message_data.replied_msg_sid) # try to check the database
+            job = ref_msg.job
+            job_info = self.get_job_info(job.job_no)
+            if job_info.get('sent_sid') != new_message_data.replied_msg_sid:
+                raise ReplyError(Error.NOT_LAST_MSG) # TODO ACCEPT AGAIN?
+            self.move_job_to_front(user_id, job_no)
+        else: # new message
+            if self.get_current_job(user_id): # no process running, last job exists, user didn't send a reply
+                raise ReplyError(Error.PENDING_DECISION)
+            elif self.get_user_status(user_id): # else if current process running, raise error
                 raise ReplyError(Error.DOUBLE_MESSAGE)
-            # if no current process, check for last job
             else:
-                last_job_info = self.get_last_job_info(user_id)
-                if last_job_info:
-                    # no process running, last job exists, user didn't send a reply
-                    raise ReplyError(Error.PENDING_DECISION)
                 # not a reply, no process running, no last job
-                job_enqueued = True
-        
-        if job_enqueued:
-            self.client.rpush(f"user_jobs_queue:{user_id}", json.dumps(new_job_info))
-        
-        return job_enqueued
+                job_no = shortuuid.ShortUUID().random(length=8)
+                self.add_job(user_id, job_no)
+                self.add_job_info(job_no)
+
+        self.add_message(user_id, job_no, new_message_data.__dict__)    
+        return True # TODO isit always return True?
 
     def job_completed(self, job_details, user_id):
 
-        job_no = job_details['job_no']
+        job_no = job_details.pop('job_no')
 
-        if not list(job_details.keys()) == ['job_no']:
+        if not job_details: # evaluates to false if its an empty dict
             
-            job_no_json = json.dumps(job_no)
-            job_id = self.cipher_suite.encrypt(job_no_json.encode())
+            self.add_job_info(job_no, job_details)
+            # KEEP USER_JOB_DATA!
+
+            if job_details['selection_type'] == SelectionType.AUTHORIZED_DECISION.value:
+                new_user_id = self.hash_identifier(str(job_details['authoriser_number'])) # IMPT if expecting authorisation, shift the cache to store for RO
+                self.add_job(new_user_id, job_no) # pass to RO
+                self.clear_user_job_data(user_id, job_no)
+                logging.info(f"job saved in cache for {job_no}")
             
-            job_completed_data_json = json.dumps(job_details)
-            encrypted_data = self.cipher_suite.encrypt(job_completed_data_json.encode())
-
-            if job_details['status'] == JobStatus.PENDING_AUTHORISED_DECISION.value:
-                user_id = app.hash_identifier(str(to_no))
-
-            self.client.hset(f"user_data:{user_id}", "current_job", job_id)
-            self.client.expire(f"user_data:{user_id}", JobUser.max_pending_duration)
-
-            self.client.hset(f"job_data:{job_id}", "job_information", encrypted_data)
-            self.client.expire(f"job_data:{job_id}", JobUser.max_pending_duration)
-
-            logging.info(f"job completed for {job_id}")
-
-        self.finish_job(user_id, job_id, clear_data=False)
-
-    def finish_job(self, user_id, job_id, clear_data=True):
-        # Clear the in-progress flag
-        self.client.delete(f"user_job:{user_id}")
-        if clear_data:
+        else: # not expecting reply
             logging.info("Clearing data for job")
-            self.client.delete(f"job_data:{job_id}")
-            self.client.delete(f"user_data:{user_id}")
+            self.clear_user_job_data(user_id, job_no)
+            self.clear_job_info(job_no)
+            
+            logging.info(f"job completed for {job_no}")
+
+        self.client.delete(f"user:{user_id}:status") # clear user status
         self.start_next_job(user_id)
 
     def start_next_job(self, user_id):
@@ -114,59 +254,99 @@ class Redis():
 
         possible jobs that have been enqueued: reply messages, new messages sent when no other job running or job pending
         '''
+
         # Check no job running
-        if not self.client.get(f"user_job:{user_id}"):
-
-            # check for pending job
-            last_job_info = self.get_last_job_info(user_id)
-            # new message must be a reply. dont start job if its not pending reply; the callback will start it
-            if last_job_info and last_job_info['status'] != JobStatus.PENDING_DECISION: 
-                return None
-            
-            # msg must be completely new / last job exists and is pending reply / user double clicks but the last_job_info has been deleted
-            else:
-                logging.info(f"start next job user_id: {user_id}")
-                job_info_raw = self.client.lpop(f"user_jobs_queue:{user_id}")
-                if job_info_raw:
-                    new_job_info = json.loads(job_info_raw)
-                    
-                    if last_job_info:
-                        new_job_info.update(last_job_info)  # Assuming you want to update/merge it
-                    logging.info(f"Combined job info dict: {new_job_info}")
-
-                    # Proceed with setting the job in progress and starting it
-                    self.client.set(f"user_job:{user_id}", "in_progress", ex=JobUser.max_pending_duration)
-
-                    logging.info("JOB STARTED")
-                    job_info = JobUser.general_workflow(new_job_info)
-                    self.job_completed(job_info, user_id)  # Assuming job_completed does not require parameters, or pass them if it does
-
-                    return "job started", new_job_info
-        # If there's already an job in progress or no jobs in the queue
-        else:
-            logging.info("JOB NOT READY TO START")
+        user_status = self.get_user_status(user_id)
+        if user_status: 
+            return
+        
+        job_no = self.get_current_job(user_id) # cycle each job and check that it is still valid in the cache
+        if not job_no: # no jobs
             return None
+            
+        
+        if not new_msg:
+            # cannot get next job as selection might not have been sent. only get when job is DELETED or COMPLETED
+            return None
+        # OK             
+
+        job_info = new_msg = None # either job_info or received msg has to be present at any time in the cache, so cycle each job and check that it is still valid in the cache
+        while True: # IMPT will it reject the empty dictionary when job is initialised too??
+            job_no = self.get_current_job(user_id)
+            if not job_no: # no jobs
+                return None
+            job_info = self.get_job_info(job_no)
+            new_msg = self.get_next_message(user_id, job_no) # Proceed with setting the job in progress and starting it
+            if job_info or new_msg:
+                break
+            self.clear_user_job_data(user_id, job_no)
+
+        if not new_msg: # needs a new msg
+            return None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+
+        # might be NEW MESSAGE or REPLY or REPLY AFTER EXPIRY
+        # new message, job_info optional (for quick replies)
+        # job not pending reply; the callbacks will start it. Note the status cannot be others because only PENDING messages are cached...
+        if job_info and job_info['status'] != JobStatus.PENDING_DECISION and job_info['status'] != JobStatus.PENDING_AUTHORISED_DECISION: 
+            self.push_message_back(user_id, job_no, new_msg)
+            return None
+        else: # last job exists and is pending selection / user double clicks but the last_job_info has been deleted
+            logging.info(f"Combined job info dict: {new_msg}")
+            logging.info("JOB STARTED")
+            # OK
+
+        self.update_user_status(user_id)
+        job_info = JobUser.general_workflow(new_msg, job_info)
+        self.job_completed(job_info, user_id) # Assuming job_completed does not require parameters, or pass them if it does
+
+        return "job started", new_msg
 
     def update_job_status(self, user_id, callback_msg):
         '''updates job status to pending user reply in the cache as soon as the callback has been confirmed'''
-        encrypted_data = self.client.hget(f"job_data:{user_id}", "job_information")
-        if encrypted_data:
-            logging.info("Encrypted data found!")
-            # Decrypt the data back into a JSON string
-            decrypted_data_json = self.cipher_suite.decrypt(encrypted_data).decode()
-            last_job_info = json.loads(decrypted_data_json)
-            if isinstance(last_job_info, dict):
-                if last_job_info.get("sent_sid", None) == callback_msg.sid and last_job_info.get("job_no", None) == callback_msg.job_no: # if current data found
-                    if last_job_info['selection_type'] == SelectionType.DECISION:
-                        last_job_info['status'] = JobStatus.PENDING_DECISION
-                    elif last_job_info['selection_type'] == SelectionType.AUTHORISED_DECISION:
-                        last_job_info['status'] = JobStatus.PENDING_AUTHORIZED_DECISION
-                        self.move_data_to_ro()
-                    logging.info("updated job status to pending user reply")
-                    # Convert updated dictionary back to JSON and then encrypt it before storing
-                    updated_data_json = json.dumps(last_job_info)
-                    encrypted_updated_data = self.cipher_suite.encrypt(updated_data_json.encode())
-                    self.client.hset(f"job_data:{user_id}", "job_information", encrypted_updated_data)
-                    return last_job_info['status']
-                
-    def move_data_to_ro(self, ):
+        
+        job_info = self.get_job_info(callback_msg.job.job_no)
+        if not job_info:
+            raise ReplyError(Error.UNKNOWN_ERROR)
+        if job_info['selection_type'] == SelectionType.DECISION:
+            job_info['status'] = JobStatus.PENDING_DECISION
+        elif job_info['selection_type'] == SelectionType.AUTHORISED_DECISION:
+            job_info['status'] = JobStatus.PENDING_AUTHORIZED_DECISION
+        logging.info("updated job status to pending user reply")
+        # Convert updated dictionary back to JSON and then encrypt it before storing
+        updated_data_json = json.dumps(job_info)
+        encrypted_updated_data = self.cipher_suite.encrypt(updated_data_json.encode())
+        self.add_job_info(user_id, callback_msg.job.job_no, encrypted_updated_data)
+        return job_info['status']
+            
+class RedisSubscriber:
+    def __init__(self, redis_client):
+        self.redis_client = redis_client
+        self.pubsub = self.redis_client.pubsub()
+        self.pubsub.psubscribe('__keyevent@0__:expired')
+        self.pubsub.psubscribe('__keyevent@0__:del')
+
+    def listen(self):
+        for message in self.pubsub.listen():
+            if message['type'] == 'pmessage':
+                event_type = message['channel'].decode('utf-8').split(':')[-1]
+                key = message['data'].decode('utf-8')
+                self.handle_event(event_type, key)
+
+    def handle_event(self, event_type, key):
+        if event_type == 'expired':
+            self.handle_expired_key(key)
+        elif event_type == 'del':
+            self.handle_deleted_key(key)
+
+    def handle_expired_key(self, key):
+        logging.info(f"Key expired: {key}")
+        # Add your custom action here
+        match = re.match(r"job:(\w+):info", key)
+        if match:
+            job_no = match.group(1)
+            session = get_session()
+            job = session.query(JobUser).filter(JobUser.job_no == job_no).first()
+            job.handle_job_expiry()
+
+
+        

@@ -128,7 +128,6 @@ class LeaveStatus(Enum):
 class LeaveError(Enum):
     CANCEL_MSG = "I'm sorry, if I got the dates and duration wrong, please send it to me again!"
     CONFIRMING_CANCELLED_MSG = "Leave has already been cancelled!"
-    NOT_LAST_MSG = "To confirm or cancel the leave, please only reply to the latest message!"
     ALL_DUPLICATE_DATES = "You are already on leave for all these dates"
     CANCELLED_BEFORE_AUTHORISATION = "Leave has already been cancelled by _____" # TODO
 
@@ -151,6 +150,7 @@ class Error(Enum):
     JOB_FAILED_MSG = "Sorry, the previous job has failed."
     SENT_MESSAGE_MISSING = "Sorry, it seems like we could not find the relavant job"
     JOB_COMPLETED = "Sorry, the job has either completed or has failed."
+    NOT_LAST_MSG = "Please only reply to the latest message!"
 
 ####################################
 # leave_job_status = {

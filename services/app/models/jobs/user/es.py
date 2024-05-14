@@ -36,8 +36,6 @@ class JobEs(JobUser):
     @overrides
     def validate_selection_message(self, selection):
 
-        selection = selection_msg.selection
-
         if selection == Decision.CANCEL or selection == Decision.CONFIRM:
         # TODO CANCEL THE MC
             return

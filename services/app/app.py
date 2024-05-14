@@ -12,7 +12,7 @@ import traceback
 from sqlalchemy import inspect, event
 
 from manage import create_app
-from extensions import db
+from extensions import db, redis, twilio
 
 from models.users import User
 from models.messages.received import MessageReceived
@@ -28,16 +28,11 @@ import os
 from sqlalchemy import create_engine
 from extensions import init_thread_session
 
-from utilities import log_level
+import threading
+from dataclasses import dataclass
+from typing import Optional
 
-# Configure the root logger
-logging.basicConfig(
-    filename='/var/log/app.log',  # Log file path
-    filemode='a',  # Append mode
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Log message format
-    level=log_level  # Log level
-)
-logging.getLogger('twilio.http_client').setLevel(logging.WARNING)
+from utilities import log_level
 
 # logger = logging.getLogger('sqlalchemy.engine.Engine')
 # # logger = logging.getLogger('redis')
@@ -83,6 +78,14 @@ def seed_db():
     db.session.add(user)
     db.session.commit()
 
+@dataclass
+class NewMessageData:
+    from_no: str
+    user_str: str
+    sid: str
+    replied_msg_sid: Optional[str] = None
+    selection: Optional[int] = None
+
 @app.route("/chatbot/sms/", methods=['GET', 'POST'])
 def sms_reply():
     """Respond to incoming calls with a simple text message."""
@@ -97,33 +100,24 @@ def sms_reply():
         logging.info(f"FROMNO: {from_no}")
         user_str = MessageReceived.get_message(request)
         sid = MessageReceived.get_sid(request)
-            
-        new_job_info = {
-            "from_no": from_no,
-            "user_str": user_str,
-            "sid": sid
-        }
-        
-        if request.form.get('OriginalRepliedMessageSid'):
-            logging.info(f"User made a selection: {request.form.get('Body')}")
-            replied_msg_sid = request.form.get('OriginalRepliedMessageSid')
-            new_job_info["replied_msg_sid"] = replied_msg_sid
 
-            # CONFIRM/CANCEL
-            if request.form.get('ButtonPayload', None):
-                new_job_info["selection"] = int(request.form['ButtonPayload'])
-            elif request.form.get('ListId', None):
-                new_job_info["selection"] = int(request.form['ListId'])
-            else:
-                raise Exception
+        replied_msg_sid = request.form.get('OriginalRepliedMessageSid', None)
+        selection = None
+        if request.form.get('ButtonPayload', None):
+            selection = int(request.form['ButtonPayload'])
+        elif request.form.get('ListId', None):
+            selection = int(request.form['ListId'])
+        new_job_info = NewMessageData(user_str, sid, replied_msg_sid, selection)
 
-        encoded_no = app.hash_identifier(str(from_no))
+        logging.info(f"User made a selection: {request.form.get('Body')}")
 
-        job_enqueued = app.redis_client.enqueue_job(user_id=encoded_no, new_job_info=new_job_info)
+        encoded_no = redis.hash_identifier(str(from_no))
+
+        job_enqueued = redis.enqueue_job(user_id=encoded_no, new_job_info=new_job_info)
         
         if job_enqueued:
             logging.info("job enqueued")
-            result = app.redis_client.start_next_job(encoded_no)
+            result = redis.start_next_job(encoded_no)
 
             if result:
                 return result[0], JobStatus.OK.value  # job started
@@ -134,7 +128,7 @@ def sms_reply():
             return "job not queued", JobStatus.OK.value
     except Exception:
         logging.error(traceback.format_exc())
-        app.twilio_client.messages.create(
+        twilio.messages.create(
             to=from_no,
             from_=os.environ.get('TWILIO_NO'),
             body="Really sorry, you caught error that we did find during development, please let us know!"
@@ -169,17 +163,37 @@ def sms_reply_callback():
             message_pendiing_reply = job.update_with_msg_callback(status, sid, message) # pending callback
             if message_pendiing_reply:
                 to_no = request.form.get("To")
-                user_id = app.hash_identifier(str(to_no))
-                updated_status = app.redis_client.update_job_status(user_id, message_pendiing_reply) # update redis
+                user_id = redis.hash_identifier(str(to_no))
+                updated_status = redis.update_job_status(user_id, message_pendiing_reply) # update redis
                 if updated_status:
                     job.commit_status(updated_status) # then update the database
-                    app.redis_client.start_next_job(user_id)
+                    redis.start_next_job(user_id)
                         
     except Exception as e:
         logging.error(traceback.format_exc())
 
     return Response(status=200)
 
+
+def start_redis_listener():
+
+    def listen():
+        with app.app_context():  # Ensure Redis listener has access to Flask app context
+            redis.subscriber.listen()
+
+    listener_thread = threading.Thread(target=listen, daemon=True)
+    listener_thread.start()
+
 if __name__ == "__main__":
     # local development, not for gunicorn
+    # Configure the root logger
+    logging.basicConfig(
+        filename='/var/log/app.log',  # Log file path
+        filemode='a',  # Append mode
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Log message format
+        level=log_level  # Log level
+    )
+    logging.getLogger('twilio.http_client').setLevel(logging.WARNING)
+    with app.app_context():
+        redis.start_redis_listener()
     app.run(debug=True)

@@ -21,8 +21,6 @@ from models.messages.received import MessageSelection
 from functools import wraps
 from sqlalchemy.types import Enum as SQLEnum
 
-
-
 class Job(db.Model): # system jobs
 
     logger = setup_logger('models.job')
@@ -95,7 +93,6 @@ class Job(db.Model): # system jobs
 
                         logging.info(id(session))
                         result = func(updated_job, *args, **kwargs)
-
                     
                         if isinstance(updated_job, Job):
                             updated_job.unlock(session)

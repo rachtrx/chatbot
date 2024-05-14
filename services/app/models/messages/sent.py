@@ -1,8 +1,7 @@
-from extensions import db, get_session
+from extensions import db, get_session, twilio
 from constants import MessageType, SentMessageStatus, SelectionType, types_to_selections
 import os
 import json
-from config import twilio_client
 from .abstract import Message
 import time
 import logging
@@ -116,8 +115,7 @@ class MessageSent(Message):
     def _send_template_msg(content_sid, content_variables, to_no):
 
         logging.info(content_variables)
-
-        sent_message_meta = twilio_client.messages.create(
+        sent_message_meta = twilio.messages.create(
                 to=to_no,
                 from_=os.environ.get("MESSAGING_SERVICE_SID"),
                 content_sid=content_sid,
@@ -129,7 +127,7 @@ class MessageSent(Message):
     @staticmethod
     def _send_normal_msg(body, to_no):
         '''so far unused'''
-        sent_message_meta = twilio_client.messages.create(
+        sent_message_meta = twilio.messages.create(
             from_=os.environ.get("TWILIO_NO"),
             to=to_no,
             body=body
@@ -138,7 +136,7 @@ class MessageSent(Message):
     
     @staticmethod
     def _send_error_msg(body="Something went wrong with the sync"):
-        sent_message_meta = twilio_client.messages.create(
+        sent_message_meta = twilio.messages.create(
             from_=os.environ.get("TWILIO_NO"),
             to=os.environ.get("DEV_NO"),
             body=body
