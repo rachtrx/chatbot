@@ -96,14 +96,13 @@ class JobStatus(Enum):
     ACCEPTED = 202
     CREATED = 201
     OK = 200
-    SERVER_ERROR = 500 # Bad Request
     PENDING_DECISION = 301
-    PENDING_AUTHORISED_DECISION = 303
-    # JobStatus.PROCESSING MSG CALLBACK
+    PENDING_AUTHORISED_DECISION = 399
     # ERROR JOB STATUS
     CLIENT_ERROR = 401
     # DURATION_CONFLICT = 403 # TODO
     DOUBLE_MESSAGE = 409 # Conflict This will always be a job with a single message
+    SERVER_ERROR = 500 # Bad Request
 
 class SentMessageStatus(Enum):
     OK = 200
@@ -124,12 +123,15 @@ class LeaveStatus(Enum):
     PENDING = 1
     APPROVED = 2
     CANCELLED = 3
+    REJECTED = 4
+    ERROR = 5
 
 class LeaveError(Enum):
     CANCEL_MSG = "I'm sorry, if I got the dates and duration wrong, please send it to me again!"
     CONFIRMING_CANCELLED_MSG = "Leave has already been cancelled!"
     ALL_DUPLICATE_DATES = "You are already on leave for all these dates"
-    CANCELLED_BEFORE_AUTHORISATION = "Leave has already been cancelled by _____" # TODO
+    NO_DATES_TO_DEL = "No dates were found past 9am today that are still active."
+    CANCELLED_AFTER_REJECTION = "Leave has already been cancelled by _____" # TODO
 
 
 class Error(Enum):
@@ -145,9 +147,8 @@ class Error(Enum):
     MESSAGE_STILL_PENDING = "Sorry, please try again in a few seconds, a message sent to you is still pending success confirmation."
     JOB_NOT_FOUND = "Sorry, it seems like there are no records of this job in the database."
     MC_WRONG_SYNTAX = "Sorry, the message should specify the type of leave. Possible values: medical leave, ml, childcare leave, child care leave, ccl, parentcare leave, parent care leave, pcl, hospitalization leave, hospitalisation leave, hl, compassionate leave, cl"
-    NO_DEL_DATE = "Sorry, there are no dates left to delete."
     TIMEOUT_MSG = "Sorry, it seems like the previous message timed out."
-    JOB_FAILED_MSG = "Sorry, the previous job has failed."
+    UNABLE_TO_CANCEL = "Sorry, the job cannot be cancelled; please check with ICT."
     SENT_MESSAGE_MISSING = "Sorry, it seems like we could not find the relavant job"
     JOB_COMPLETED = "Sorry, the job has either completed or has failed."
     NOT_LAST_MSG = "Please only reply to the latest message!"
@@ -242,7 +243,7 @@ leave_alt_words = r'(leave|appointment|mc|ml|sick|medical certificate|medical ce
 #     "MC_WRONG_SYNTAX": "Sorry, the message should specify the type of leave. Possible values: medical leave, ml, childcare leave, child care leave, ccl, parentcare leave, parent care leave, pcl, hospitalization leave, hospitalisation leave, hl, compassionate leave, cl",
 #     "NO_DEL_DATE": "Sorry, there are no dates left to delete.",
 #     "TIMEOUT_MSG": "Sorry, it seems like the previous message timed out.",
-#     "JOB_FAILED_MSG": "Sorry, the previous job has failed.",
+#     "UNABLE_TO_CANCEL": "Sorry, the previous job has failed.",
 #     "SENT_MESSAGE_MISSING": "Sorry, it seems like we could not find the relavant job",
 #     "JOB_COMPLETED": "Sorry, the job has either completed or has failed."
 # }

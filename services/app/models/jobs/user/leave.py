@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, date
 from extensions import db, get_session
-from constants import LeaveError, Error, LeaveType, LeaveIssue, leave_keywords, SelectionType, Decision, Intent, JobStatus
+from constants import LeaveError, Error, LeaveType, LeaveIssue, leave_keywords, SelectionType, Decision, Intent, JobStatus, LeaveStatus, AuthorizedDecision
 from dateutil.relativedelta import relativedelta
 import os
 import logging
@@ -12,32 +12,38 @@ from overrides import overrides
 from logs.config import setup_logger
 
 from models.exceptions import ReplyError, DurationError
-from models.jobs.user.abstract import JobUser
+from models.jobs.user.abstract import JobUserInitial
 from models.leave_records import LeaveRecord
 import re
 import traceback
 from .utils_leave import dates
 from sqlalchemy.types import Enum as SQLEnum
 
-class JobLeave(JobUser):
+class JobLeave(JobUserInitial):
     __tablename__ = "job_leave"
     job_no = db.Column(db.ForeignKey("job_user.job_no"), primary_key=True) # TODO on delete cascade?
-    forwards_status = db.Column(db.Integer, default=None, nullable=True)
-    local_db_updated = db.Column(db.Boolean(), nullable=False)
+    forwards_status = db.Column(SQLEnum(JobStatus), default=None, nullable=True)
     leave_type = db.Column(SQLEnum(LeaveType), nullable=True)
-    
+    auth_status = db.Column(SQLEnum(AuthorizedDecision), nullable=False)
+    cancelled_job_no = db.Column(db.ForeignKey("job_user.job_no"), nullable=True)
+
+    cancelled_job_no = db.Column(db.ForeignKey("job_cancel.job_no"), unique=True, nullable=True)
+    authorize_job_no = 
+    cancelled_job = db.relationship('JobUserCancel', foreign_keys=[cancelled_job_no], backref=db.backref('original_job', uselist=False, remote_side=[JobLeaveCancel.job_no]), lazy='select')
+
     __mapper_args__ = {
         "polymorphic_identity": "job_leave"
     }
 
     logger = setup_logger('models.job_leave')
     errors = LeaveError
+    cancel_intent = Intent.CANCEL_LEAVE
 
     def __init__(self, name):
         super().__init__(name)
-        self.local_db_updated = False
         self.duplicate_dates = []
         self.validation_errors = set()
+        self.authorised_status = False
         
     ###############################
     # SETTING REDIS DATA
@@ -51,7 +57,7 @@ class JobLeave(JobUser):
                 "dates": [date.strftime("%d-%m-%Y") for date in self.dates_to_update],
                 "duplicate_dates": [date.strftime("%d-%m-%Y") for date in self.duplicate_dates],
                 # returned by generate base
-                "validation_errors": list(self.validation_errors), # TODO CREATE UTIL FUNCTION
+                "validation_errors": [error.value for error in list(self.validation_errors)],
                 # can be blank after genenrate base
                 "leave_type": getattr(self, 'leave_type')
             }
@@ -65,19 +71,29 @@ class JobLeave(JobUser):
     def update_info(self, job_information, selection_type, selection): # TODO
         self.dates_to_update = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in job_information['dates']]
         self.duplicate_dates = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in job_information['duplicate_dates']]
-        self.validation_errors = set(job_information.get('validation_errors'))
+        self.validation_errors = set([LeaveError(int(value)) for value in job_information.get('validation_errors')])
         if selection_type == SelectionType.LEAVE_TYPE:
             self.leave_type = selection
         
     ##########################
+    # HANDLING CANCELLATION
+    ##########################
+    
+    def get_cancel_details(self):
+        return LeaveRecord.get_active_records(self, past_9am=True)
+    
+    def handle_cancellation(self, cancel_job, records):
+        if not records or len(records) == 0:
+            raise ReplyError(LeaveError.NO_DATES_TO_DEL)
+        
+        updated_db_msg = LeaveRecord.cancel_leaves(self, records, cancel_job)
+        self.content_sid = os.environ.get("LEAVE_NOTIFY_CANCEL_SID")
+        self.forward_messages()
+        return f"{updated_db_msg}, messages have been forwarded. Pending success..."
+
+    ##########################
     # HANDLING INCOMING MSGES
     ##########################
-
-    @overrides
-    def is_partially_completed(self):
-        if self.local_db_updated:
-            return True
-        return False
     
     def handle_initial_request(self, selection=None):
         '''Returns Reply to Initial Message'''
@@ -106,7 +122,7 @@ class JobLeave(JobUser):
         # these 2 functions are implemented with method overriding
         self.validate_confirm_message() # checks for ReplyErrors based on state
 
-        updated_db_msg = LeaveRecord.insert_local_db(self)
+        updated_db_msg = LeaveRecord.add_leaves(self)
         self.content_sid = os.environ.get("LEAVE_NOTIFY_SID")
         self.forward_messages()
         return f"{updated_db_msg}, messages have been forwarded. Pending success..."
@@ -118,6 +134,10 @@ class JobLeave(JobUser):
         pass
 
     def handle_reject(self):
+        pass
+
+    def cleanup_on_error(self):
+        LeaveRecord.update_local_db(self, status=LeaveStatus.ERROR)
         pass
 
     def set_validation_errors(self):
@@ -350,9 +370,6 @@ class JobLeave(JobUser):
 
         session.commit()
     
-    def create_cancel_job(self, user_str):
-        return self.create_job(Intent.CANCEL_LEAVE, user_str, self.user.name, self.job_no, self.leave_type)
-    
     #######################
     # SECTION CONFIRMATION 
     #######################
@@ -363,7 +380,6 @@ class JobLeave(JobUser):
 
     @overrides
     def forward_messages(self):
-        self.set_dates_str()
         self.cv_list = self.get_forward_leave_cv()
         super().forward_messages()
 
@@ -393,13 +409,15 @@ class JobLeave(JobUser):
     # CV TEMPLATES FOR MANY MESSAGES
     #################################
         
-    def set_dates_str(self):
+    def set_dates_str(self, mark_late):
         dates_str = print_all_dates(self.dates_to_update, date_obj=True)
-        cur_date = current_sg_time().date()
-        cur_date_str = cur_date.strftime('%d/%m/%Y')
 
-        if get_latest_date_past_9am() > cur_date:
-            dates_str = re.sub(cur_date_str, cur_date_str + ' (*LATE*)', dates_str)
+        if mark_late:
+            cur_date = current_sg_time().date()
+            cur_date_str = cur_date.strftime('%d/%m/%Y')
+
+            if get_latest_date_past_9am() > cur_date:
+                dates_str = re.sub(cur_date_str, cur_date_str + ' (*LATE*)', dates_str)
 
         return dates_str
 
@@ -454,83 +472,13 @@ class JobLeave(JobUser):
         return LeaveIssue.OVERLAP.value + print_all_dates(self.duplicate_dates, date_obj=True)
 
     @JobUser.loop_relations # just need to pass in the user when calling get_forward_leave_cv
-    def get_forward_leave_cv(self, relation):
-        '''LEAVE_NOTIFY_SID; The decorator is for SENDING MESSAGES TO ALL RELATIONS OF ONE PERSON'''
+    def get_forward_leave_cv(self, relation, mark_late=False):
+        '''LEAVE_NOTIFY_SID and LEAVE_NOTIFY_CANCEL_SID; The decorator is for SENDING MESSAGES TO ALL RELATIONS OF ONE PERSON'''
         duration = len(self.dates_to_update)
         return {
             '1': relation.alias,
             '2': self.user.alias,
             '3': self.leave_type.lower(),
             '4': f"{str(duration)} {'day' if duration == 1 else 'days'}",
-            '5': self.set_dates_str()
+            '5': self.set_dates_str(mark_late)
         }
-
-class JobLeaveCancel(JobLeave):
-    __tablename__ = "job_leave_cancel"
-    job_no = db.Column(db.ForeignKey("job_leave.job_no"), primary_key=True) # TODO on delete cascade?
-    initial_job_no = db.Column(db.ForeignKey("job_leave.job_no"), unique=True, nullable=False)
-
-    original_job = db.relationship('JobLeave', foreign_keys=[initial_job_no], backref=db.backref('cancelled_job', uselist=False, remote_side=[JobLeave.job_no]), lazy='select')
-
-    __mapper_args__ = {
-        "polymorphic_identity": "job_leave_cancel",
-        'inherit_condition': (job_no == JobLeave.job_no),
-    }
-
-    def __init__(self, name, initial_job_no, leave_type):
-        super().__init__(name)
-        self.initial_job_no = initial_job_no
-        self.local_db_updated = False
-        self.leave_type = leave_type
-
-    @overrides
-    def check_cancel_valid(self, selection):        
-        self.logger.info(f"original job status: {self.original_job.status}")
-        
-        if self.original_job.local_db_updated != True:
-            raise ReplyError(Error.JOB_FAILED_MSG)
-        
-    @overrides
-    def forward_messages(self):
-        self.cv_list = self.get_forward_cancel_leave_cv()
-        super().forward_messages()
-
-        if len(self.successful_forwards) > 0:
-            return f"messages have been successfully forwarded to {join_with_commas_and(self.successful_forwards)}. Pending delivery success..."
-        else:
-            return f"All messages failed to send. You might have to update them manually, sorry about that"
-
-    def handle_cancel_request(self, selection=None):
-        # HANDLE CANCEL MSG
-        # if it has the user string, its the first msg, or a retry message. user_str attribute it set either in update_info or during job initialisation
-        if isinstance(self, JobLeaveCancel):
-            if selection != Decision.CANCEL:
-                logging.error(f"UNCAUGHT DECISION {selection}")
-                raise ReplyError(Error.UNKNOWN_ERROR)
-            self.check_cancel_valid(selection) # checks for ReplyErrors based on state
-
-        updated_db_msg = LeaveRecord.update_local_db(self)
-        if updated_db_msg == None:
-            raise ReplyError(Error.NO_DEL_DATE)
-        self.content_sid = os.environ.get("LEAVE_NOTIFY_CANCEL_SID")
-        self.forward_messages()
-        return f"{updated_db_msg}, messages have been forwarded. Pending success..."
-    
-    @JobUser.loop_relations # just need to pass in the user when calling get_forward_leave_cv
-    def get_forward_cancel_leave_cv(self, relation):
-        '''LEAVE_NOTIFY_CANCEL_SID'''
-
-        return {
-            '1': relation.alias,
-            '2': self.user.alias,
-            '3': self.original_job.leave_type.lower(),
-            '4': f"{str(self.duration)} {'day' if self.duration == 1 else 'days'}",
-            '5': print_all_dates(self.dates_to_update, date_obj=True)
-        }
-    
-    # inherit
-    # def handle_replied_future_results(self, future_results):
-
-    # inherit
-    # @overrides
-    # def validate_complete(self):

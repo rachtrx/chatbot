@@ -1,5 +1,5 @@
 from extensions import db
-from sqlalchemy import func
+from sqlalchemy import func, not_
 from logs.config import setup_logger
 from utilities import get_latest_date_past_9am, print_all_dates
 import json
@@ -77,42 +77,45 @@ class LeaveRecord(db.Model):
         return duplicate_records
 
     @classmethod
-    def insert_local_db(cls, job):
+    def add_leaves(cls, job):
         session = get_session()
         for date in job.dates_to_update:
             new_record = cls(job=job, date=date)
             session.add(new_record)
-        
-        job.local_db_updated = True
         session.commit()
 
         return f"Dates added for {print_all_dates(job.dates_to_update, date_obj=True)}"
 
     @classmethod
-    def update_local_db(cls, job):
+    def cancel_leaves(cls, records, cancel_job, status=LeaveStatus.CANCELLED):
+
         session = get_session()
-        records = session.query(cls).filter(
-            cls.job_no == job.original_job.job_no,
-            cls.date >= get_latest_date_past_9am(),
-            cls.is_cancelled == False
-        ).all()
-
-        if len(records) == 0:
-            return None
-
-        job.dates_to_update = []
+        dates_to_update = []
 
         with session.begin_nested():
             for record in records:
-                record.is_cancelled = True
+                record.leave_status = status
                 record.sync_status = None
-                record.cancelled_job_no = job.job_no
-                job.dates_to_update.append(record.date)
+                record.cancelled_job_no = cancel_job.job_no
+                dates_to_update.append(record.date)
             session.commit()
-        
-        job.local_db_updated = True
-        job.duration = len(job.dates_to_update)
 
-        return f"Dates removed for {print_all_dates(job.dates_to_update, date_obj=True)}"
+        cancel_job.duration = len(dates_to_update)
+        cancel_job.dates_to_update = dates_to_update
 
+        return f"Dates removed for {print_all_dates(dates_to_update, date_obj=True)}"
 
+    @classmethod
+    def get_active_records(cls, job, past_9am=False, ignore_statuses=[LeaveStatus.CANCELLED, LeaveStatus.ERROR, LeaveStatus.REJECTED]):
+        session = get_session()
+        query = session.query(cls).filter(cls.job_no == job.original_job.job_no)
+
+        # filter records based on 'past_9am'
+        if past_9am:
+            query = query.filter(cls.date >= get_latest_date_past_9am())
+
+        # Conditionally filter records based on 'status'
+        if ignore_statuses:
+            query = query.filter(not_(cls.leave_status.in_(ignore_statuses)))
+
+        return query.all()

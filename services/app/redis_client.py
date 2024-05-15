@@ -4,6 +4,7 @@ from logs.config import setup_logger
 from constants import JobStatus
 # from concurrent.futures import ThreadPoolExecutor
 from models.jobs.user.abstract import JobUser
+from models.jobs.user.base import JobUserInitial
 from models.exceptions import ReplyError
 from models.users import User
 from models.messages.sent import MessageSent
@@ -202,10 +203,7 @@ class Redis:
         if new_message_data.replied_msg_sid:
             ref_msg = MessageSent.get_message_by_sid(new_message_data.replied_msg_sid) # try to check the database
             job = ref_msg.job
-            job_info = self.get_job_info(job.job_no)
-            if job_info.get('sent_sid') != new_message_data.replied_msg_sid:
-                raise ReplyError(Error.NOT_LAST_MSG) # TODO ACCEPT AGAIN?
-            self.move_job_to_front(user_id, job_no)
+            self.move_job_to_front(user_id, job.job_no)
         else: # new message
             if self.get_current_job(user_id): # no process running, last job exists, user didn't send a reply
                 raise ReplyError(Error.PENDING_DECISION)
@@ -229,7 +227,7 @@ class Redis:
             self.add_job_info(job_no, job_details)
             # KEEP USER_JOB_DATA!
 
-            if job_details['selection_type'] == SelectionType.AUTHORIZED_DECISION.value:
+            if 'authoriser_number' in job_details:
                 new_user_id = self.hash_identifier(str(job_details['authoriser_number'])) # IMPT if expecting authorisation, shift the cache to store for RO
                 self.add_job(new_user_id, job_no) # pass to RO
                 self.clear_user_job_data(user_id, job_no)
@@ -296,7 +294,7 @@ class Redis:
             # OK
 
         self.update_user_status(user_id)
-        job_info = JobUser.general_workflow(new_msg, job_info)
+        job_info = JobUserInitial.general_workflow(new_msg, job_info)
         self.job_completed(job_info, user_id) # Assuming job_completed does not require parameters, or pass them if it does
 
         return "job started", new_msg
@@ -307,9 +305,10 @@ class Redis:
         job_info = self.get_job_info(callback_msg.job.job_no)
         if not job_info:
             raise ReplyError(Error.UNKNOWN_ERROR)
-        if job_info['selection_type'] == SelectionType.DECISION:
+
+        if callback_msg.selection_type == SelectionType.DECISION:
             job_info['status'] = JobStatus.PENDING_DECISION
-        elif job_info['selection_type'] == SelectionType.AUTHORISED_DECISION:
+        elif callback_msg.selection_type == SelectionType.AUTHORISED_DECISION:
             job_info['status'] = JobStatus.PENDING_AUTHORIZED_DECISION
         logging.info("updated job status to pending user reply")
         # Convert updated dictionary back to JSON and then encrypt it before storing

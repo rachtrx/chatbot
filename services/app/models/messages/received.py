@@ -80,18 +80,6 @@ class MessageSelection(MessageReceived):
         super().__init__(job_no, sid, body) # initialise message
         self.ref_msg_sid = ref_msg_sid
         self.selection = selection
-        
-    @classmethod
-    def get_latest_sent_message(cls, job_no):
-        session = get_session()
-        latest_message = session.query(MessageSent) \
-                        .filter(
-                            MessageSent.job_no == job_no,
-                            MessageSent.selection_type != None
-                        ).order_by(cls.timestamp.desc()) \
-                        .first()
-
-        return latest_message if latest_message else None
     
     def check_for_other_selection(self):
         

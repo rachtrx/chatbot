@@ -38,9 +38,9 @@ class Job(db.Model): # system jobs
         "polymorphic_on": "type"
     }
 
-    def __init__(self):
+    def __init__(self, job_no=None):
         logging.info(f"current time: {current_sg_time()}")
-        self.job_no = shortuuid.ShortUUID().random(length=8)
+        self.job_no = job_no or shortuuid.ShortUUID().random(length=8)
         self.logger.info(f"new job: {self.job_no}")
         self.created_at = current_sg_time()
         self.status = JobStatus.PROCESSING
@@ -153,6 +153,9 @@ class Job(db.Model): # system jobs
         if complete:
             self.commit_status(JobStatus.OK)
         session.commit()
+
+    def cleanup_on_error(self):
+        pass
         
 
     def commit_status(self, status, _forwards=False):
@@ -164,6 +167,7 @@ class Job(db.Model): # system jobs
         if status is None:
             return
         elif status is JobStatus.SERVER_ERROR or status is JobStatus.CLIENT_ERROR:
+            self.cleanup_on_error()
             self.logger.info(traceback.format_exc())
         
         if not _forwards:

@@ -1,5 +1,5 @@
 from extensions import db, get_session, twilio
-from constants import MessageType, SentMessageStatus, SelectionType, types_to_selections
+from constants import MessageType, SentMessageStatus, SelectionType, types_to_selections, AuthorizedDecision
 import os
 import json
 from .abstract import Message
@@ -41,6 +41,19 @@ class MessageSent(Message):
 
     def get_selection_type(self):
         return types_to_selections[self.selection_type]
+    
+    @classmethod
+    def get_latest_sent_message(cls, job_no):
+        session = get_session()
+        latest_message = session.query(cls) \
+            .filter(
+                cls.job_no == job_no,
+                cls.selection_type != None,
+                cls.type != "message_forward" # dont get the authorization msg
+            ).order_by(cls.timestamp.desc()) \
+            .first()
+
+        return latest_message if latest_message else None
 
     def commit_message_body(self, body):
         session = get_session()
