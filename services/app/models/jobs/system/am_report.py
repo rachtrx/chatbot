@@ -3,9 +3,9 @@ from extensions import db, get_session
 from .abstract import JobSystem
 from azure.utils import generate_header
 
-from logs.config import setup_logger
+from MessageLoggersetup_logger
 
-from constants import SentMessageStatus
+from constants import JobStatus
 from sqlalchemy.types import Enum as SQLEnum
 
 import os
@@ -26,7 +26,6 @@ class JobAmReport(JobSystem):
 
     __tablename__ = 'job_am_report'
     job_no = db.Column(db.ForeignKey("job_system.job_no"), primary_key=True)
-    forwards_status = db.Column(SQLEnum(SentMessageStatus), default=None, nullable=True)
 
     dept_order = ('Corporate', 'ICT', 'AP', 'Voc Ed', 'Lower Pri', 'Upper Pri', 'Secondary', 'High School', 'Relief')
     
@@ -49,10 +48,9 @@ class JobAmReport(JobSystem):
         self.global_cv = {}
 
     def validate_complete(self):
-        if self.forwards_status == SentMessageStatus.OK:
-            messages_sent = super().validate_complete()
-            if messages_sent:
-                return True
+        messages_sent = super().validate_complete()
+        if messages_sent:
+            return True
         return False
     
     def generate_all_cv(self):

@@ -15,7 +15,7 @@ from PIL import Image
 import pytesseract
 import spacy
 
-from logs.config import setup_logger
+from MessageLoggersetup_logger
 
 setup_logger('es.file_extraction', 'es')
 

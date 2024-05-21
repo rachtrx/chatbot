@@ -6,7 +6,7 @@ from utilities import current_sg_time
 from config import twilio
 # from sqlalchemy.orm import joinedload
 
-from logs.config import setup_logger
+from MessageLoggersetup_logger
 
 import logging
 
@@ -56,7 +56,7 @@ class Message(db.Model):
         elif msg_type == MessageType.RECEIVED:
             from .received import MessageReceived
             new_message =  MessageReceived(*args, **kwargs)
-        elif msg_type == MessageType.CONFIRM:
+        elif msg_type == MessageType.SELECTION:
             from .received import MessageSelection
             new_message =  MessageSelection(*args, **kwargs)
         elif msg_type == MessageType.FORWARD:

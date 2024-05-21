@@ -160,15 +160,19 @@ def sms_reply_callback():
         else:
             job = message.job
             logging.info(f"callback received, status: {status}, sid: {sid}, message: {message}, Job found: {job}")
-            message_pendiing_reply = job.update_with_msg_callback(status, sid, message) # pending callback
-            if message_pendiing_reply:
+            message_pending_selection = job.update_with_msg_callback(status, sid, message) # pending callback
+            if message_pending_selection:
+                if message_pending_selection.selection_type == SelectionType.AUTHORIZED_DECISION:
+                    status = JobStatus.PENDING_AUTHORISED_DECISION
+                else:
+                    status = JobStatus.PENDING_DECISION
+                job.commit_status(job, status)
                 to_no = request.form.get("To")
                 user_id = redis.hash_identifier(str(to_no))
-                updated_status = redis.update_job_status(user_id, message_pendiing_reply) # update redis
-                if updated_status:
-                    job.commit_status(updated_status) # then update the database
-                    redis.start_next_job(user_id)
-                        
+                redis.start_next_job(user_id)
+            else:
+                redis.check_for_complete(job)
+            
     except Exception as e:
         logging.error(traceback.format_exc())
 

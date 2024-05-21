@@ -1,7 +1,7 @@
 from models.jobs.abstract import Job
 from datetime import timedelta
 
-from logs.config import setup_logger
+from MessageLoggersetup_logger
 from extensions import db
 
 from utilities import get_session, current_sg_time

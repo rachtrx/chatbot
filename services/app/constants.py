@@ -14,18 +14,19 @@ OVERLAP = 4
 
 class Intent(Enum):
     TAKE_LEAVE = 1
-    CANCEL_LEAVE = 2
-    TAKE_LEAVE_NO_TYPE = 3
-    SHAREPOINT_ADD_RECORD = 4
-    SHAREPOINT_DEL_RECORD = 5
-    OTHERS = 6
-    ES_SEARCH = 7
-    SEND_ERROR_MESSAGE = 8
+    CANCEL = 2
+    AUTHORISE = 3
+    TAKE_LEAVE_NO_TYPE = 4
+    SHAREPOINT_ADD_RECORD = 5
+    SHAREPOINT_DEL_RECORD = 6
+    OTHERS = 7
+    ES_SEARCH = 8
+    SEND_ERROR_MESSAGE = 9
 
 class MessageType(Enum):
     SENT = 1
     RECEIVED = 2
-    CONFIRM = 3
+    SELECTION = 3
     FORWARD = 4
 
 class SystemOperation(Enum):
@@ -60,7 +61,7 @@ class SelectionType(Enum):
     LEAVE_TYPE = 2
     AUTHORIZED_DECISION = 3
 
-types_to_selections = {
+type_to_class = {
     SelectionType.DECISION: Decision,
     SelectionType.LEAVE_TYPE: LeaveType,
     SelectionType.AUTHORIZED_DECISION: AuthorizedDecision
@@ -109,6 +110,12 @@ class SentMessageStatus(Enum):
     SERVER_ERROR = 500
     PENDING_CALLBACK = 302
 
+
+class ForwardStatus:
+    def __init__(self):
+        for status in SentMessageStatus:
+            setattr(self, status.name, [])
+
 class MetricStatus(Enum):
     OK = 200
     SERVER_ERROR = 500
@@ -132,7 +139,7 @@ class LeaveError(Enum):
     ALL_DUPLICATE_DATES = "You are already on leave for all these dates"
     NO_DATES_TO_DEL = "No dates were found past 9am today that are still active."
     CANCELLED_AFTER_REJECTION = "Leave has already been cancelled by _____" # TODO
-
+    NO_DATES_TO_UPDATE = "No dates were found past 9am today that are still pending approval."
 
 class Error(Enum):
     USER_NOT_FOUND = "I'm sorry, your contact is not in our database. Please check with HR and try again in an hour."

@@ -9,10 +9,10 @@ import threading
 from utilities import current_sg_time, print_all_dates, join_with_commas_and, get_latest_date_past_9am, combine_with_key_increment
 from overrides import overrides
 
-from logs.config import setup_logger
+from MessageLoggersetup_logger
 
 from models.exceptions import ReplyError, DurationError
-from models.jobs.user.abstract import JobUserInitial
+from models.jobs.user.abstract import JobUserInitial, JobUserInitial
 from models.leave_records import LeaveRecord
 import re
 import traceback
@@ -21,15 +21,10 @@ from sqlalchemy.types import Enum as SQLEnum
 
 class JobLeave(JobUserInitial):
     __tablename__ = "job_leave"
-    job_no = db.Column(db.ForeignKey("job_user.job_no"), primary_key=True) # TODO on delete cascade?
-    forwards_status = db.Column(SQLEnum(JobStatus), default=None, nullable=True)
+    job_no = db.Column(db.ForeignKey("job_user_initial.job_no"), primary_key=True) # TODO on delete cascade?
+    
     leave_type = db.Column(SQLEnum(LeaveType), nullable=True)
     auth_status = db.Column(SQLEnum(AuthorizedDecision), nullable=False)
-    cancelled_job_no = db.Column(db.ForeignKey("job_user.job_no"), nullable=True)
-
-    cancelled_job_no = db.Column(db.ForeignKey("job_cancel.job_no"), unique=True, nullable=True)
-    authorize_job_no = 
-    cancelled_job = db.relationship('JobUserCancel', foreign_keys=[cancelled_job_no], backref=db.backref('original_job', uselist=False, remote_side=[JobLeaveCancel.job_no]), lazy='select')
 
     __mapper_args__ = {
         "polymorphic_identity": "job_leave"
@@ -43,7 +38,7 @@ class JobLeave(JobUserInitial):
         super().__init__(name)
         self.duplicate_dates = []
         self.validation_errors = set()
-        self.authorised_status = False
+        self.auth_status = False
         
     ###############################
     # SETTING REDIS DATA
@@ -76,34 +71,55 @@ class JobLeave(JobUserInitial):
             self.leave_type = selection
         
     ##########################
-    # HANDLING CANCELLATION
+    # HANDLING SUBJOBS
     ##########################
     
-    def get_cancel_details(self):
-        return LeaveRecord.get_active_records(self, past_9am=True)
+    def get_cancel_details(self): # only find PENDING and APPROVED
+        return LeaveRecord.get_records(self, ignore_statuses=[LeaveStatus.CANCELLED, LeaveStatus.ERROR, LeaveStatus.REJECTED])
+    
+    def get_approve_details(self): # only find PENDING (cannot approve after reject)
+        return LeaveRecord.get_records(self, ignore_statuses=[LeaveStatus.CANCELLED, LeaveStatus.ERROR, LeaveStatus.REJECTED, LeaveStatus.APPROVED])
+
+    def get_reject_details(self): # only find PENDING and APRROVED
+        return LeaveRecord.get_records(self, ignore_statuses=[LeaveStatus.CANCELLED, LeaveStatus.ERROR, LeaveStatus.REJECTED])
+
+    def update_leaves(self, job, records, status):
+        updated_db_msg = LeaveRecord.update_leaves(self, records, job, status)
+        job.content_sid = os.environ.get("LEAVE_NOTIFY_CANCEL_SID")
+        job.cv_list = self.get_forward_leave_cv()
+        job.forward_messages()
+        return f"{updated_db_msg}, messages have been forwarded. Pending success..."
+
     
     def handle_cancellation(self, cancel_job, records):
         if not records or len(records) == 0:
             raise ReplyError(LeaveError.NO_DATES_TO_DEL)
         
-        updated_db_msg = LeaveRecord.cancel_leaves(self, records, cancel_job)
-        self.content_sid = os.environ.get("LEAVE_NOTIFY_CANCEL_SID")
-        self.forward_messages()
-        return f"{updated_db_msg}, messages have been forwarded. Pending success..."
+        return self.update_leaves(cancel_job, records, LeaveStatus.CANCELLED)
+    
+    def handle_approve(self, approval_job, records): 
+        if not records or len(records) == 0:
+            raise ReplyError(LeaveError.NO_DATES_TO_DEL)
+        
+        return self.update_leaves(approval_job, records, LeaveStatus.APPROVED)
+
+    def handle_reject(self, rejection_job, records):
+        if not records or len(records) == 0:
+            raise ReplyError(LeaveError.NO_DATES_TO_DEL)
+        
+        return self.update_leaves(rejection_job, records, LeaveStatus.APPROVED)
 
     ##########################
     # HANDLING INCOMING MSGES
     ##########################
     
-    def handle_initial_request(self, selection=None):
+    def handle_initial_request(self, user_str, selection=None):
         '''Returns Reply to Initial Message'''
-        if selection: # retry message
-            try:
-                self.leave_type = LeaveType(int(selection)) # previously had bus sometimes when not using str()
-                if not self.leave_type:
-                    raise Exception
-            except:
-                raise ReplyError(Error.UNKNOWN_ERROR)
+
+        self.user_str = user_str
+
+        if not isinstance(selection, LeaveType): # retry message
+            raise ReplyError(Error.UNKNOWN_ERROR)
 
         else: # first message
             self.generate_base()
@@ -124,16 +140,11 @@ class JobLeave(JobUserInitial):
 
         updated_db_msg = LeaveRecord.add_leaves(self)
         self.content_sid = os.environ.get("LEAVE_NOTIFY_SID")
+        self.cv_list = self.get_forward_leave_cv(mark_late=True)
         self.forward_messages()
         return f"{updated_db_msg}, messages have been forwarded. Pending success..."
     
     def handle_cancellation_before_authorisation(self): # TODO
-        pass
-
-    def handle_approve(self): 
-        pass
-
-    def handle_reject(self):
         pass
 
     def cleanup_on_error(self):
@@ -171,8 +182,8 @@ class JobLeave(JobUserInitial):
     def validate_complete(self):
         self.logger.info(f"user: {self.user.name}, messages: {self.messages}")
         
-        if self.local_db_updated and self.forwards_status == JobStatus.OK:
-            last_message_replied = self.all_messages_successful() # IMPT check for any double selections before unblocking
+        if self.local_db_updated and self.all_messages_successful():
+            last_message_replied =  # IMPT check for any double selections before unblocking
             if last_message_replied:
                 self.logger.info("all messages successful")
                 return True
@@ -377,16 +388,6 @@ class JobLeave(JobUserInitial):
     @overrides
     def validate_selection_message(self, selection):
         pass
-
-    @overrides
-    def forward_messages(self):
-        self.cv_list = self.get_forward_leave_cv()
-        super().forward_messages()
-
-        if len(self.successful_forwards) > 0:
-            return f"messages have been successfully forwarded to {join_with_commas_and(self.successful_forwards)}. Pending delivery success..."
-        else:
-            return f"All messages failed to send. You might have to update them manually, sorry about that"
         
     ###################
     # SECTION AUTHORISATION
@@ -471,7 +472,7 @@ class JobLeave(JobUserInitial):
     def print_overlap_dates(self):
         return LeaveIssue.OVERLAP.value + print_all_dates(self.duplicate_dates, date_obj=True)
 
-    @JobUser.loop_relations # just need to pass in the user when calling get_forward_leave_cv
+    @JobUserInitial.loop_relations # just need to pass in the user when calling get_forward_leave_cv
     def get_forward_leave_cv(self, relation, mark_late=False):
         '''LEAVE_NOTIFY_SID and LEAVE_NOTIFY_CANCEL_SID; The decorator is for SENDING MESSAGES TO ALL RELATIONS OF ONE PERSON'''
         duration = len(self.dates_to_update)

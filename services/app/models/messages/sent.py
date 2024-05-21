@@ -1,5 +1,5 @@
 from extensions import db, get_session, twilio
-from constants import MessageType, SentMessageStatus, SelectionType, types_to_selections, AuthorizedDecision
+from constants import MessageType, SentMessageStatus, SelectionType, type_to_class, AuthorizedDecision
 import os
 import json
 from .abstract import Message
@@ -12,7 +12,7 @@ from utilities import join_with_commas_and, print_all_dates
 from models.users import User
 from models.exceptions import ReplyError
 
-from logs.config import setup_logger
+from MessageLoggersetup_logger
 from sqlalchemy.types import Enum as SQLEnum
 
 
@@ -40,7 +40,7 @@ class MessageSent(Message):
         self.selection_type = selection_type
 
     def get_selection_type(self):
-        return types_to_selections[self.selection_type]
+        return type_to_class[self.selection_type]
     
     @classmethod
     def get_latest_sent_message(cls, job_no):
@@ -92,20 +92,20 @@ class MessageSent(Message):
         for template messages, sid and cv are passed through reply as a tuple
         '''
 
-        # kwargs["selection_type"] sets the MessageSent.selection_type col. job.selection_type is used to save into cache later on and not needed to be stored in JobUser or ReceivedMessage table...
+        # kwargs["selection_type"] sets the MessageSent.selection_type col. job.selection_type is used to save into cache later on and not needed to be stored in JobUserInitial or ReceivedMessage table...
         if msg_type == MessageType.FORWARD:
             to_no = kwargs['to_user'].sg_number # forward message
             kwargs["selection_type"] = getattr(job, 'selection_type', False)
         else: # SENT
-            from models.jobs.user.abstract import JobUser
+            from models.jobs.user.abstract import JobUserInitial
             from models.jobs.unknown.unknown import JobUnknown
             from models.jobs.system.abstract import JobSystem
             if isinstance(job, JobUnknown):
                 to_no = job.from_no # unknown number
-            elif isinstance(job, JobUser):
+            elif isinstance(job, JobUserInitial):
                 to_no = job.user.sg_number # user number
             elif isinstance(job, JobSystem):
-                to_no = job.root_user.sg_number # user number
+                to_no = job.user.sg_number # user number
             kwargs["selection_type"] = getattr(job, 'selection_type', False)
 
         # Send the message
@@ -165,8 +165,6 @@ class MessageForward(MessageSent):
     __tablename__ = "message_forward"
     sid = db.Column(db.ForeignKey("message_sent.sid"), primary_key=True)
     to_name = db.Column(db.String(80), nullable=False)
-    # forward_status = db.Column(db.Integer(), nullable=False)
-    # message_pending_forward = db.Column(db.ForeignKey("message.sid"))
 
     # unused
     @property

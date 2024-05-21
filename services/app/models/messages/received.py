@@ -8,7 +8,7 @@ from constants import leave_alt_words, Decision, AuthorizedDecision, LeaveType, 
 import logging
 from sqlalchemy.types import Enum as SQLEnum
 
-from logs.config import setup_logger
+from MessageLoggersetup_logger
 
 class MessageReceived(Message):
 
@@ -76,10 +76,10 @@ class MessageSelection(MessageReceived):
         'inherit_condition': sid == MessageReceived.sid
     }
 
-    def __init__(self, job_no, sid, body, ref_msg_sid, selection):
-        super().__init__(job_no, sid, body) # initialise message
-        self.ref_msg_sid = ref_msg_sid
-        self.selection = selection
+    def __init__(self, job_no, message):
+        super().__init__(job_no, message['sid'], message['body']) # initialise message
+        self.ref_msg_sid = message['ref_msg_sid']
+        self.selection = message['selection']
     
     def check_for_other_selection(self):
         

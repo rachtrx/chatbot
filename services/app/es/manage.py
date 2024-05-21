@@ -8,7 +8,7 @@ import os
 import json
 import re
 import logging
-from logs.config import setup_logger
+from MessageLoggersetup_logger
 
 es = Elasticsearch(
     ["https://es01:9200"],

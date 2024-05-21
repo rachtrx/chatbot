@@ -11,11 +11,11 @@ from overrides import overrides
 
 from es.manage import search_for_document
 from models.exceptions import ReplyError, DurationError
-from models.jobs.user.abstract import JobUser
+from models.jobs.user.abstract import JobUserInitial
 
-from logs.config import setup_logger
+from MessageLoggersetup_logger
 
-class JobEs(JobUser):
+class JobEs(JobUserInitial):
     __tablename__ = "job_es"
     job_no = db.Column(db.ForeignKey("job_user.job_no"), primary_key=True) # TODO on delete cascade?
     category = db.Column(db.String(20), nullable=True)
@@ -70,11 +70,11 @@ class JobEs(JobUser):
 
             return body
 
-    def check_for_complete(self):
-        last_message_replied = self.all_messages_successful()
-        if self.answered and last_message_replied:
-            self.commit_status(JobStatus.OK)
-            self.logger.info("job complete")
+    # def check_for_complete(self): # IMPT MOVED TO REDIS
+    #     last_message_replied = self.all_messages_successful()
+    #     if self.answered and last_message_replied:
+    #         self.commit_status(JobStatus.OK)
+    #         self.logger.info("job complete")
 
     def get_es_reply(self):
 

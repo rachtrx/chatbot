@@ -1,6 +1,6 @@
 from extensions import db
 from sqlalchemy import func, not_
-from logs.config import setup_logger
+from MessageLoggersetup_logger
 from utilities import get_latest_date_past_9am, print_all_dates
 import json
 import time
@@ -87,7 +87,7 @@ class LeaveRecord(db.Model):
         return f"Dates added for {print_all_dates(job.dates_to_update, date_obj=True)}"
 
     @classmethod
-    def cancel_leaves(cls, records, cancel_job, status=LeaveStatus.CANCELLED):
+    def update_leaves(cls, records, cancel_job, status=LeaveStatus.CANCELLED):
 
         session = get_session()
         dates_to_update = []
@@ -106,7 +106,7 @@ class LeaveRecord(db.Model):
         return f"Dates removed for {print_all_dates(dates_to_update, date_obj=True)}"
 
     @classmethod
-    def get_active_records(cls, job, past_9am=False, ignore_statuses=[LeaveStatus.CANCELLED, LeaveStatus.ERROR, LeaveStatus.REJECTED]):
+    def get_records(cls, job, ignore_statuses, past_9am=True):
         session = get_session()
         query = session.query(cls).filter(cls.job_no == job.original_job.job_no)
 

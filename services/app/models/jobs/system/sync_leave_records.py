@@ -5,7 +5,7 @@ from utilities import current_sg_time
 from datetime import datetime, timedelta
 from azure.utils import loop_leave_files, generate_header
 from models.jobs.system.abstract import JobSystem
-from logs.config import setup_logger
+from MessageLoggersetup_logger
 from extensions import db, get_session
 import pandas as pd
 from models.exceptions import AzureSyncError, ReplyError
@@ -23,7 +23,6 @@ class JobSyncRecords(JobSystem):
     __tablename__ = 'job_sync_records'
 
     job_no = db.Column(db.ForeignKey("job_system.job_no", ondelete='CASCADE'), primary_key=True)
-    forwards_status = db.Column(db.Integer, default=None, nullable=True)
     
     __mapper_args__ = {
         "polymorphic_identity": "job_sync_records",

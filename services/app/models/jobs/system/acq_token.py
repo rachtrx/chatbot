@@ -1,6 +1,6 @@
 from extensions import db
 from .abstract import JobSystem
-from logs.config import setup_logger
+from MessageLoggersetup_logger
 import os
 import msal
 from azure.utils import generate_header

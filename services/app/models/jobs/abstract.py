@@ -2,14 +2,18 @@ from extensions import db, get_session, remove_thread_session
 from sqlalchemy import inspect
 import shortuuid
 import logging
-from constants import MessageType, Error, JobStatus, SentMessageStatus
-from utilities import current_sg_time, join_with_commas_and, log_instances
+from constants import MessageType, Error, JobStatus, SentMessageStatus, SystemOperation, Intent, ForwardStatus
+from utilities import current_sg_time, join_with_commas_and, log_instances, run_new_context
 import json
 import os
 import threading
+from datetime import datetime, timedelta
+from models.users import User
+from datetime import datetime, timedelta
+import logging
 
 from models.exceptions import ReplyError
-from logs.config import setup_logger
+from MessageLoggersetup_logger
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 import time
@@ -17,33 +21,32 @@ from models.users import User
 
 from models.messages.sent import MessageSent, MessageForward
 from models.messages.received import MessageSelection
-
-from functools import wraps
 from sqlalchemy.types import Enum as SQLEnum
 
 class Job(db.Model): # system jobs
 
+    __abstract__ = True
     logger = setup_logger('models.job')
 
-    __tablename__ = 'job'
-
     job_no = db.Column(db.String, primary_key=True)
-    type = db.Column(db.String(50))
+    type = db.Column(SQLEnum(SystemOperation, Intent), nullable=False)
     status = db.Column(SQLEnum(JobStatus), nullable=False)
     created_at = db.Column(db.DateTime(timezone=True))
     locked = db.Column(db.Boolean(), nullable=False)
+    name = db.Column(db.String(80), nullable=True)
     
     __mapper_args__ = {
-        "polymorphic_identity": "job",
+        "polymorphic_identity": None,
         "polymorphic_on": "type"
     }
 
-    def __init__(self, job_no=None):
+    def __init__(self, job_no=None, name=None):
         logging.info(f"current time: {current_sg_time()}")
         self.job_no = job_no or shortuuid.ShortUUID().random(length=8)
         self.logger.info(f"new job: {self.job_no}")
         self.created_at = current_sg_time()
         self.status = JobStatus.PROCESSING
+        self.name = name
         self.locked = False
 
     def unlock(self, session):
@@ -54,66 +57,62 @@ class Job(db.Model): # system jobs
         self.locked = True
         session.commit()
 
-    # BUG
-    @staticmethod
-    def run_new_context(wait_time=None):
-        def decorator(func):
-            @wraps(func)
-            def wrapper(self, *args, **kwargs):
-                from manage import create_app
+    @property
+    def user(self):
+        if not getattr(self, '_user', None):
+            session = get_session()
+            self.user = session.query(User).filter_by(name=self.name).first()
+        return self._user
 
-                result = None
+    @user.setter
+    def user(self, value):
+        self._user = value
 
-                # logging.basicConfig(
-                #     filename='/var/log/app.log',  # Log file path
-                #     filemode='a',  # Append mode
-                #     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Log message format
-                #     level=logging.ERROR  # Log level
-                # )
-
-                if wait_time:
-                    time.sleep(wait_time)
-
-                app = create_app()
-                with app.app_context():
-                    session = get_session()
-                    logging.info("In decorator")
-
-                    try:
-                        for _ in range(300):
-                            updated_job = session.query(Job).filter_by(job_no = self.job_no).first()
-                            if not updated_job.locked:
-                                break
-                        if not updated_job.locked:
-                            log_instances(session, "run_new_context")
-                            updated_job.lock(session)
-                            session.commit()
-                        else:
-                            raise Exception                            
-
-                        logging.info(id(session))
-                        result = func(updated_job, *args, **kwargs)
-                    
-                        if isinstance(updated_job, Job):
-                            updated_job.unlock(session)
-
-                        logging.info(f"Result in decorator: {result}")
-
-                    except Exception as e:
-                        session.rollback()
-                        logging.error("Something went wrong! Exception in decorator")
-                        logging.error(traceback.format_exc())
-                        raise
-                    finally:
-                        logging.info(id(session))
-                        if threading.current_thread() == threading.main_thread():
-                            logging.info("This is running in the main thread.")
-                        else:
-                            logging.info("This is running in a separate thread.")
-                            remove_thread_session()
-                        return result
-            return wrapper
-        return decorator
+    @classmethod
+    def create_job(cls, intent, *args, **kwargs):
+        new_job = None
+        if isinstance(intent, SystemOperation):
+            if intent == SystemOperation.MAIN:
+                new_job = cls(*args, **kwargs)
+            elif intent == SystemOperation.ACQUIRE_TOKEN:
+                from .system.acq_token import JobAcqToken
+                new_job = JobAcqToken(*args, **kwargs)
+            elif intent == SystemOperation.AM_REPORT:
+                from .system.am_report import JobAmReport
+                new_job = JobAmReport(*args, **kwargs)
+            # Add conditions for other subclasses
+            elif intent == SystemOperation.SYNC_USERS:
+                from .system.sync_users import JobSyncUsers
+                new_job =  JobSyncUsers(*args, **kwargs)
+            elif intent == SystemOperation.SYNC_LEAVE_RECORDS:
+                from .system.sync_leave_records import JobSyncRecords
+                new_job =  JobSyncRecords(*args, **kwargs)
+            elif intent == SystemOperation.INDEX_DOCUMENT:
+                pass # TODO
+        elif isinstance(intent, Intent):
+            '''args is typically "user" and "options"'''
+            if intent == Intent.CANCEL:
+                from .user import JobUserCancel
+                new_job = JobUserCancel(*args, **kwargs)
+            elif intent == Intent.AUTHORISE:
+                from .user import JobUserAuthorise
+                new_job = JobUserAuthorise(*args, **kwargs)
+            if intent == Intent.TAKE_LEAVE:
+                from .user.leave import JobLeave
+                new_job = JobLeave(*args, **kwargs)
+            # Add conditions for other subclasses
+            elif intent == Intent.ES_SEARCH:
+                from .user.es import JobEs
+                new_job =  JobEs(*args, **kwargs)
+            elif intent == Intent.OTHERS:
+                new_job =  cls(*args, **kwargs)
+        if not new_job:
+            raise ValueError(f"Unknown intent: {intent}")
+        new_job.error = False
+        session = get_session()
+        session.add(new_job)
+        session.commit()
+        return new_job
 
     def all_messages_successful(self):
         '''also checks for presence of the other confirm option'''
@@ -139,26 +138,20 @@ class Job(db.Model): # system jobs
 
     # to implement
     def validate_complete(self):
-        return True
+        if self.status == JobStatus.OK and self.all_messages_successful():
+            return True
+        return False
 
     def set_cache_data(self):
         pass
 
-    def check_for_complete(self):
-        session = get_session()
-        if self.status == JobStatus.OK:
-            return
-        complete = self.validate_complete()
-        self.logger.info(f"complete: {complete}")
-        if complete:
-            self.commit_status(JobStatus.OK)
-        session.commit()
+    
 
     def cleanup_on_error(self):
         pass
         
 
-    def commit_status(self, status, _forwards=False):
+    def commit_status(self, status):
         '''tries to update status'''
 
         session = get_session()
@@ -170,26 +163,33 @@ class Job(db.Model): # system jobs
             self.cleanup_on_error()
             self.logger.info(traceback.format_exc())
         
-        if not _forwards:
-            self.status = status
-        else:
-            self.forwards_status = status
+        self.status = status
         session.commit()
 
         job2 = session.query(Job).filter_by(job_no=self.job_no).first()
         logging.info(f"job no: {job2.job_no}")
 
-        logging.info(f"Status in commit status: {job2.status if not _forwards else job2.forwards_status}, status passed: {status}")
+        logging.info(f"Status in commit status: {job2.status}, status passed: {status}")
 
         return
-
-    def forward_status_not_null(self):
-        if self.forwards_status == None:
-            return False
-        return True
     
     @run_new_context(wait_time = 5)
-    def check_message_forwarded(self, seq_no, _type, alias=False):
+    def update_user_on_forwards(self, message_type, seq_no, use_name_alias):
+        statuses = self.check_message_forwarded(seq_no)
+
+        content_variables = {
+            '1': message_type,
+            '2': join_with_commas_and([user.alias if use_name_alias else user.name for user in statuses.OK]) if len(statuses.OK) > 0 else "NA",
+            '3': join_with_commas_and([user.alias if use_name_alias else user.name for user in statuses.SERVER_ERROR]) if len(statuses.SERVER_ERROR) > 0 else "NA",
+            '4': join_with_commas_and([user.alias if use_name_alias else user.name for user in statuses.PENDING_CALLBACK]) if len(statuses.PENDING_CALLBACK) > 0 else "NA"
+        }
+        
+        content_variables = json.dumps(content_variables)
+
+        reply = (os.environ.get("FORWARD_MESSAGES_CALLBACK_SID"), content_variables)
+        MessageForward.send_msg(MessageType.SENT, reply, self)
+    
+    def check_message_forwarded(self, seq_no):
 
         session = get_session()
         logging.info(f"session id in check_message_forwarded: {id(session)}")
@@ -211,39 +211,16 @@ class Job(db.Model): # system jobs
             # logging.info([f_msg.forward_status, f_msg.sid] for f_msg in forwarded_msgs)
             logging.info(list([f_msg.status, f_msg.sid] for f_msg in forwarded_msgs))
 
-            success = []
-            failed = []
-            unknown = []
+            statuses = ForwardStatus()
             for f_msg in forwarded_msgs:
-                if alias:
-                    to_name = f_msg.to_user.alias
 
                 if f_msg.status == SentMessageStatus.OK:
-                    success.append(to_name)
+                    statuses.OK.append(f_msg.to_user)
                 elif f_msg.status == SentMessageStatus.SERVER_ERROR:
-                    failed.append(to_name)
-                else:
-                    unknown.append(to_name)
-
-            content_variables = {
-                '1': _type,
-                '2': join_with_commas_and(success) if len(success) > 0 else "NA",
-                '3': join_with_commas_and(failed) if len(failed) > 0 else "NA",
-                '4': join_with_commas_and(unknown) if len(unknown) > 0 else "NA"
-            }
-            
-            content_variables = json.dumps(content_variables)
-
-            reply = (os.environ.get("FORWARD_MESSAGES_CALLBACK_SID"), content_variables)
-
-            MessageForward.send_msg(MessageType.SENT, reply, self)
-
-            if not len(failed) > 0 and not len(unknown) > 0: 
-                self.commit_status(JobStatus.OK, _forwards=True)
-            elif len(unknown) > 0:
-                self.commit_status(JobStatus.PROCESSING, _forwards=True)
-            else:
-                self.commit_status(JobStatus.SERVER_ERROR, _forwards=True)
+                    statuses.SERVER_ERROR.append(f_msg.to_user)
+                else: # TODO ENSURE PENDING_CALLBACK
+                    statuses.PENDING_CALLBACK.append(f_msg.to_user)
+            return statuses
             
         except Exception as e:
             logging.error(traceback.format_exc())
@@ -274,20 +251,17 @@ class Job(db.Model): # system jobs
             
             if message.type == "message_forward":
                 logging.info(f"forwarded message {sid} was sent successfully")
-                if self.forward_status_not_null():
-                    self.check_message_forwarded(message.seq_no, self.map_job_type())
+                if self.forwards_status_sent(message.seq_no):
+                    self.update_user_on_forwards(message.seq_no, self.map_job_type())
 
-            message.job.check_for_complete()
-
-            
             # reply message expecting user reply. just to be safe, specify the 2 types of messages
         
         elif status == "failed":
             # job immediately fails
             message.commit_status(SentMessageStatus.SERVER_ERROR)
 
-            if message.type == "message_forward" and self.forward_status_not_null():
-                self.check_message_forwarded(message.seq_no, self.map_job_type())
+            if message.type == "message_forward" and self.forwards_status_sent():
+                self.update_user_on_forwards(message.seq_no, self.map_job_type())
             else:
                 self.commit_status(JobStatus.SERVER_ERROR) # forward message failed is still ok to some extent, especially if the user cancels afterwards. It's better to inform about the cancel
 
@@ -302,9 +276,10 @@ class Job(db.Model): # system jobs
         from models.jobs.system.abstract import JobSystem
 
         if isinstance(self, JobLeave):
-            if isinstance(self, JobLeaveCancel):
-                return "your leave cancellation"
             return "your leave"
+        
+        if isinstance(self, JobLeaveCancel):
+            return "your leave cancellation"
         
         elif isinstance(self, JobSystem):
             return self.type
@@ -378,7 +353,7 @@ class Job(db.Model): # system jobs
 
     def forward_messages(self):
         '''
-        Ensure self has the following attributes: cv_list, which is usually created with a function under a @JobUser.loop_relations decorator
+        Ensure self has the following attributes: cv_list, which is usually created with a function under a @JobUserInitial.loop_relations decorator
         It is also within loop_relations that relations_list is set
         '''
 
@@ -392,6 +367,11 @@ class Job(db.Model): # system jobs
         self.logger.info(f"forwarding messages with this cv list: {self.cv_and_users_list}")
 
         MessageForward.forward_template_msges(self)
-            
 
-          
+        if len(self.successful_forwards) > 0:
+            return f"messages have been successfully forwarded to {join_with_commas_and(self.successful_forwards)}. Pending delivery success..."
+        else:
+            return f"All messages failed to send. You might have to update them manually, sorry about that"
+
+        # print(f"Job nos to delete: {job_nos}")
+        # logging.info(f"Job nos to delete: {job_nos}")

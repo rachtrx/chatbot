@@ -4,7 +4,7 @@ from flask import has_request_context, current_app
 import logging
 
 from twilio.rest import Client
-from redis_client import Redis
+from routing.redis_client import Redis
 from cryptography.fernet import Fernet
 import os
 

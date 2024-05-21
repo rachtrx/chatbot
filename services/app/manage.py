@@ -13,7 +13,7 @@ from models.jobs.system.acq_token import JobAcqToken
 from models.jobs.system.am_report import JobAmReport
 from models.jobs.system.sync_users import JobSyncUsers
 from models.jobs.system.sync_leave_records import JobSyncRecords
-from models.jobs.user.abstract import JobUser
+from models.jobs.user.abstract import JobUserInitial
 from models.jobs.user.leave import JobLeave
 from models.jobs.user.es import JobEs
 from models.leave_records import LeaveRecord

@@ -40,7 +40,7 @@ def upgrade() -> None:
     )
     op.create_table('job_system',
     sa.Column('job_no', sa.String(), nullable=False),
-    sa.Column('root_name', sa.String(length=80), nullable=True),
+    sa.Column('name', sa.String(length=80), nullable=True),
     sa.ForeignKeyConstraint(['job_no'], ['job.job_no'], ),
     sa.PrimaryKeyConstraint('job_no')
     )

@@ -9,6 +9,7 @@ from sqlalchemy import inspect as sql_inspect
 import threading
 import os
 from dotenv import load_dotenv
+from functools import wraps
 
 if os.environ.get('LIVE') == "1":
     log_level = logging.ERROR
@@ -144,3 +145,49 @@ def check_obj_state(obj):
         logging.info("Object is persistent (attached to a session, saved to the database)")
     elif inspector.detached:
         logging.info("Object is detached (was attached to a session, but now is not)")
+
+def run_new_context(wait_time):
+    '''used on instance methods that are ran in a new thread'''
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            from manage import create_app
+
+            result = None
+
+            if wait_time:
+                time.sleep(wait_time)
+
+            # logging.basicConfig(
+            #     filename='/var/log/app.log',  # Log file path
+            #     filemode='a',  # Append mode
+            #     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Log message format
+            #     level=logging.ERROR  # Log level
+            # )
+
+            app = create_app()
+            with app.app_context():
+                session = get_session()
+                logging.info("In decorator")
+
+                try:                           
+                    logging.info(id(session))
+                    result = func(self, *args, **kwargs)
+
+                    logging.info(f"Result in decorator: {result}")
+
+                except Exception as e:
+                    session.rollback()
+                    logging.error("Something went wrong! Exception in decorator")
+                    logging.error(traceback.format_exc())
+                    raise
+                finally:
+                    logging.info(id(session))
+                    if threading.current_thread() == threading.main_thread():
+                        logging.info("This is running in the main thread.")
+                    else:
+                        logging.info("This is running in a separate thread.")
+                        remove_thread_session()
+                    return result
+        return wrapper
+    return decorator

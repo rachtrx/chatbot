@@ -1,9 +1,9 @@
 import json
 import logging
-from logs.config import setup_logger
+from MessageLoggersetup_logger
 from constants import JobStatus
 # from concurrent.futures import ThreadPoolExecutor
-from models.jobs.user.abstract import JobUser
+from models.jobs.user.abstract import JobUserInitial
 from models.jobs.user.base import JobUserInitial
 from models.exceptions import ReplyError
 from models.users import User
@@ -93,7 +93,7 @@ class Redis:
     
     def update_user_status(self, user_id, status=1):
         user_status_key = f"user:{user_id}:status"
-        self.client.setex(user_status_key, JobUser.max_pending_duration, status)
+        self.client.setex(user_status_key, JobUserInitial.max_pending_duration, status)
 
     def get_user_status(self, user_id):
         user_status_key = f"user:{user_id}:status"
@@ -167,7 +167,7 @@ class Redis:
             last_job_info = json.loads(decrypted_data_json)
             return last_job_info
         return None
-    
+
     def move_job_to_front(self, user_id, job_no):
         user_jobs_key = f"user:{user_id}:jobs"
 
@@ -195,6 +195,10 @@ class Redis:
                 # Execute the pipeline
                 pipe.execute()
 
+    def update_job_info(self, job_no, new_data):
+        job_info = self.get_job_info(job_no)
+        self.add_job_info({**job_info, **new_data})
+
     @catch_reply_errors
     def enqueue_job(self, user_id, new_message_data):
         # Use a list as a queue for each user's jobs
@@ -203,6 +207,7 @@ class Redis:
         if new_message_data.replied_msg_sid:
             ref_msg = MessageSent.get_message_by_sid(new_message_data.replied_msg_sid) # try to check the database
             job = ref_msg.job
+            self.update_job_info(job.job_no, new_message_data)
             self.move_job_to_front(user_id, job.job_no)
         else: # new message
             if self.get_current_job(user_id): # no process running, last job exists, user didn't send a reply
@@ -260,13 +265,7 @@ class Redis:
         
         job_no = self.get_current_job(user_id) # cycle each job and check that it is still valid in the cache
         if not job_no: # no jobs
-            return None
-            
-        
-        if not new_msg:
-            # cannot get next job as selection might not have been sent. only get when job is DELETED or COMPLETED
-            return None
-        # OK             
+            return None      
 
         job_info = new_msg = None # either job_info or received msg has to be present at any time in the cache, so cycle each job and check that it is still valid in the cache
         while True: # IMPT will it reject the empty dictionary when job is initialised too??
@@ -277,10 +276,13 @@ class Redis:
             new_msg = self.get_next_message(user_id, job_no) # Proceed with setting the job in progress and starting it
             if job_info or new_msg:
                 break
-            self.clear_user_job_data(user_id, job_no)
+            self.clear_user_job_data(user_id, job_no) # loop and delete jobs with neither
 
         if not new_msg: # needs a new msg
-            return None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+            # cannot get next job as selection might not have been sent. only get when job is DELETED or COMPLETED
+            return None
+
+        # TODO GET JOB STATUS, DONT USE job_info['status'], its deprecated                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
 
         # might be NEW MESSAGE or REPLY or REPLY AFTER EXPIRY
         # new message, job_info optional (for quick replies)
@@ -298,24 +300,39 @@ class Redis:
         self.job_completed(job_info, user_id) # Assuming job_completed does not require parameters, or pass them if it does
 
         return "job started", new_msg
+    
+    def send_next_msg_to_user(self, user_id):
+        # before sending msg, check current job for user
 
-    def update_job_status(self, user_id, callback_msg):
-        '''updates job status to pending user reply in the cache as soon as the callback has been confirmed'''
+        # if theres a current job that is not the same job, dont send
+        # else send message
+
+        # move job to start of the queue
+        message_key = f"user:messages:{user_id}"
         
-        job_info = self.get_job_info(callback_msg.job.job_no)
-        if not job_info:
-            raise ReplyError(Error.UNKNOWN_ERROR)
+        if self.get_current_job(user_id) != 
+        reply = self.client.lpop(message_key, user_id)
+        from models.messages.sent import MessageSent
+        MessageSent.send_msg(reply) # TODO
 
-        if callback_msg.selection_type == SelectionType.DECISION:
-            job_info['status'] = JobStatus.PENDING_DECISION
-        elif callback_msg.selection_type == SelectionType.AUTHORISED_DECISION:
-            job_info['status'] = JobStatus.PENDING_AUTHORIZED_DECISION
-        logging.info("updated job status to pending user reply")
-        # Convert updated dictionary back to JSON and then encrypt it before storing
-        updated_data_json = json.dumps(job_info)
-        encrypted_updated_data = self.cipher_suite.encrypt(updated_data_json.encode())
-        self.add_job_info(user_id, callback_msg.job.job_no, encrypted_updated_data)
-        return job_info['status']
+    def add_pending_message_to_user_queue(self, user_id):
+        message_key = f"user:messages:{user_id}"
+        self.client.rpush(message_key, user_id)
+        self.send_next_msg_to_user(user_id)
+        
+
+    def check_for_complete(self, job):
+        job_info = self.get_job_info(job.job_no)
+        if job_info['status'] == JobStatus.PENDING_CALLBACK:
+            job.commit_status(JobStatus.OK)
+
+
+    #### NEW VERSION #####
+
+    def push_to_primary_queue(self, user_id):
+        
+
+    
             
 class RedisSubscriber:
     def __init__(self, redis_client):
@@ -344,7 +361,7 @@ class RedisSubscriber:
         if match:
             job_no = match.group(1)
             session = get_session()
-            job = session.query(JobUser).filter(JobUser.job_no == job_no).first()
+            job = session.query(JobUserInitial).filter(JobUserInitial.job_no == job_no).first()
             job.handle_job_expiry()
 
 
