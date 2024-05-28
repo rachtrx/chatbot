@@ -10,7 +10,7 @@ import traceback
 
 from azure.utils import generate_header, delay_decorator
 from utilities import current_sg_time, get_latest_date_past_9am
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 import calendar
 
 class SpreadsheetManager:

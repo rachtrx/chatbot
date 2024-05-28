@@ -3,7 +3,7 @@ from datetime import datetime
 from extensions import db, get_session
 # from sqlalchemy.orm import 
 from sqlalchemy import ForeignKey
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 from constants import SystemOperation, MetricStatus
 from utilities import current_sg_time
 import logging

@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 import logging
 
 from models.exceptions import ReplyError
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 import time
@@ -375,3 +375,34 @@ class Job(db.Model): # system jobs
 
         # print(f"Job nos to delete: {job_nos}")
         # logging.info(f"Job nos to delete: {job_nos}")
+
+
+class Job:
+    def __init__(self, job_id):
+        self.job_id = job_id
+        self.processes = []
+        self.queue = RedisQueue(name=f"job:{job_id}:queue")
+
+    def add_process(self, process):
+        self.processes.append(process)
+
+    def execute(self):
+        print(f"Executing job: {self.job_id}")
+        while self.queue.qsize() > 0:
+            message = self.queue.get()
+            if message:
+                self._execute_processes(message)
+
+    def _execute_processes(self, message):
+        results = []
+        for process in self.processes:
+            result = process.execute(message)
+            results.append(result)
+        self._send_results_to_users(results)
+
+    def _send_results_to_users(self, results):
+        for result in results:
+            user_id = result['user_id'] # provided by the process
+            response_queue = RedisQueue(name=f"user:{user_id}:responses")
+            response_queue.put(result)
+            print(f"Result sent to user {user_id}: {result}")

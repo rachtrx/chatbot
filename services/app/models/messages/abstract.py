@@ -6,7 +6,7 @@ from utilities import current_sg_time
 from config import twilio
 # from sqlalchemy.orm import joinedload
 
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 
 import logging
 

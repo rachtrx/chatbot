@@ -1,7 +1,7 @@
 from extensions import db, get_session
 # from sqlalchemy.orm import 
 from sqlalchemy import ForeignKey
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 from constants import MAX_UNBLOCK_WAIT
 import os
 

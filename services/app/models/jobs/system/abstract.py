@@ -1,6 +1,6 @@
 from extensions import db, get_session
 from models.jobs.abstract import Job
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 from constants import JobStatus, SystemOperation
 from overrides import overrides
 from models.users import User

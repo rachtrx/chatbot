@@ -10,7 +10,7 @@ import os
 
 db = SQLAlchemy()
 twilio = Client(os.environ.get('TWILIO_ACCOUNT_SID'), os.environ.get('TWILIO_AUTH_TOKEN'))
-redis = Redis(os.getenv("REDIS_URL"), Fernet(os.getenv("FERNET_KEY"))) # Fernet encryption key setup
+redis_client = Redis(os.getenv("REDIS_URL"), Fernet(os.getenv("FERNET_KEY"))) # Fernet encryption key setup
 
 ThreadSession = None
 

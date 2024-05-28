@@ -3,7 +3,7 @@ from extensions import db, get_session
 from .abstract import JobSystem
 from azure.utils import generate_header
 
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 
 from constants import JobStatus
 from sqlalchemy.types import Enum as SQLEnum

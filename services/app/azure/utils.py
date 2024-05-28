@@ -6,7 +6,7 @@ import time
 from utilities import current_sg_time
 from models.exceptions import AzureSyncError
 
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 
 def generate_header(token=None):
     

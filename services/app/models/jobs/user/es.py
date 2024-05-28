@@ -13,7 +13,7 @@ from es.manage import search_for_document
 from models.exceptions import ReplyError, DurationError
 from models.jobs.user.abstract import JobUserInitial
 
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 
 class JobEs(JobUserInitial):
     __tablename__ = "job_es"

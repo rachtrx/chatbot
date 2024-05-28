@@ -6,7 +6,7 @@ import logging
 import traceback
 from utilities import current_sg_time
 
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 
 # SECTION utils
 start_prefixes = r'from|on|for|starting|doctor|leave|mc|appointment|sick|doctor|ml|ccl|npl|medical cert|medical certificate'

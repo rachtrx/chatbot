@@ -1,6 +1,6 @@
 from extensions import db
 from sqlalchemy import func, not_
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 from utilities import get_latest_date_past_9am, print_all_dates
 import json
 import time

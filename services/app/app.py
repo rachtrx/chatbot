@@ -12,7 +12,7 @@ import traceback
 from sqlalchemy import inspect, event
 
 from manage import create_app
-from extensions import db, redis, twilio
+from extensions import db, redis_client, twilio
 
 from models.users import User
 from models.messages.received import MessageReceived
@@ -27,6 +27,14 @@ from constants import SystemOperation, SelectionType, JobStatus
 import os
 from sqlalchemy import create_engine
 from extensions import init_thread_session
+
+import jsonify
+import json
+import time
+
+from routing.MessageHandler import MessageHandler
+from routing.JobScheduler import JobScheduler
+from routing.RedisQueue import RedisQueue
 
 import threading
 from dataclasses import dataclass
@@ -85,16 +93,9 @@ class NewMessageData:
     sid: str
     replied_msg_sid: Optional[str] = None
     selection: Optional[int] = None
-
-@app.route("/chatbot/sms/", methods=['GET', 'POST'])
-def sms_reply():
-    """Respond to incoming calls with a simple text message."""
-
-    logging.info("start message")
-    for key in request.values:
-        logging.info(f"{key}: {request.values[key]}")
-    logging.info("end message")
-
+    
+@app.route('/enqueue_message', methods=['POST'])
+def enqueue_message():
     try:
         from_no = request.form.get("From")
         logging.info(f"FROMNO: {from_no}")
@@ -107,25 +108,21 @@ def sms_reply():
             selection = int(request.form['ButtonPayload'])
         elif request.form.get('ListId', None):
             selection = int(request.form['ListId'])
-        new_job_info = NewMessageData(user_str, sid, replied_msg_sid, selection)
+        message = NewMessageData(user_str, sid, replied_msg_sid, selection)
 
         logging.info(f"User made a selection: {request.form.get('Body')}")
 
-        encoded_no = redis.hash_identifier(str(from_no))
+        user_id = redis_client.hash_identifier(str(from_no))
 
-        job_enqueued = redis.enqueue_job(user_id=encoded_no, new_job_info=new_job_info)
-        
-        if job_enqueued:
-            logging.info("job enqueued")
-            result = redis.start_next_job(encoded_no)
+        # Check for timeout
+        if check_user_processing_state(user_id):
+            return jsonify({"status": "User is currently processing another request. Please wait."}), 429
 
-            if result:
-                return result[0], JobStatus.OK.value  # job started
-            else:
-                return "job not started", JobStatus.OK.value  # Accepted but queued
-        else:
-            logging.info("job not queued")
-            return "job not queued", JobStatus.OK.value
+        response = message_handler.handle_message(message)
+        if response["status"] == "User is currently processing another request. Please wait.":
+            return jsonify(response), 429  # HTTP 429 Too Many Requests
+        return jsonify(response), 202
+    
     except Exception:
         logging.error(traceback.format_exc())
         twilio.messages.create(
@@ -133,8 +130,6 @@ def sms_reply():
             from_=os.environ.get('TWILIO_NO'),
             body="Really sorry, you caught error that we did find during development, please let us know!"
         )
-    
-    
 
 @app.route("/chatbot/sms/callback/", methods=['POST'])
 def sms_reply_callback():
@@ -168,10 +163,10 @@ def sms_reply_callback():
                     status = JobStatus.PENDING_DECISION
                 job.commit_status(job, status)
                 to_no = request.form.get("To")
-                user_id = redis.hash_identifier(str(to_no))
-                redis.start_next_job(user_id)
+                user_id = redis_client.hash_identifier(str(to_no))
+                redis_client.start_next_job(user_id)
             else:
-                redis.check_for_complete(job)
+                redis_client.check_for_complete(job)
             
     except Exception as e:
         logging.error(traceback.format_exc())
@@ -183,7 +178,7 @@ def start_redis_listener():
 
     def listen():
         with app.app_context():  # Ensure Redis listener has access to Flask app context
-            redis.subscriber.listen()
+            redis_client.subscriber.listen()
 
     listener_thread = threading.Thread(target=listen, daemon=True)
     listener_thread.start()
@@ -191,6 +186,45 @@ def start_redis_listener():
 if __name__ == "__main__":
     # local development, not for gunicorn
     # Configure the root logger
+    
+    with app.app_context():
+        redis_client.start_redis_listener()
+    app.run(debug=True)
+
+# RedisQueue helper functions
+def set_user_processing_state(user_id, timeout=30):
+    redis_client.setex(f"user:{user_id}:processing", timeout, "true")
+
+def check_user_processing_state(user_id):
+    return redis_client.exists(f"user:{user_id}:processing")
+
+def clear_user_processing_state(user_id):
+    redis_client.delete(f"user:{user_id}:processing")
+
+# Initialize JobScheduler and MessageHandler
+job_scheduler = JobScheduler()
+message_handler = MessageHandler(job_scheduler)
+
+# Start the message listener in a separate thread
+def message_listener(redis_queue, message_handler):
+    while True:
+        try:
+            message = redis_queue.get(block=True, timeout=10)
+            if message:
+                message_handler.handle_message(message)
+        except json.JSONDecodeError as e:
+            print(f"Error decoding message: {e}")
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+        time.sleep(0.1)  # Sleep briefly to avoid tight loop in case of continuous errors
+
+def start_listener():
+    redis_queue = RedisQueue(name='tasks')
+    listener_thread = threading.Thread(target=message_listener, args=(redis_queue, message_handler))
+    listener_thread.daemon = True
+    listener_thread.start()
+
+if __name__ == '__main__':
     logging.basicConfig(
         filename='/var/log/app.log',  # Log file path
         filemode='a',  # Append mode
@@ -198,6 +232,5 @@ if __name__ == "__main__":
         level=log_level  # Log level
     )
     logging.getLogger('twilio.http_client').setLevel(logging.WARNING)
-    with app.app_context():
-        redis.start_redis_listener()
+    start_listener()
     app.run(debug=True)

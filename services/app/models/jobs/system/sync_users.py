@@ -11,7 +11,7 @@ from extensions import db, get_session
 from models.users import User
 from models.exceptions import AzureSyncError
 
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 from utilities import join_with_commas_and
 import logging
 

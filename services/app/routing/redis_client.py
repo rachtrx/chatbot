@@ -1,6 +1,6 @@
 import json
 import logging
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 from constants import JobStatus
 # from concurrent.futures import ThreadPoolExecutor
 from models.jobs.user.abstract import JobUserInitial

@@ -11,7 +11,7 @@ from constants import (
     Decision, Error, Intent, JobStatus, LeaveType, MessageType, SelectionType, AuthorizedDecision
 )
 from extensions import db, get_session
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 from models.exceptions import ReplyError
 from models.jobs.abstract import Job
 from models.jobs.unknown.unknown import JobUnknown

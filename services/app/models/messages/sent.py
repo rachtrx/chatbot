@@ -12,7 +12,7 @@ from utilities import join_with_commas_and, print_all_dates
 from models.users import User
 from models.exceptions import ReplyError
 
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 from sqlalchemy.types import Enum as SQLEnum
 
 

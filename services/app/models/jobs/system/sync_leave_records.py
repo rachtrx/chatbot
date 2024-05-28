@@ -5,7 +5,7 @@ from utilities import current_sg_time
 from datetime import datetime, timedelta
 from azure.utils import loop_leave_files, generate_header
 from models.jobs.system.abstract import JobSystem
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 from extensions import db, get_session
 import pandas as pd
 from models.exceptions import AzureSyncError, ReplyError

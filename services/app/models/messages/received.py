@@ -8,7 +8,7 @@ from constants import leave_alt_words, Decision, AuthorizedDecision, LeaveType, 
 import logging
 from sqlalchemy.types import Enum as SQLEnum
 
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 
 class MessageReceived(Message):
 

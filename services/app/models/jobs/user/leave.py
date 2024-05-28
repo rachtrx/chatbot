@@ -9,7 +9,7 @@ import threading
 from utilities import current_sg_time, print_all_dates, join_with_commas_and, get_latest_date_past_9am, combine_with_key_increment
 from overrides import overrides
 
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 
 from models.exceptions import ReplyError, DurationError
 from models.jobs.user.abstract import JobUserInitial, JobUserInitial

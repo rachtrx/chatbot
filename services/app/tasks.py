@@ -11,7 +11,7 @@ from models.messages.sent import MessageSent
 from models.exceptions import AzureSyncError
 from utilities import current_sg_time
 from constants import JobStatus, SystemOperation
-from MessageLoggersetup_logger
+from MessageLogger import setup_logger
 import logging
 import traceback
 from sqlalchemy import create_engine
