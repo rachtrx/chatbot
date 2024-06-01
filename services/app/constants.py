@@ -23,12 +23,6 @@ class Intent(Enum):
     ES_SEARCH = 8
     SEND_ERROR_MESSAGE = 9
 
-class MessageType(Enum):
-    SENT = 1
-    RECEIVED = 2
-    SELECTION = 3
-    FORWARD = 4
-
 class SystemOperation(Enum):
     MAIN = 1
     SYNC_USERS = 2
@@ -36,61 +30,6 @@ class SystemOperation(Enum):
     AM_REPORT = 4
     ACQUIRE_TOKEN = 5
     SYNC_LEAVE_RECORDS = 6
-    
-class Decision(Enum):
-    CONFIRM: 1
-    CANCEL: 2
-
-class AuthorizedDecision(Enum):
-    APPROVE = 1
-    REJECT = 2
-
-class LeaveType(Enum):
-    MEDICAL = 1
-    CHILDCARE = 2
-    PARENTCARE = 3
-    HOSPITALISATION = 4
-    COMPASSIONATE = 5
-    # Paternity = 6
-    # Maternity = 7
-    # Anniversary = 8
-    # Marriage = 9
-
-class SelectionType(Enum):
-    DECISION = 1
-    LEAVE_TYPE = 2
-    AUTHORIZED_DECISION = 3
-
-type_to_class = {
-    SelectionType.DECISION: Decision,
-    SelectionType.LEAVE_TYPE: LeaveType,
-    SelectionType.AUTHORIZED_DECISION: AuthorizedDecision
-}
-
-# class SelectionType:
-#     enums = {
-#         'DECISION': Decision,
-#         'LEAVE_TYPE': LeaveType,
-#         'AUTHORIZED_DECISION': AuthorizedDecision
-#     }
-
-#     @classmethod
-#     def get_value(cls, enum_type, value):
-#         return cls.enums[enum_type](value).name
-    
-# use case: print(SelectionType.get_value('DECISION', 2))
-
-leave_keywords = {
-    LeaveType.MEDICAL: ["medical leave", "ml", "mc", "medical cert", "medical certificate", "sick", "medical appointment"],
-    LeaveType.CHILDCARE: ["childcare leave", "child care leave", "ccl"],
-    LeaveType.PARENTCARE: ["parentcare leave", "parent care leave", "pcl"],
-    LeaveType.HOSPITALISATION: ["hospitalisation leave", "hospitalization leave", "hl"],
-    LeaveType.COMPASSIONATE: ["compassionate leave", "cl"],
-    # LeaveType.Paternity: ["paternity leave"],
-    # LeaveType.Maternity: ['maternity leave'],
-    # LeaveType.Anniversary: ['birthday leave', 'wedding leave', 'anniversary leave'],
-    # LeaveType.Marriage: ['marriage leave']
-}
 
 class JobStatus(Enum):
     PROCESSING = 102
@@ -110,7 +49,6 @@ class SentMessageStatus(Enum):
     SERVER_ERROR = 500
     PENDING_CALLBACK = 302
 
-
 class ForwardStatus:
     def __init__(self):
         for status in SentMessageStatus:
@@ -121,25 +59,91 @@ class MetricStatus(Enum):
     SERVER_ERROR = 500
     PROCESSING = 102
 
+class MessageType(Enum):
+    SENT = 1
+    RECEIVED = 2
+    SELECTION = 3
+    FORWARD = 4
+
+class Decision(Enum):
+    CONFIRM = "confirm"
+    CANCEL = "cancel"
+
+class AuthorizedDecision(Enum):
+    APPROVE = "approve"
+    REJECT = "reject"
+
+class SelectionType(Enum):
+    DECISION = 1
+    LEAVE_TYPE = 2
+    AUTHORIZED_DECISION = 3
+
+class LeaveType(Enum):
+    MEDICAL = "medical"
+    CHILDCARE = "childcare"
+    PARENTCARE = "parentcare"
+    HOSPITALISATION = "hospitalisation"
+    COMPASSIONATE = "compassionate"
+    # Paternity = "paternity"
+    # Maternity = "maternity"
+    # Anniversary = "anniversary"
+    # Marriage = "marriage"
+
+type_to_class = {
+    SelectionType.DECISION: Decision,
+    SelectionType.LEAVE_TYPE: LeaveType,
+    SelectionType.AUTHORIZED_DECISION: AuthorizedDecision
+}
+
+leave_keywords = {
+    LeaveType.MEDICAL: ["medical leave", "ml", "mc", "medical cert", "medical certificate", "sick", "medical appointment"],
+    LeaveType.CHILDCARE: ["childcare leave", "child care leave", "ccl"],
+    LeaveType.PARENTCARE: ["parentcare leave", "parent care leave", "pcl"],
+    LeaveType.HOSPITALISATION: ["hospitalisation leave", "hospitalization leave", "hl"],
+    LeaveType.COMPASSIONATE: ["compassionate leave", "cl"],
+    # LeaveType.Paternity: ["paternity leave"],
+    # LeaveType.Maternity: ['maternity leave'],
+    # LeaveType.Anniversary: ['birthday leave', 'wedding leave', 'anniversary leave'],
+    # LeaveType.Marriage: ['marriage leave']
+}
+
+class LeaveStatus(Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    CANCELLED = "cancelled"
+    REJECTED = "rejected"
+    ERROR = "error"
+
+class LeaveStateEnum(Enum): # update the status then call next function
+    MESSAGE_RECEIVED = 1
+    DATES_FOUND = 2
+    DATES_NOT_FOUND = 3
+    LEAVE_TYPE_FOUND = 4
+    LEAVE_TYPE_NOT_FOUND = 5
+    REGEX_ERROR = 6
+    LEAVE_CONFIRMED = 7
+    LEAVE_APPROVED = 8
+    COMPLETED = 9
+    LEAVE_REJECTED = 10
+    LEAVE_CANCELLED = 11
+    SERVER_ERROR = 12
+
 class LeaveIssue(Enum):
     UPDATED = "I am unable to add leaves before today; the earliest date is today."
     LATE = "You have missed out the morning report for today's leave as it has already been sent out at 9am, but I am still able to update the records and inform your reporting contacts."
     OVERLAP = "There are overlapping dates on "
 
-class LeaveStatus(Enum):
-    PENDING = 1
-    APPROVED = 2
-    CANCELLED = 3
-    REJECTED = 4
-    ERROR = 5
-
 class LeaveError(Enum):
-    CANCEL_MSG = "I'm sorry, if I got the dates and duration wrong, please send it to me again!"
+    REGEX = "I'm sorry, if I got the dates and duration wrong, please send it to me again!"
     CONFIRMING_CANCELLED_MSG = "Leave has already been cancelled!"
     ALL_DUPLICATE_DATES = "You are already on leave for all these dates"
     NO_DATES_TO_DEL = "No dates were found past 9am today that are still active."
     CANCELLED_AFTER_REJECTION = "Leave has already been cancelled by _____" # TODO
     NO_DATES_TO_UPDATE = "No dates were found past 9am today that are still pending approval."
+    AUTHORISING_CANCELLED_MSG = "Leave has already been cancelled!"
+    LEAVE_CANCELLED = "Leave has already been cancelled!"
+    LEAVE_APPROVED = "Leave has already been approved!"
+    LEAVE_REJECTED = "Leave has already been rejected!"
 
 class Error(Enum):
     USER_NOT_FOUND = "I'm sorry, your contact is not in our database. Please check with HR and try again in an hour."
@@ -159,6 +163,7 @@ class Error(Enum):
     SENT_MESSAGE_MISSING = "Sorry, it seems like we could not find the relavant job"
     JOB_COMPLETED = "Sorry, the job has either completed or has failed."
     NOT_LAST_MSG = "Please only reply to the latest message!"
+    PENDING_AUTHORISATION = "This job is currently pending authorisation."
 
 ####################################
 # leave_job_status = {

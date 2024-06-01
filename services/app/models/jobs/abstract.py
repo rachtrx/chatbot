@@ -30,7 +30,6 @@ class Job(db.Model): # system jobs
 
     job_no = db.Column(db.String, primary_key=True)
     type = db.Column(SQLEnum(SystemOperation, Intent), nullable=False)
-    status = db.Column(SQLEnum(JobStatus), nullable=False)
     created_at = db.Column(db.DateTime(timezone=True))
     locked = db.Column(db.Boolean(), nullable=False)
     name = db.Column(db.String(80), nullable=True)
@@ -45,17 +44,8 @@ class Job(db.Model): # system jobs
         self.job_no = job_no or shortuuid.ShortUUID().random(length=8)
         self.logger.info(f"new job: {self.job_no}")
         self.created_at = current_sg_time()
-        self.status = JobStatus.PROCESSING
         self.name = name
         self.locked = False
-
-    def unlock(self, session):
-        self.locked = False
-        session.commit()
-
-    def lock(self, session):
-        self.locked = True
-        session.commit()
 
     @property
     def user(self):
@@ -351,7 +341,7 @@ class Job(db.Model): # system jobs
     ###################################
 
 
-    def forward_messages(self):
+    def forward_messages(self): # TODO PUSH TO USER QUEUE INSTEAD... SUBSQUEUE IF POSSIBLE
         '''
         Ensure self has the following attributes: cv_list, which is usually created with a function under a @JobUserInitial.loop_relations decorator
         It is also within loop_relations that relations_list is set
@@ -376,33 +366,30 @@ class Job(db.Model): # system jobs
         # print(f"Job nos to delete: {job_nos}")
         # logging.info(f"Job nos to delete: {job_nos}")
 
+    def send_response_to_user(self, user_id, result):
+        response_queue = RedisQueue(name=f"user:{user_id}:responses")
+        response_queue.put(result)
+        print(f"Result sent to user {user_id}: {result}")
+
 
 class Job:
     def __init__(self, job_id):
         self.job_id = job_id
-        self.processes = []
-        self.queue = RedisQueue(name=f"job:{job_id}:queue")
 
-    def add_process(self, process):
-        self.processes.append(process)
+    def process_message(self, message):
+        process_type = message['process_type']
+        process = self.create_process(process_type)
+        response = process.execute(message)
+        self.send_response_to_user(message['user_id'], response)
 
-    def execute(self):
-        print(f"Executing job: {self.job_id}")
-        while self.queue.qsize() > 0:
-            message = self.queue.get()
-            if message:
-                self._execute_processes(message)
+    def create_process(self, type):
+        if type == 'data_cleaning':
+            return DataCleaningProcess()
+        elif type == 'data_transformation':
+            return DataTransformationProcess()
+        elif type == 'model_training':
+            return ModelTrainingProcess()
+        else:
+            raise ValueError("Unsupported process type")
 
-    def _execute_processes(self, message):
-        results = []
-        for process in self.processes:
-            result = process.execute(message)
-            results.append(result)
-        self._send_results_to_users(results)
-
-    def _send_results_to_users(self, results):
-        for result in results:
-            user_id = result['user_id'] # provided by the process
-            response_queue = RedisQueue(name=f"user:{user_id}:responses")
-            response_queue.put(result)
-            print(f"Result sent to user {user_id}: {result}")
+    

@@ -144,7 +144,7 @@ class JobUserMain(Job):
                         job.commit_status(JobStatus.PROCESSING)
 
                         if selection == Decision.CANCEL:
-                            raise ReplyError(job.errors.CANCEL_MSG, job_status=JobStatus.CLIENT_ERROR)
+                            raise ReplyError(job.errors.REGEX, job_status=JobStatus.CLIENT_ERROR)
                         elif selection == Decision.CONFIRM:
                             reply = job.handle_initial_request(user_str, selection)
                         elif (selection == AuthorizedDecision.APPROVE or selection == AuthorizedDecision.REJECT):

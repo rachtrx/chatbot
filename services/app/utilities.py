@@ -191,3 +191,65 @@ def run_new_context(wait_time):
                     return result
         return wrapper
     return decorator
+
+
+# from contextlib import contextmanager
+# from sqlalchemy.exc import OperationalError, DBAPIError
+
+# class User(db.Model):
+#     id = db.Column(db.Integer, primary_key=True)
+#     username = db.Column(db.String(80), unique=True, nullable=False)
+
+# @contextmanager
+# def session_scope():
+#     """Provide a transactional scope around a series of operations."""
+#     session = db.session()
+#     try:
+#         yield session
+#         session.commit()
+#     except:
+#         session.rollback()
+#         raise
+#     finally:
+#         session.close()
+
+# def retry_operation(session, func, max_attempts=5, initial_wait=0.1, backoff_factor=2):
+#     """Attempt a DB operation with retries on failure.
+
+#     Args:
+#         session (SQLAlchemy.Session): The database session.
+#         func (callable): A function to execute that performs the operation.
+#         max_attempts (int): Maximum number of retry attempts.
+#         initial_wait (float): Initial wait time between retries in seconds.
+#         backoff_factor (int): Factor by which to increase wait time after each retry.
+#     """
+#     attempt = 0
+#     wait_time = initial_wait
+#     while attempt < max_attempts:
+#         try:
+#             result = func(session)
+#             session.commit()
+#             return result  # Return or break after successful execution and commit
+#         except (OperationalError, DBAPIError) as e:
+#             session.rollback()  # Roll back the transaction before retrying
+#             attempt += 1
+#             if attempt == max_attempts:
+#                 print(f"Failed after {max_attempts} attempts.")
+#                 break  # Optionally, you can return or raise a custom exception here
+#             time.sleep(wait_time)
+#             wait_time *= backoff_factor
+#             print(f"Retrying operation, attempt {attempt}...")
+#         except Exception as e:
+#             print(f"An unexpected error occurred: {e}")
+#             session.rollback()
+#             break
+
+# def update_user(session, user_id, new_username):
+#     user = session.query(User).filter(User.id == user_id).with_for_update().one()
+#     user.username = new_username
+
+# @app.route('/update_user/<int:user_id>/<new_username>')
+# def web_update_user(user_id, new_username):
+#     with session_scope() as session:
+#         retry_operation(session, lambda s: update_user(s, user_id, new_username))
+#         return "Update attempted."

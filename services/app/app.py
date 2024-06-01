@@ -32,8 +32,7 @@ import jsonify
 import json
 import time
 
-from routing.MessageHandler import MessageHandler
-from routing.JobScheduler import JobScheduler
+from services.app.routing.Sheduler import JobScheduler, MessageScheduler
 from routing.RedisQueue import RedisQueue
 
 import threading
@@ -203,20 +202,17 @@ def clear_user_processing_state(user_id):
 
 # Initialize JobScheduler and MessageHandler
 job_scheduler = JobScheduler()
-message_handler = MessageHandler(job_scheduler)
+message_scheduler = MessageScheduler()
 
 # Start the message listener in a separate thread
-def message_listener(redis_queue, message_handler):
+def message_listener(redis_queue, job_scheduler):
     while True:
-        try:
-            message = redis_queue.get(block=True, timeout=10)
-            if message:
-                message_handler.handle_message(message)
-        except json.JSONDecodeError as e:
-            print(f"Error decoding message: {e}")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-        time.sleep(0.1)  # Sleep briefly to avoid tight loop in case of continuous errors
+        message = redis_queue.get(block=True, timeout=10)
+        if message:
+            job_id = message['job_id']  # Assuming each message includes a job ID
+            if job_id not in job_scheduler.jobs:
+                job_scheduler.add_job(Job(job_id))
+            job_scheduler.jobs[job_id].queue.put(message)
 
 def start_listener():
     redis_queue = RedisQueue(name='tasks')

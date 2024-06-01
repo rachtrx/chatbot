@@ -65,4 +65,16 @@ class ModelTrainingProcess(BaseProcess):
         }
         print(result)
         return result
-    
+
+
+class ConfirmationProcess():
+    job.confirm()
+
+class CancellationProcess():
+    job.cancel()
+
+class ApprovalProcess():
+    job.approve()
+
+class RejectionProcess():
+    job.reject()
