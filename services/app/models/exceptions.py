@@ -1,41 +1,106 @@
-from constants import Intent, JobStatus
-from extensions import get_session
-import logging
-import traceback
 
+from extensions import get_session, twilio
 
-class DurationError(Exception):
-    """thows error if any dates or duration are conflicting"""
+import os
 
+from models.messages.MessageKnown import MessageKnown
+from models.messages.MessageUnknown import MessageUnknown
+from models.jobs.base.constants import OutgoingMessageData, MessageType, ErrorMessage
+from models.messages.SentMessageStatus import SentMessageStatus
+
+class AzureSyncError(Exception):
     def __init__(self, message):
-        self.message = message
-        super().__init__(self.message)
+        super().__init__(message)
+
+class UserNotFoundError(Exception):
+    def __init__(self, sid, incoming_body, user_no):
+        self.sid = sid
+        self.incoming_body = incoming_body
+        self.user_no = user_no
+        self.body = ErrorMessage.USER_NOT_FOUND
+
+    def execute(self):
+        session = get_session()
+        incoming_msg = MessageUnknown(sid=self.sid, user_no=self.user_no, body=self.incoming_body)
+        session.add(incoming_msg)
+        session.commit()
+
+        sent_message_meta = twilio.messages.create(
+            to=self.user_no,
+            from_=os.environ.get('TWILIO_NO'),
+            body=self.body
+        )
+
+        outgoing_msg = MessageUnknown(sid=sent_message_meta.sid, user_no=self.user_no, body=self.body)
+        sent_msg_status = SentMessageStatus(sid=sent_message_meta.sid)
+        session.add(outgoing_msg)
+        session.add(sent_msg_status)
+        session.commit()
+
+        return
+    
+class EnqueueMessageError(Exception):
+    def __init__(self, sid, incoming_body, user_id, body):
+        self.sid = sid
+        self.incoming_body = incoming_body
+        self.user_id = user_id
+        self.body = body
+
+    def execute(self):
+
+        from models.users import User
+
+        session = get_session()
+        user = session.query(User).get(self.user_id)
+
+        incoming_msg = MessageKnown(
+            sid=self.sid, 
+            msg_type=MessageType.RECEIVED,
+            body=self.incoming_body,
+            user_id=self.user_id
+        )
+        session.add(incoming_msg)
+        session.commit()
+
+        message = OutgoingMessageData(
+            msg_type=MessageType.SENT,
+            user=user,
+            job_no=None,
+            body=self.body
+        )
+        MessageKnown.send_msg(message)
+
+        return
 
 class ReplyError(Exception):
     """throws error when trying to reply but message not found"""
 
-    def __init__(self, err_message, intent=Intent.OTHERS, job_status=JobStatus.SERVER_ERROR):
-        self.err_message = err_message
-        super().__init__(self.err_message)
-        self.intent = intent
-        self.job_status = job_status
+    def __init__(self, body, user_id, job_no, error=None):
+        self.body = body
+        self.user_id = user_id
+        self.job_no = job_no
+        self.error = error
 
-class AzureSyncError(Exception):
+    def execute(self):
+        
+        from models.users import User
 
-    def __init__(self, message):
-        self.message = message
-        super().__init__(self.message)
+        session = get_session()
+        user = session.query(User).get(self.user_id)
 
-def handle_value_error(ex):
-    logging.error("ValueError encountered.")
+        reply_message = OutgoingMessageData(
+            msg_type=MessageType.SENT,
+            user=user,
+            job_no=job.job_no,
+            body=self.body
+        )
+        MessageKnown.send_msg(reply_message)
 
-def handle_key_error(ex):
-    logging.error("KeyError encountered.")
+        if self.error:
+            from models.jobs.base.Job import Job
+            job = session.query(Job).get(self.job_no)
+            job.error = self.error # ensure the column exists
 
-def handle_default(ex):
-    logging.error(f"Unexpected error: {ex}")
+        session.commit()
 
-exception_handlers = {
-    ValueError: handle_value_error,
-    KeyError: handle_key_error,
-}
+        return

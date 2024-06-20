@@ -1,6 +1,5 @@
 import logging
-import sys
-from utilities import log_level
+from models.jobs.base.constants import LOG_LEVEL
 
 def setup_logger(name, filename="app", log_dir="/var/log"):
     """
@@ -10,7 +9,7 @@ def setup_logger(name, filename="app", log_dir="/var/log"):
     logger = logging.getLogger(name)
 
     # Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    logger.setLevel(log_level)
+    logger.setLevel(LOG_LEVEL)
 
     if not logger.handlers:
 
@@ -20,7 +19,7 @@ def setup_logger(name, filename="app", log_dir="/var/log"):
 
         # Set the logging level for handlers
         # console_handler.setLevel(log_level)
-        file_handler.setLevel(log_level)
+        file_handler.setLevel(LOG_LEVEL)
 
         # Create formatter and add it to the handlers
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')

@@ -38,14 +38,6 @@ cmd="$@"
 #   sleep 10
 # done
 
-# >&2 echo "Elasticsearch is up - executing command"
-
-flask setup_azure
-
-service cron start
-echo "cron service started"
-
-# flask create_new_index
-# flask loop_files
+# >&2 echo "Elasticsearch is up - starting server"
 
 exec $cmd

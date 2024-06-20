@@ -313,7 +313,7 @@ class Redis:
         if self.get_current_job(user_id) != 
         reply = self.client.lpop(message_key, user_id)
         from models.messages.sent import MessageSent
-        MessageSent.send_msg(reply) # TODO
+        MessageSent.execute(reply) # TODO
 
     def add_pending_message_to_user_queue(self, user_id):
         message_key = f"user:messages:{user_id}"
@@ -331,9 +331,6 @@ class Redis:
 
     def push_to_primary_queue(self, user_id):
         
-
-    
-            
 class RedisSubscriber:
     def __init__(self, redis_client):
         self.redis_client = redis_client

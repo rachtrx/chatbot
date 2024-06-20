@@ -1,38 +1,34 @@
-from extensions import db, get_session
-# from sqlalchemy.orm import 
-from sqlalchemy import ForeignKey
-from MessageLogger import setup_logger
-from constants import MAX_UNBLOCK_WAIT
 import os
+import shortuuid
+from __future__ import annotations
+
+from extensions import db, get_session
+from MessageLogger import setup_logger
+
+from models.jobs.base.utilities import join_with_commas_and
+
+# from models.jobs.daemon.constants import AccessLevel # KEEP OLD IMPLEMENTATION FOR NOW
+# from sqlalchemy.types import Enum as SQLEnum
 
 class User(db.Model):
 
     logger = setup_logger('models.user')
 
     __tablename__ = "users"
-    name = db.Column(db.String(80), primary_key=True, nullable=False)
+    id = db.Column(db.String(80), primary_key=True, nullable=False)
+    name = db.Column(db.String(80), nullable=False)
     alias = db.Column(db.String(80), nullable=False)
-    number = db.Column(db.Integer(), unique=True, nullable=False)
+    number = db.Column(db.Integer(), nullable=False)
     dept = db.Column(db.String(50), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
 
     # Self-referential relationships
-    reporting_officer_name = db.Column(db.String(80), ForeignKey('users.name', ondelete='SET NULL'), nullable=True)
-    reporting_officer = db.relationship('User', remote_side=[name], post_update=True,
-                                     backref=db.backref('subordinates'), foreign_keys=[reporting_officer_name])
+    reporting_officer_id = db.Column(db.String(80), db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    reporting_officer = db.relationship('User', remote_side=[id], post_update=True,
+                                     backref=db.backref('reportees'), foreign_keys=[reporting_officer_id])
     
     is_global_admin = db.Column(db.Boolean, default=False, nullable=False)
     is_dept_admin = db.Column(db.Boolean, default=False, nullable=False)
-
-    # hod_name = db.Column(String(80), ForeignKey('users.name', ondelete='SET NULL'), nullable=True)
-    # hod = db.relationship('User', remote_side=[name], post_update=True,
-    #                                  backref=db.backref('dept_members'), foreign_keys=[hod_name])
-    
-
-    # reporting_officer = Column('User', backref=db.backref('subordinates'), remote_side=[name], post_update=True, foreign_keys=[reporting_officer_name])
-    
-    # hod_name = Column(db.String(80), db.ForeignKey('user.name', ondelete="SET NULL"), nullable=True)
-    # hod = db.relationship('User', backref=db.backref('dept_members'), remote_side=[name], post_update=True, foreign_keys=[hod_name])
-
 
     @property
     def sg_number(self):
@@ -45,6 +41,7 @@ class User(db.Model):
         self._sg_number = value
 
     def __init__(self, name, alias, number, dept, is_global_admin, is_dept_admin, reporting_officer=None):
+        self.id = shortuuid.ShortUUID().random(length=8)
         self.name = name
         self.alias = alias
         self.number = number
@@ -63,20 +60,9 @@ class User(db.Model):
         else:
             return None
         
-    @classmethod
-    def get_principal(cls):
-
-        session = get_session()
-
-        principal = session.query(cls).filter_by(dept="Principal").first()
-        if principal:
-            return principal.name, principal.sg_number
-        else:
-            return None
-        
     def get_ro(self):
         self.logger.info(f"RO: {self.reporting_officer}")
-        return [self.reporting_officer] if self.reporting_officer else []
+        return {self.reporting_officer} if self.reporting_officer else set()
 
     @classmethod
     def get_dept_admins(cls, dept):
@@ -86,19 +72,47 @@ class User(db.Model):
             User.dept == dept
         )
         dept_admins = query.all()
-        return dept_admins if dept_admins else []
+        return set(dept_admins) if dept_admins else set()
 
     @classmethod
     def get_global_admins(cls):
         session = get_session()
         query = session.query(cls).filter(cls.is_global_admin == True)
         global_admins = query.all()
-        return global_admins if global_admins else []
+        return set(global_admins) if global_admins else set()
 
-    def get_relations(self):
+    def get_relations(self, ignore_users: list[User] = []):
         # Using list unpacking to handle both list and empty list cases
-        relations = list(set(self.get_ro()) | set(self.get_dept_admins(self.dept)) | set(self.get_global_admins()))
+        relations = list(self.get_ro() | self.get_dept_admins(self.dept) | self.get_global_admins())
         if os.environ.get('LIVE') == "1":
-            relations = [user for user in relations if user.name != self.name]
-        # self.logger.info(f"Final relations: {relations}")
+            ignore_ids = {self.id}
+            ignore_ids.update(user.id for user in ignore_users)
+            relations = [user for user in relations if user.id not in ignore_ids]
+            # self.logger.info(f"Final relations: {relations}")
         return relations
+    
+    @staticmethod
+    def loop_users(func):
+        '''This wrapper wraps any method of the Job class. Call the method on any job and pass in the user.
+        
+        Returns a list of each relation function call result if there are relations, returns None if no relations.
+        
+        The function being decorated must have relation as the first param such that it can use the relation'''
+
+        def wrapper(relations, *args, **kwargs):
+
+            results = []
+
+            for relation in relations:
+                result = func(relation, *args, **kwargs)
+                results.append(result) # original function has to be called on an instance method of job pr user
+
+            return results
+        return wrapper
+    
+    def print_relations_list(self):
+        user_list = []
+        for relation in self.get_relations():
+            user_list.append(f"{relation.alias} ({relation.number})")
+
+        return join_with_commas_and(user_list)

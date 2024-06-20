@@ -3,43 +3,34 @@ env_path = f"/etc/environment"
 load_dotenv(dotenv_path=env_path)
 
 import os
-from datetime import datetime
-
-from flask import Flask, request, Response
-from flask.cli import with_appcontext
 import logging
 import traceback
-from sqlalchemy import inspect, event
+import jsonify
+import threading
+
+from flask import request, Response
+from flask.cli import with_appcontext
+from flask_apscheduler import APScheduler
 
 from manage import create_app
-from extensions import db, redis_client, twilio
+from extensions import redis_client, twilio, get_session
+
+from routing.Scheduler import JobScheduler
 
 from models.users import User
-from models.messages.received import MessageReceived
-from models.messages.abstract import Message
 
-from tasks import main as create_task
+from models.exceptions import UserNotFoundError, EnqueueMessageError
 
-from es.manage import loop_through_files, create_index
+from models.messages.MessageKnown import MessageKnown
+from models.messages.SentMessageStatus import SentMessageStatus
 
-from constants import SystemOperation, SelectionType, JobStatus
+from models.jobs.base.Job import BaseJob
+from models.jobs.base.constants import JOBS_PREFIX, JobType, ErrorMessage, UserState, MessageType
+from models.jobs.base.utilities import log_level, set_user_state, check_user_state, current_sg_time
 
-import os
-from sqlalchemy import create_engine
-from extensions import init_thread_session
+from models.jobs.daemon.constants import TaskType as DaemonTaskType
 
-import jsonify
-import json
-import time
-
-from services.app.routing.Sheduler import JobScheduler, MessageScheduler
-from routing.RedisQueue import RedisQueue
-
-import threading
-from dataclasses import dataclass
-from typing import Optional
-
-from utilities import log_level
+# from es.manage import loop_through_files, create_index
 
 # logger = logging.getLogger('sqlalchemy.engine.Engine')
 # # logger = logging.getLogger('redis')
@@ -51,84 +42,124 @@ from utilities import log_level
 
 app = create_app()
 
-@app.cli.command("setup_azure")
-@with_appcontext
-def setup_azure():
-    create_task([SystemOperation.ACQUIRE_TOKEN, SystemOperation.SYNC_USERS, SystemOperation.SYNC_LEAVE_RECORDS])
-    # create_task([system['ACQUIRE_TOKEN'], system['SYNC_USERS']])
+scheduler = APScheduler()
+scheduler.init_app(app)
+scheduler.start()
 
-@app.cli.command("create_new_index")
-@with_appcontext
-def create_new_index():
-    create_index()
+@scheduler.task('cron', id='task_sync_users', minute='*/15')
+def sync_users():
+    logging.info("Syncing users every 15 minutes.")
 
-@app.cli.command("loop_files")
-@with_appcontext
-def loop_files():
-    with app.app_context():
-        temp_url = os.environ.get('TEMP_FOLDER_URL')
-        loop_through_files(temp_url)
+@scheduler.task('cron', id='task_sync_leaves', minute='*/15')
+def sync_leaves():
+    logging.info("Syncing leave records every 15 minutes.")
 
-def log_table_creation(target, connection, **kw):
-    logging.info(f"Creating table: {target.name}")
+@scheduler.task('cron', id='task_acq_token', hour='*/1')
+def acquire_token():
+    logging.info("Acquiring token every hour.")
 
-@app.cli.command("remove_db")
-@with_appcontext
-def remove_db():
-    db.drop_all()
-    db.session.commit()
+@scheduler.task('cron', id='task_send_report', hour='9', day_of_week='mon-fri')
+def send_report():
+    logging.info("Running AM report at 9 AM on weekdays.")
 
-@app.cli.command("seed_db")
-@with_appcontext
-def seed_db():
-    user = User("Rachmiel", "12345678", "rach@rach")
-    db.session.add(user)
-    db.session.commit()
+# @app.cli.command("create_new_index")
+# @with_appcontext
+# def create_new_index():
+#     create_index()
 
-@dataclass
-class NewMessageData:
-    from_no: str
-    user_str: str
-    sid: str
-    replied_msg_sid: Optional[str] = None
-    selection: Optional[int] = None
+# @app.cli.command("loop_files")
+# @with_appcontext
+# def loop_files():
+#     with app.app_context():
+#         temp_url = os.environ.get('TEMP_FOLDER_URL')
+#         loop_through_files(temp_url)
+
+job_scheduler = JobScheduler(prefix=JOBS_PREFIX)
+
+def enqueue_daemon_job():
+
+    tasks_to_run = []
+
+    cur_datetime = current_sg_time()
+    logging.info(cur_datetime)
+
+    minute = cur_datetime.minute
+
+    logging.info(f"{minute}, {cur_datetime.hour}")
+
+    if minute % 15 == 0:
+        tasks_to_run.append(DaemonTaskType.SYNC_LEAVES)
+        tasks_to_run.append(DaemonTaskType.SYNC_USERS) # this should be more regular than acquire
+
+        if minute % 30 == 0:
+            tasks_to_run.append(DaemonTaskType.ACQUIRE_TOKEN)
+        
+    if minute == 0 and cur_datetime.hour == 9 and cur_datetime.weekday() not in [5, 6]: # bool
+        tasks_to_run.append(DaemonTaskType.SEND_REPORT)
+
+    if len(tasks_to_run) == 0:
+        return
+
+    job_no = BaseJob.create_job(JobType.DAEMON)
+    job_scheduler.add_to_queue(job_no, payload=tasks_to_run)
     
 @app.route('/enqueue_message', methods=['POST'])
 def enqueue_message():
     try:
         from_no = request.form.get("From")
-        logging.info(f"FROMNO: {from_no}")
-        user_str = MessageReceived.get_message(request)
-        sid = MessageReceived.get_sid(request)
+        body = request.form.get('Body')
+        sid = request.form.get('MessageSid')
+
+        if check_user_state(from_no, UserState.BLOCKED):
+            return
+        
+        # set user_id
+        user = User.get_user(from_no)
+        if not user:
+            set_user_state(from_no, UserState.BLOCKED) # TODO TIMEOUT
+            raise UserNotFoundError(sid=sid, incoming_body=body, user_no=from_no)
+        
+        message = MessageKnown(
+            sid=sid, 
+            msg_type=MessageType.RECEIVED, 
+            body=body,
+            user_id=user.id
+        )
 
         replied_msg_sid = request.form.get('OriginalRepliedMessageSid', None)
-        selection = None
-        if request.form.get('ButtonPayload', None):
-            selection = int(request.form['ButtonPayload'])
-        elif request.form.get('ListId', None):
-            selection = int(request.form['ListId'])
-        message = NewMessageData(user_str, sid, replied_msg_sid, selection)
+        
+        # SET JOB NO
+        if not replied_msg_sid:
+            if check_user_state(user.id, UserState.PROCESSING):
+                raise EnqueueMessageError(sid=sid, incoming_body=body, user_id=user.id, body=ErrorMessage.DOUBLE_MESSAGE)
+            elif check_user_state(user.id, UserState.PENDING):
+                raise EnqueueMessageError(sid=sid, incoming_body=body, user_id=user.id, body=ErrorMessage.PENDING_DECISION)
+            else:
+                message.job_no = BaseJob.create_job(MessageKnown.get_intent(), primary_user_id=user.id)
+        else:
+            try:
+                message.job_no = MessageKnown.query.with_entities(MessageKnown.job_no).filter_by(sid=replied_msg_sid).scalar()
+            except AttributeError:
+                raise EnqueueMessageError(sid=sid, incoming_body=body, user_id=user.id, body=ErrorMessage.UNKNOWN_ERROR)
 
-        logging.info(f"User made a selection: {request.form.get('Body')}")
+        set_user_state(user.id, UserState.PROCESSING)
+        
+        logging.info(f"From No: {from_no}, Message: {request.form.get('Body')}")
 
-        user_id = redis_client.hash_identifier(str(from_no))
+        job_scheduler.add_to_queue(job_no=message.job_no, payload=message)
+        
+    except (EnqueueMessageError, UserNotFoundError) as e: # problem
+        e.execute()
 
-        # Check for timeout
-        if check_user_processing_state(user_id):
-            return jsonify({"status": "User is currently processing another request. Please wait."}), 429
-
-        response = message_handler.handle_message(message)
-        if response["status"] == "User is currently processing another request. Please wait.":
-            return jsonify(response), 429  # HTTP 429 Too Many Requests
-        return jsonify(response), 202
-    
     except Exception:
-        logging.error(traceback.format_exc())
         twilio.messages.create(
             to=from_no,
             from_=os.environ.get('TWILIO_NO'),
             body="Really sorry, you caught error that we did find during development, please let us know!"
         )
+        logging.error(traceback.format_exc())
+
+    return jsonify("OK"), 202
 
 @app.route("/chatbot/sms/callback/", methods=['POST'])
 def sms_reply_callback():
@@ -146,32 +177,23 @@ def sms_reply_callback():
         logging.info(f"callback received, status: {status}, sid: {sid}")
         
         # check if this is a forwarded message, which would have its own ID
-        message = Message.get_message_by_sid(sid)
+        session = get_session()
 
-        if not message:
-            logging.info(f"not a message, {sid}")
+        sent_msg = session.query(SentMessageStatus).get(sid)
+
+        if not sent_msg:
+            logging.info(f"not a sent message, {sid}")
 
         else:
-            job = message.job
-            logging.info(f"callback received, status: {status}, sid: {sid}, message: {message}, Job found: {job}")
-            message_pending_selection = job.update_with_msg_callback(status, sid, message) # pending callback
-            if message_pending_selection:
-                if message_pending_selection.selection_type == SelectionType.AUTHORIZED_DECISION:
-                    status = JobStatus.PENDING_AUTHORISED_DECISION
-                else:
-                    status = JobStatus.PENDING_DECISION
-                job.commit_status(job, status)
-                to_no = request.form.get("To")
-                user_id = redis_client.hash_identifier(str(to_no))
-                redis_client.start_next_job(user_id)
-            else:
-                redis_client.check_for_complete(job)
+            if sent_msg.message.body is None:
+                sent_msg.update_msg_body()
+
+            sent_msg.update_message_status(status)
             
     except Exception as e:
         logging.error(traceback.format_exc())
 
     return Response(status=200)
-
 
 def start_redis_listener():
 
@@ -185,42 +207,6 @@ def start_redis_listener():
 if __name__ == "__main__":
     # local development, not for gunicorn
     # Configure the root logger
-    
-    with app.app_context():
-        redis_client.start_redis_listener()
-    app.run(debug=True)
-
-# RedisQueue helper functions
-def set_user_processing_state(user_id, timeout=30):
-    redis_client.setex(f"user:{user_id}:processing", timeout, "true")
-
-def check_user_processing_state(user_id):
-    return redis_client.exists(f"user:{user_id}:processing")
-
-def clear_user_processing_state(user_id):
-    redis_client.delete(f"user:{user_id}:processing")
-
-# Initialize JobScheduler and MessageHandler
-job_scheduler = JobScheduler()
-message_scheduler = MessageScheduler()
-
-# Start the message listener in a separate thread
-def message_listener(redis_queue, job_scheduler):
-    while True:
-        message = redis_queue.get(block=True, timeout=10)
-        if message:
-            job_id = message['job_id']  # Assuming each message includes a job ID
-            if job_id not in job_scheduler.jobs:
-                job_scheduler.add_job(Job(job_id))
-            job_scheduler.jobs[job_id].queue.put(message)
-
-def start_listener():
-    redis_queue = RedisQueue(name='tasks')
-    listener_thread = threading.Thread(target=message_listener, args=(redis_queue, message_handler))
-    listener_thread.daemon = True
-    listener_thread.start()
-
-if __name__ == '__main__':
     logging.basicConfig(
         filename='/var/log/app.log',  # Log file path
         filemode='a',  # Append mode
@@ -228,5 +214,6 @@ if __name__ == '__main__':
         level=log_level  # Log level
     )
     logging.getLogger('twilio.http_client').setLevel(logging.WARNING)
-    start_listener()
+    with app.app_context():
+        start_redis_listener() # TODO
     app.run(debug=True)

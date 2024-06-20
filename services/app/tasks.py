@@ -17,6 +17,7 @@ import traceback
 from sqlalchemy import create_engine
 import os
 import json
+import requests
 
 def main(jobs_to_run=[]):
 
@@ -58,7 +59,7 @@ def main(jobs_to_run=[]):
     if send_message:
         cv = json.dumps(cv)
         content_sid = os.environ.get('SEND_SYSTEM_TASKS_SID')
-        MessageSent.send_msg(MessageType.SENT, (content_sid, cv), main_job)
+        MessageSent.execute(MessageType.SENT, (content_sid, cv), main_job)
 
     main_job.run_background_tasks()
 
