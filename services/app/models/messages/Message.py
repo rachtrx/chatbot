@@ -7,16 +7,16 @@ from MessageLogger import setup_logger
 from models.jobs.base.constants import MessageOrigin, MessageType
 from models.jobs.base.utilities import current_sg_time
 
-class MessageBase(db.Model):
+class Message(db.Model):
 
-    __tablename__ = 'message_base'
+    __tablename__ = 'message'
 
     @declared_attr
     def logger(cls):
         return setup_logger(f'models.{cls.__name__.lower()}')
 
-    sid = db.Column(db.String(80), primary_key=True, nullable=False)
-    body = db.Column(db.String(), nullable=True)
+    sid = db.Column(db.String(64), primary_key=True, nullable=False)
+    body = db.Column(db.Text, nullable=True)
     timestamp = db.Column(db.DateTime(timezone=True), nullable=False)
     type = db.Column(SQLEnum(MessageOrigin), nullable=False)
     msg_type = db.Column(SQLEnum(MessageType), nullable=False)

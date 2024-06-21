@@ -3,15 +3,15 @@ from enum import Enum
 import re
 
 class LeaveType(Enum):
-    MEDICAL = "medical"
-    CHILDCARE = "childcare"
-    PARENTCARE = "parentcare"
-    HOSPITALISATION = "hospitalisation"
-    COMPASSIONATE = "compassionate"
-    # Paternity = "paternity"
-    # Maternity = "maternity"
-    # Anniversary = "anniversary"
-    # Marriage = "marriage"
+    MEDICAL = "MEDICAL"
+    CHILDCARE = "CHILDCARE"
+    PARENTCARE = "PARENTCARE"
+    HOSPITALISATION = "HOSPITALISATION"
+    COMPASSIONATE = "COMPASSIONATE"
+    # Paternity = "PATERNITY"
+    # Maternity = "MATERNITY"
+    # Anniversary = "ANNIVERSARY"
+    # Marriage = "MARRIAGE"
 
 class Patterns:
 
@@ -188,32 +188,21 @@ class LeaveIssue: # ERRORS THAT CAN BE FIXED
     LATE = "You have missed out the morning report for today's leave as it has already been sent out at 9am, but I am still able to update the records and inform your reporting contacts." # start date was today, need to inform user about missed morning report
     OVERLAP = "There are overlapping dates on "
 
-class State:
-    MESSAGE_RECEIVED = 1
-    PENDING_LEAVE_TYPE = 2
-    PENDING_DECISION = 3
-    PENDING_AUTHORISATION = 4
-    APPROVED = 5
-    REJECTED = 6
-    CANCELLED = 7
-    REGEX_ERROR = 8
-    UNKNOWN_ERROR = 9
-
-class LeaveTaskType:
-    NONE = 1
-    EXTRACT_DATES = 2
-    REQUEST_CONFIRMATION = 3
-    REQUEST_AUTHORISATION = 4
-    APPROVE = 5
-    REJECT = 6
-    CANCEL = 7
+class LeaveTaskType(Enum):
+    NONE = 'NONE'
+    EXTRACT_DATES = 'EXTRACT_DATES'
+    REQUEST_CONFIRMATION = 'REQUEST_CONFIRMATION'
+    REQUEST_AUTHORISATION = 'REQUEST_AUTHORISATION'
+    APPROVE = 'APPROVE'
+    REJECT = 'REJECT'
+    CANCEL = 'CANCEL'
 
 class LeaveStatus(Enum):
-    PENDING = "pending"
-    APPROVED = "approved"
-    CANCELLED = "cancelled"
-    REJECTED = "rejected"
-    ERROR = "error"
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    CANCELLED = "CANCELLED"
+    REJECTED = "REJECTED"
+    ERROR = "ERROR"
 
 
 

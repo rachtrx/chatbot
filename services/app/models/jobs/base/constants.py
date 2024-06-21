@@ -1,10 +1,9 @@
-import os
 from enum import Enum
 from dataclasses import dataclass
+from models.users import User
 
 MAX_UNBLOCK_WAIT = 30
 JOBS_PREFIX = "jobs"
-LOG_LEVEL = 'error' if os.environ.get('LIVE') == 1 else 'info'
 
 ##################################
 # JOB STATUSES
@@ -33,10 +32,10 @@ class ErrorMessage:
     NO_FORWARD_MESSAGE_FOUND = "We could not find any staff to forward the request."
 
 class JobType(Enum):
+    NONE = "NONE"
     LEAVE = "LEAVE"
     DAEMON = "DAEMON"
-    UNKNOWN = "UNKNOWN"
-    ES_SEARCH = "SEARCH"
+    SEARCH = "SEARCH"
 
 class UserState(Enum):
     PROCESSING = 'PROCESSING'
@@ -66,7 +65,6 @@ class MessageType(Enum):
 
 @dataclass
 class OutgoingMessageData:
-    from models.users import User
     msg_type: MessageType
     user: User
     job_no: str | None

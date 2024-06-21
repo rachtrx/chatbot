@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from sqlalchemy import select, func, extract, cast, Integer
 
-from extensions import get_session
+from extensions import Session
 
 from models.users import User
 
@@ -16,7 +16,7 @@ from models.exceptions import AzureSyncError
 from models.jobs.base.utilities import current_sg_time, print_all_dates
 from models.jobs.base.constants import Status
 
-from models.jobs.daemon.Task import DaemonTask
+from models.jobs.daemon.Task import TaskDaemon
 from models.jobs.daemon.SpreadsheetManager import SpreadsheetManager
 from models.jobs.daemon.utilities import generate_header
 from models.jobs.daemon.constants import Update, Link, DaemonMessage, DaemonTaskType
@@ -27,7 +27,7 @@ from models.jobs.leave.Job import JobLeave
 
 from models.messages.MessageKnown import MessageKnown
 
-class SyncLeaves(DaemonTask):
+class SyncLeaves(TaskDaemon):
 
     __mapper_args__ = {
         "polymorphic_identity": DaemonTaskType.SYNC_LEAVES
@@ -47,7 +47,7 @@ class SyncLeaves(DaemonTask):
             Update.DEL: {Status.FAILED: {}, Status.COMPLETED: {}}
         }
 
-        session = get_session()
+        session = Session()
 
         az_mmyy_arr = self.loop_leave_files(latest_date=self.latest_date)
         # self.logger.info(az_mmyy_arr)
@@ -257,7 +257,7 @@ class SyncLeaves(DaemonTask):
         return az_df.loc[mask]
 
     def get_db_df(self, mm, yy):
-        session = get_session()
+        session = Session()
 
         rows = session.query(
             LeaveRecord.id,
@@ -292,7 +292,7 @@ class SyncLeaves(DaemonTask):
     def get_all_mmyy_in_db(self):
         from models.jobs.leave.LeaveRecord import LeaveRecord
 
-        session = get_session()
+        session = Session()
 
         stmt = (
             select(
@@ -324,7 +324,7 @@ class SyncLeaves(DaemonTask):
         return [row['record_id']] + [date_str] + [str(row[col]) for col in ['name', 'dept', 'leave_type']]
     
     def get_forward_metadata(self):
-        session = get_session()
+        session = Session()
 
         cv_list = []
         users_list = []

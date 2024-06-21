@@ -2,18 +2,19 @@ from extensions import db
 
 import os
 import msal
-from azure.utils import generate_header
 import requests
 import traceback
-from utilities import current_sg_time
 from datetime import datetime
 import json
 import logging
 
-from models.jobs.daemon.Task import DaemonTask
-from models.jobs.daemon.constants import DaemonTaskType, DaemonMessage
+from models.jobs.base.utilities import current_sg_time
 
-class AcquireToken(DaemonTask):
+from models.jobs.daemon.Task import TaskDaemon
+from models.jobs.daemon.constants import DaemonTaskType, DaemonMessage
+from models.jobs.daemon.utilities import generate_header
+
+class AcquireToken(TaskDaemon):
 
     __mapper_args__ = {
         "polymorphic_identity": DaemonTaskType.ACQUIRE_TOKEN

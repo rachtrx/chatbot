@@ -1,8 +1,8 @@
 from extensions import db
 from models.jobs.base.constants import MessageOrigin
-from models.messages.MessageBase import MessageBase
+from models.messages.Message import Message
 
-class MessageUnknown(MessageBase):
+class MessageUnknown(Message):
 
     __tablename__ = 'message_unknown'
 

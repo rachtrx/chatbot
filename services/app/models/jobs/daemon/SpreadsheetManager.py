@@ -2,13 +2,15 @@ import os
 import requests
 import json
 import traceback
+import calendar
 import numpy as np
 import pandas as pd
 
-from utilities import current_sg_time
 from MessageLogger import setup_logger
+
+from models.jobs.base.utilities import current_sg_time
+
 from models.jobs.daemon.utilities import generate_header, delay_decorator
-import calendar
 
 class SpreadsheetManager:
 

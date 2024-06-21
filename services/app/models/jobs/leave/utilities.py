@@ -7,7 +7,6 @@ from models.users import User
 from models.jobs.base.utilities import print_all_dates, current_sg_time, get_latest_date_past_hour, join_with_commas_and
 
 from models.jobs.leave.constants import LeaveIssue, Patterns
-from models.jobs.leave.LeaveRecord import LeaveRecord
 
 def set_dates_str(dates, mark_late):
     dates_str = print_all_dates(dates, date_obj=True)

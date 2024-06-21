@@ -2,11 +2,11 @@ import shortuuid
 from sqlalchemy import func
 from sqlalchemy.types import Enum as SQLEnum
 
-from extensions import db
+from extensions import db, Session
 from MessageLogger import setup_logger
 
 from models.jobs.base.constants import Status
-from models.jobs.base.utilities import get_latest_date_past_hour, get_session, current_sg_time
+from models.jobs.base.utilities import get_latest_date_past_hour, current_sg_time
 
 from models.jobs.leave.Job import JobLeave
 from models.jobs.leave.constants import LeaveStatus
@@ -16,7 +16,8 @@ class LeaveRecord(db.Model):
     logger = setup_logger('models.leave_records')
 
     __tablename__ = "leave_records"
-    id = db.Column(db.String(80), primary_key=True, nullable=False)
+
+    id = db.Column(db.String(32), primary_key=True, nullable=False)
     # name = db.Column(db.String(80), nullable=False)
     job_no = db.Column(db.ForeignKey("job_leave.job_no"), nullable=False)
 
@@ -36,7 +37,7 @@ class LeaveRecord(db.Model):
     @classmethod
     def get_all_leaves_today(cls):
         from models.users import User
-        session = get_session()
+        session = Session()
         all_records_today = session.query(
             cls.date,
             func.concat(User.name, ' (', JobLeave.leave_type, ')').label('name'),
@@ -54,7 +55,7 @@ class LeaveRecord(db.Model):
 
     @classmethod
     def get_duplicates(cls, job):
-        session = get_session()
+        session = Session()
         duplicate_records = session.query(cls).join(
             JobLeave
         ).filter(
@@ -68,7 +69,7 @@ class LeaveRecord(db.Model):
 
     @classmethod
     def add_leaves(cls, job_no, dates, leave_status=LeaveStatus.PENDING): # RequestAuthorisation
-        session = get_session()
+        session = Session()
         new_records = []
         for date in dates:
             new_record = cls(job=job_no, date=date, leave_status=leave_status)
@@ -81,7 +82,7 @@ class LeaveRecord(db.Model):
     @classmethod
     def update_leaves(cls, records, status):
 
-        session = get_session()
+        session = Session()
         dates = []
 
         with session.begin_nested():
@@ -95,7 +96,7 @@ class LeaveRecord(db.Model):
 
     @classmethod
     def get_records(cls, job_no, statuses, past_9am=True):
-        session = get_session()
+        session = Session()
         query = session.query(cls).filter(cls.job_no == job_no)
 
         # filter records based on 'past_9am'

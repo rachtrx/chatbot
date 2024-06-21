@@ -1,5 +1,5 @@
 
-from extensions import get_session, twilio
+from extensions import Session, twilio
 
 import os
 
@@ -20,7 +20,7 @@ class UserNotFoundError(Exception):
         self.body = ErrorMessage.USER_NOT_FOUND
 
     def execute(self):
-        session = get_session()
+        session = Session()
         incoming_msg = MessageUnknown(sid=self.sid, user_no=self.user_no, body=self.incoming_body)
         session.add(incoming_msg)
         session.commit()
@@ -50,7 +50,7 @@ class EnqueueMessageError(Exception):
 
         from models.users import User
 
-        session = get_session()
+        session = Session()
         user = session.query(User).get(self.user_id)
 
         incoming_msg = MessageKnown(
@@ -85,7 +85,7 @@ class ReplyError(Exception):
         
         from models.users import User
 
-        session = get_session()
+        session = Session()
         user = session.query(User).get(self.user_id)
 
         reply_message = OutgoingMessageData(

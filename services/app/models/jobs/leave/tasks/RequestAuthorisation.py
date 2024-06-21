@@ -3,19 +3,18 @@ from datetime import datetime
 
 from models.exceptions import ReplyError
 
-from models.jobs.base.constants import ErrorMessage, OutgoingMessageData, MessageType
+from models.jobs.base.constants import ErrorMessage, OutgoingMessageData, MessageType, Status
 from models.jobs.base.utilities import print_all_dates, current_sg_time, clear_user_processing_state
 
-from models.jobs.leave.Task import LeaveTask
+from models.jobs.leave.Task import TaskLeave
 from models.jobs.leave.constants import LeaveErrorMessage, LeaveError, LeaveType, LeaveStatus, LeaveTaskType
 from models.jobs.leave.utilities import get_approve_leave_cv, get_authorisation_cv, get_authorisation_late_cv
 from models.jobs.leave.LeaveRecord import LeaveRecord
 
-from models.jobs.base.constants import Error
-
 from models.messages.MessageKnown import MessageKnown
 
-class RequestAuthorisation(LeaveTask):
+
+class RequestAuthorisation(TaskLeave):
 
     __mapper_args__ = {
         "polymorphic_identity": LeaveTaskType.REQUEST_AUTHORISATION
@@ -24,11 +23,15 @@ class RequestAuthorisation(LeaveTask):
     def restore_cache(self, data):
 
         if not data.get('dates_to_update', None):
-            raise ReplyError(ErrorMessage.TIMEOUT_MSG)
+            raise ReplyError(
+                body=ErrorMessage.TIMEOUT_MSG,
+                job_no=self.job_no,
+                user_id=self.user_id
+            )
 
         self.dates_to_update = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in data['dates_to_update'] if data.get('dates_to_update', None)]
         self.duplicate_dates = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in data['duplicate_dates'] if data.get('duplicate_dates', None)]
-        self.validation_errors = set([LeaveError(int(value)) for value in data['validation_errors'] if data.get('validation_errors', None)])
+        self.validation_errors = set([getattr(Status, key) for key in data['validation_errors'] if data.get('validation_errors', None)])
 
     def handle_dates(self):
 
@@ -48,10 +51,14 @@ class RequestAuthorisation(LeaveTask):
 
         ro = self.user.get_ro()
         if len(ro) == 0:
-            raise ReplyError(LeaveErrorMessage.NO_USERS_TO_NOTIFY)
+            raise ReplyError(
+                body=LeaveErrorMessage.NO_USERS_TO_NOTIFY,
+                job_no=self.job_no,
+                user_id=self.user_id
+            )
 
         self.handle_dates()
-
+        
         LeaveRecord.add_leaves(self.job_no, self.dates_to_authorise)
         LeaveRecord.add_leaves(self.job_no, self.dates_to_approve, leave_status=LeaveStatus.APPROVED)
 
@@ -64,7 +71,11 @@ class RequestAuthorisation(LeaveTask):
         relations_list = self.user.get_relations()
 
         if len(self.dates_to_authorise) == 0 and len(self.dates_to_approve) == 0: # NO DATES FOUND
-            raise ReplyError(Error.DATES_NOT_FOUND) # TODO
+            raise ReplyError(
+                body=ErrorMessage.DATES_NOT_FOUND,
+                job_no=self.job_no,
+                user_id=self.user_id
+            ) # TODO
 
         elif len(self.dates_to_authorise) == 0 and len(self.dates_to_approve) > 0: # ALL TO APPROVE IMMEDIATELY
             cv_list = get_approve_leave_cv( # LOOP RELATIONS
@@ -143,7 +154,12 @@ class RequestAuthorisation(LeaveTask):
         MessageKnown.send_msg(message=reply_message)
 
         if not forward_metadata:
-            raise ReplyError(Error.NO_FORWARD_MESSAGE_FOUND) # IMMEDIATTELY APPROVE?
+            raise ReplyError(
+                body=ErrorMessage.NO_FORWARD_MESSAGE_FOUND,
+                job_no=self.job_no,
+                user_id=self.user_id
+            ) # IMMEDIATTELY APPROVE?
+        
         MessageKnown.forward_template_msges(
             job_no=self.job.job_no, 
             callback=self.forwards_callback,

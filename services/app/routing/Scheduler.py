@@ -1,15 +1,14 @@
 import threading
 
 from manage import create_app
+from extensions import Session
 
 from routing.Redis import RedisQueue
 
-from models.jobs.base.Job import BaseJob
-from models.jobs.base.utilities import get_session
+from models.jobs.base.constants import JOBS_PREFIX
+from models.jobs.base.Job import Job
 
 from models.exceptions import ReplyError
-
-app = create_app()
 
 class BaseScheduler:
     def __init__(self, prefix, max_workers=3):
@@ -44,6 +43,7 @@ class BaseScheduler:
 
     def worker(self, item_id):
         try:
+            session = Session()
             payload = self.queues[item_id].get(block=False)  # 1st message should be available. TODO handle error?
             print(f"Payload retrieved: {payload}")
 
@@ -52,13 +52,16 @@ class BaseScheduler:
             while not empty:
                 # Execute job in the application context
                 payload = self.queues[item_id].get(block=True, timeout=60)  # Wait for msges
-                with app.app_context():
+
+                with create_app().app_context():
                     completed = self.execute(item_id, payload) # job.execute must return True or False
                     if completed:
                         empty = self.queues[item_id].is_empty()
                         if empty:
                             break
         finally:
+            session.close()
+            session.remove()
             self.cleanup_worker(item_id)
             self.worker_semaphore.release()  # Release the permit when the worker finishes
 
@@ -76,9 +79,11 @@ class JobScheduler(BaseScheduler): # job queue
         print(f"Executing job {job_id} with data: {payload}")
 
         # TODO WITH APP CONTEXT?
-        session = get_session()
-        job = session.query(BaseJob).get(job_id)
+        session = Session()
+        job = session.query(Job).get(job_id)
         try:
             return job.execute(payload) # implement whether the job can be cleaned up, for leave, once the requestor is no longer pending
         except ReplyError as re:
             re.execute()
+
+job_scheduler = JobScheduler(prefix=JOBS_PREFIX)

@@ -13,9 +13,9 @@ from flask.cli import with_appcontext
 from flask_apscheduler import APScheduler
 
 from manage import create_app
-from extensions import redis_client, twilio, get_session
+from extensions import redis_client, twilio, Session
 
-from routing.Scheduler import JobScheduler
+from routing.Scheduler import job_scheduler
 
 from models.users import User
 
@@ -24,8 +24,8 @@ from models.exceptions import UserNotFoundError, EnqueueMessageError
 from models.messages.MessageKnown import MessageKnown
 from models.messages.SentMessageStatus import SentMessageStatus
 
-from models.jobs.base.Job import BaseJob
-from models.jobs.base.constants import JOBS_PREFIX, JobType, ErrorMessage, UserState, MessageType
+from models.jobs.base.Job import Job
+from models.jobs.base.constants import JobType, ErrorMessage, UserState, MessageType
 from models.jobs.base.utilities import log_level, set_user_state, check_user_state, current_sg_time
 
 from models.jobs.daemon.constants import TaskType as DaemonTaskType
@@ -40,28 +40,6 @@ from models.jobs.daemon.constants import TaskType as DaemonTaskType
 # file_handler.setFormatter(formatter)
 # logger.addHandler(file_handler)
 
-app = create_app()
-
-scheduler = APScheduler()
-scheduler.init_app(app)
-scheduler.start()
-
-@scheduler.task('cron', id='task_sync_users', minute='*/15')
-def sync_users():
-    logging.info("Syncing users every 15 minutes.")
-
-@scheduler.task('cron', id='task_sync_leaves', minute='*/15')
-def sync_leaves():
-    logging.info("Syncing leave records every 15 minutes.")
-
-@scheduler.task('cron', id='task_acq_token', hour='*/1')
-def acquire_token():
-    logging.info("Acquiring token every hour.")
-
-@scheduler.task('cron', id='task_send_report', hour='9', day_of_week='mon-fri')
-def send_report():
-    logging.info("Running AM report at 9 AM on weekdays.")
-
 # @app.cli.command("create_new_index")
 # @with_appcontext
 # def create_new_index():
@@ -74,10 +52,14 @@ def send_report():
 #         temp_url = os.environ.get('TEMP_FOLDER_URL')
 #         loop_through_files(temp_url)
 
-job_scheduler = JobScheduler(prefix=JOBS_PREFIX)
+app = create_app()
 
-def enqueue_daemon_job():
+scheduler = APScheduler()
+scheduler.init_app(app)
+scheduler.start()
 
+@scheduler.task('cron', id='health_check', minute='*/15')
+def execute():
     tasks_to_run = []
 
     cur_datetime = current_sg_time()
@@ -100,12 +82,14 @@ def enqueue_daemon_job():
     if len(tasks_to_run) == 0:
         return
 
-    job_no = BaseJob.create_job(JobType.DAEMON)
+    job_no = Job.create_job(JobType.DAEMON)
     job_scheduler.add_to_queue(job_no, payload=tasks_to_run)
-    
+
 @app.route('/enqueue_message', methods=['POST'])
 def enqueue_message():
     try:
+        session = Session()
+
         from_no = request.form.get("From")
         body = request.form.get('Body')
         sid = request.form.get('MessageSid')
@@ -125,6 +109,8 @@ def enqueue_message():
             body=body,
             user_id=user.id
         )
+        session.add(message)
+        session.commit()
 
         replied_msg_sid = request.form.get('OriginalRepliedMessageSid', None)
         
@@ -135,7 +121,7 @@ def enqueue_message():
             elif check_user_state(user.id, UserState.PENDING):
                 raise EnqueueMessageError(sid=sid, incoming_body=body, user_id=user.id, body=ErrorMessage.PENDING_DECISION)
             else:
-                message.job_no = BaseJob.create_job(MessageKnown.get_intent(), primary_user_id=user.id)
+                message.job_no = Job.create_job(MessageKnown.get_intent(), primary_user_id=user.id)
         else:
             try:
                 message.job_no = MessageKnown.query.with_entities(MessageKnown.job_no).filter_by(sid=replied_msg_sid).scalar()
@@ -158,8 +144,8 @@ def enqueue_message():
             body="Really sorry, you caught error that we did find during development, please let us know!"
         )
         logging.error(traceback.format_exc())
-
-    return jsonify("OK"), 202
+    finally:
+        return jsonify("OK"), 202
 
 @app.route("/chatbot/sms/callback/", methods=['POST'])
 def sms_reply_callback():
@@ -177,7 +163,7 @@ def sms_reply_callback():
         logging.info(f"callback received, status: {status}, sid: {sid}")
         
         # check if this is a forwarded message, which would have its own ID
-        session = get_session()
+        session = Session()
 
         sent_msg = session.query(SentMessageStatus).get(sid)
 
@@ -193,16 +179,10 @@ def sms_reply_callback():
     except Exception as e:
         logging.error(traceback.format_exc())
 
+    finally:
+        session.close()
+
     return Response(status=200)
-
-def start_redis_listener():
-
-    def listen():
-        with app.app_context():  # Ensure Redis listener has access to Flask app context
-            redis_client.subscriber.listen()
-
-    listener_thread = threading.Thread(target=listen, daemon=True)
-    listener_thread.start()
 
 if __name__ == "__main__":
     # local development, not for gunicorn

@@ -2,7 +2,7 @@ import shortuuid
 import logging
 import traceback
 
-from extensions import db, get_session
+from extensions import db, Session
 from MessageLogger import setup_logger
 
 from models.jobs.base.constants import JobType
@@ -12,20 +12,20 @@ from sqlalchemy.orm import declared_attr
 
 from sqlalchemy.types import Enum as SQLEnum
 
-class BaseJob(db.Model): # system jobs
+class Job(db.Model): # system jobs
 
     @declared_attr
     def logger(cls):
         return setup_logger(f'models.{cls.__name__.lower()}')
 
-    job_no = db.Column(db.Integer, primary_key=True)
+    job_no = db.Column(db.String(32), primary_key=True)
     created_at = db.Column(db.DateTime(timezone=True))
     primary_user_id = db.Column(db.ForeignKey("users.id"), nullable=True)
     primary_user = db.relationship('User', backref='jobs', lazy='select')
     type = db.Column(SQLEnum(JobType), nullable=False)
 
     __mapper_args__ = {
-        "polymorphic_identity": JobType.DAEMON,
+        "polymorphic_identity": JobType.NONE,
         "polymorphic_on": type
     }
 
@@ -52,7 +52,7 @@ class BaseJob(db.Model): # system jobs
             pass
         if not new_job:
             raise ValueError(f"Unknown intent: {intent}")
-        session = get_session()
+        session = Session()
         session.add(new_job)
         session.commit()
         return new_job.job_no
@@ -64,7 +64,7 @@ class BaseJob(db.Model): # system jobs
         raise NotImplementedError("Please define a cleanup function")
     
     def get_latest_tasks(self):
-        session = get_session()
+        session = Session()
         return session.query(self.state_model)\
             .filter(self.state_model.job_no == self.job_no)\
             .order_by(self.state_model.timestamp.desc())\

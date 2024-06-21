@@ -9,7 +9,7 @@ import threading
 from functools import wraps
 from sqlalchemy import inspect as sql_inspect
 
-from extensions import get_session, remove_thread_session, redis_client
+from extensions import ThreadSession, redis_client
 
 singapore_tz = ZoneInfo('Asia/Singapore')
 
@@ -171,7 +171,7 @@ def run_new_context(func):
 
         app = create_app()
         with app.app_context():
-            session = get_session()
+            session = ThreadSession()
             logging.info("In decorator")
 
             try:                           
@@ -186,11 +186,8 @@ def run_new_context(func):
                 raise
             finally:
                 logging.info(id(session))
-                if threading.current_thread() == threading.main_thread():
-                    logging.info("This is running in the main thread.")
-                else:
-                    logging.info("This is running in a separate thread.")
-                    remove_thread_session()
+                session.close()
+                session.remove()
                 return result
     return wrapper
 

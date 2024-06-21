@@ -1,18 +1,18 @@
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
-from extensions import get_session
+from extensions import Session
 
 from models.exceptions import ReplyError
 
 from models.jobs.base.constants import ErrorMessage
 from models.jobs.base.utilities import current_sg_time, get_latest_date_past_hour, join_with_commas_and
 
-from models.jobs.leave.Task import LeaveTask
+from models.jobs.leave.Task import TaskLeave
 from models.jobs.leave.constants import LeaveIssue, LeaveError, LeaveErrorMessage, LeaveTaskType
 from models.jobs.leave.utilities import duration_extraction, calc_start_end_date, named_month_extraction, named_ddmm_extraction, named_day_extraction
 from models.jobs.leave.LeaveRecord import LeaveRecord
 
-class ExtractDates(LeaveTask):
+class ExtractDates(TaskLeave):
 
     __mapper_args__ = {
         "polymorphic_identity": LeaveTaskType.EXTRACT_DATES
@@ -39,7 +39,7 @@ class ExtractDates(LeaveTask):
             "dates": [date.strftime("%d-%m-%Y") for date in self.dates_to_update],
             "duplicate_dates": [date.strftime("%d-%m-%Y") for date in self.duplicate_dates],
             # returned by generate base
-            "validation_errors": [error.value for error in list(self.validation_errors)],
+            "validation_errors": [error.key for error in list(self.validation_errors)],
             # can be blank after genenrate base
         }
 
@@ -66,7 +66,12 @@ class ExtractDates(LeaveTask):
 
                 body = f'The duration from {datetime.strftime(self.start_date, "%d/%m/%Y")} to {datetime.strftime(self.end_date, "%d/%m/%Y")} ({duration_c}) days) do not match with {self.duration} days. Please send another msg with the form "on leave from dd/mm to dd/mm" to indicate the MC. Thank you!'
 
-                raise ReplyError(body, LeaveError.DURATION_MISMATCH)
+                raise ReplyError(
+                    body=body, 
+                    job_no=self.job_no,
+                    user_id=self.user_id,
+                    error=LeaveError.DURATION_MISMATCH
+                )
             
         # if there is only 1 specified date and duration_e
         elif self.duration and self.start_date:
@@ -82,7 +87,12 @@ class ExtractDates(LeaveTask):
             try: # duration specified
                 self.start_date, self.end_date = calc_start_end_date(self.duration) # sets self.start_date, self.end_date
             except Exception: # start, end dates and duration not specified
-                raise ReplyError(ErrorMessage.DATES_NOT_FOUND, LeaveError.DATES_NOT_FOUND)
+                raise ReplyError(
+                    body=ErrorMessage.DATES_NOT_FOUND, 
+                    job_no=self.job_no,
+                    user_id=self.user_id,
+                    error=LeaveError.DATES_NOT_FOUND
+                )
         
     def set_start_end_date(self):
         '''This function uses msg and returns True or False, at the same time setting start and end dates where possible and resolving possible conflicts. Checks if can do something about start date, end date and duration'''
@@ -100,12 +110,22 @@ class ExtractDates(LeaveTask):
 
             body = f'Conflicting start dates {join_with_commas_and(datetime.strptime(date, "%d/%m/%Y") for date in start_dates)}. Please send another msg with the form "on leave from dd/mm to dd/mm" to indicate the MC. Thank you!'
 
-            raise ReplyError(body, LeaveError.DURATION_MISMATCH)
+            raise ReplyError(
+                body=body, 
+                job_no=self.job_no,
+                user_id=self.user_id,
+                error=LeaveError.DURATION_MISMATCH
+            )
         if len(end_dates) > 1:
             
             body = f'Conflicting end dates {join_with_commas_and(datetime.strptime(date, "%d/%m/%Y") for date in end_dates)}. Please send another msg with the form "on leave from dd/mm to dd/mm" to indicate the MC. Thank you!'
 
-            raise ReplyError(body, LeaveError.DURATION_MISMATCH)
+            raise ReplyError(
+                body=body, 
+                job_no=self.job_no,
+                user_id=self.user_id,
+                error=LeaveError.DURATION_MISMATCH
+            )
         
         if len(start_dates) == 1:
             self.start_date = start_dates[0]
@@ -155,7 +175,12 @@ class ExtractDates(LeaveTask):
         if self.end_date < cur_sg_date:
             self.logger.info("date is too early cannot be fixed")
             body = f"Hi {self.user.alias}, I am no longer able to add your leave if you take it before today, sorry about the inconvenience."
-            raise ReplyError(body, LeaveError.ALL_PREVIOUS_DATES)
+            raise ReplyError(
+                body=body, 
+                job_no=self.job_no,
+                user_id=self.user_id,
+                error=LeaveError.ALL_PREVIOUS_DATES
+            )
         # the start date is before today, but end date is at least today
         elif self.start_date < earliest_possible_date:
             # if start date is before today, definitely need to reset it to at least today
@@ -163,7 +188,7 @@ class ExtractDates(LeaveTask):
                 self.logger.info("date is too early but can be fixed")
                 self.start_date = cur_sg_date
                 self.duration = (self.end_date - self.start_date).days + 1
-                self.logger.info(f"committed in validate_start_date in session {id(get_session())}")
+                self.logger.info(f"committed in validate_start_date in session {id(Session())}")
                 self.validation_errors.add(LeaveIssue.UPDATED)
 
     def check_for_overlap(self):
@@ -193,7 +218,12 @@ class ExtractDates(LeaveTask):
             self.validation_errors.add(LeaveIssue.OVERLAP)
         elif len(self.duplicate_dates) != 0:
             self.logger.info("duplicates cannot be fixed")
-            raise ReplyError(LeaveErrorMessage.ALL_OVERLAPPING, LeaveError.ALL_OVERLAPPING)
+            raise ReplyError(
+                body=LeaveErrorMessage.ALL_OVERLAPPING, 
+                job_no=self.job_no,
+                user_id=self.user_id,
+                error=LeaveError.ALL_OVERLAPPING
+            )
         else:
             pass
     

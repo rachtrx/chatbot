@@ -1,7 +1,7 @@
 from sqlalchemy import desc
 from sqlalchemy.types import Enum as SQLEnum
 
-from extensions import db, get_session
+from extensions import db, Session
 
 from models.users import User
 
@@ -11,9 +11,9 @@ from models.jobs.base.utilities import current_sg_time
 
 from models.jobs.daemon.constants import DaemonTaskType
 
-class DaemonTask(Task):
+class TaskDaemon(Task):
 
-    __tablename__ = "daemon_task"
+    __tablename__ = "task_daemon"
 
     id = db.Column(db.Integer, primary_key=True)
     type = db.Column(SQLEnum(DaemonTaskType), nullable=False)
@@ -28,7 +28,7 @@ class DaemonTask(Task):
     @property
     def user(self):
         if not hasattr(self, '_user'):
-            self._user = get_session().query(User).filter_by(User.name == 'ICT Hotline').first()
+            self._user = Session().query(User).filter_by(User.name == 'ICT Hotline').first()
         return self._user # TODO
     
     @user.setter
@@ -37,7 +37,7 @@ class DaemonTask(Task):
 
     @classmethod
     def get_latest_tasks(cls, task_type, count=2):
-        tasks = get_session().query(
+        tasks = Session().query(
                 cls.created_at,
                 cls.status
             ).filter(
@@ -51,7 +51,7 @@ class DaemonTask(Task):
 
     @classmethod
     def get_latest_completed_task(cls, task_type):
-        return get_session().query(
+        return Session().query(
                 cls.created_at
             ).filter(
                 cls.type == task_type,
@@ -62,7 +62,7 @@ class DaemonTask(Task):
 
     @classmethod
     def get_metric(cls, operation):
-        session = get_session()
+        session = Session()
         metric = session.query(cls).filter_by(operation=operation).first()
         if not metric:
             metric = cls(operation)
@@ -71,7 +71,7 @@ class DaemonTask(Task):
     def set_metric_status(self, job):
         cur_time = current_sg_time()
 
-        session = get_session()
+        session = Session()
         updates_match = self.last_successful_update == self.last_update
         self.status = job.status
 

@@ -3,14 +3,14 @@ import os
 from models.jobs.base.constants import OutgoingMessageData, MessageType
 from models.jobs.base.utilities import print_all_dates, clear_user_processing_state
 
-from models.jobs.leave.Task import LeaveTask
+from models.jobs.leave.Task import TaskLeave
 from models.jobs.leave.constants import LeaveStatus, LeaveTaskType
 from models.jobs.leave.utilities import get_cancel_leave_cv
 from models.jobs.leave.LeaveRecord import LeaveRecord
 
 from models.messages.MessageKnown import MessageKnown
 
-class CancelLeave(LeaveTask):
+class CancelLeave(TaskLeave):
 
     __mapper_args__ = {
         "polymorphic_identity": LeaveTaskType.CANCEL

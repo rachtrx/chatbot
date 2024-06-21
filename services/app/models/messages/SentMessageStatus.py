@@ -1,7 +1,7 @@
 import os
 from sqlalchemy.types import Enum as SQLEnum
 
-from extensions import db, get_session, twilio
+from extensions import db, Session, twilio
 
 from models.jobs.base.constants import MessageType, Status
 
@@ -17,22 +17,11 @@ class SentMessageStatus(db.Model):
     sid = db.Column(db.ForeignKey("message.sid"), primary_key=True)
     status = db.Column(SQLEnum(Status), nullable=False)
 
-    message = db.relationship('MessageBase', backref='sent_status', lazy='select')
+    message = db.relationship('Message', backref='sent_status', lazy='select')
 
     def __init__(self, sid):
         self.sid = sid
-        self.status = Status.PENDING_CALLBACK
-
-    def commit_status(self, status):
-        self.logger.info(f"trying to commit status {status}")
-        session = get_session()
-        '''tries to update status'''
-        self.status = status
-        session.commit()
-
-        message = session.query(SentMessageStatus).filter_by(sid=self.sid).first()
-        self.logger.info(f"message status: {message.status}, passed status: {status}")
-        return True
+        self.status = Status.PENDING
     
     # FOLLOWING FUNCTIONS ARE CALLED FROM THE HTTTP CALLBACK
 
@@ -45,33 +34,18 @@ class SentMessageStatus(db.Model):
         if status == "sent":
             pass # USE TWILIO LOGS FOR DETAILS
 
-        elif status == "delivered":
+        elif status == "delivered" or status == "failed":
 
-            self.status = Status.COMPLETED
+            self.status = Status.COMPLETED if status == "delivered" else Status.FAILED
             logging.info(f"message {self.sid} committed with COMPLETED")
             
             if self.message.msg_type == MessageType.FORWARD:
                 logging.info(f"forwarded message {self.sid} was sent successfully")
-                session = get_session()
+                session = Session()
 
                 callback = session.query(ForwardCallback).get((self.message.job_no, self.message.seq_no))
                 if callback and callback.update_count > 0:
                     callback.update_on_forwards(use_name_alias=True)
-
-            # reply message expecting user reply. just to be safe, specify the 2 types of messages
-        
-        elif status == "failed":
-            # job immediately fails
-            message.commit_status(Status.SERVER_ERROR)
-
-            if message.type == "message_forward" and self.forwards_status_sent():
-                self.update_user_on_forwards(message.seq_no, self.map_job_type())
-            else:
-                self.commit_status(JobStatus.SERVER_ERROR) # forward message failed is still ok to some extent, especially if the user cancels afterwards. It's better to inform about the cancel
-
-
-            if self.type == "job_es": # TODO should probably send to myself
-                Message.execute(MessageType.SENT, (os.environ.get("ERROR_SID"), None), self)
 
         return None
     

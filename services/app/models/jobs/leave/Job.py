@@ -4,18 +4,19 @@ from overrides import overrides
 from sqlalchemy.types import Enum as SQLEnum
 
 from models.users import User
-from models.exceptions import ReplyError, DurationError
+from models.exceptions import ReplyError
 
-from models.jobs.base.Job import BaseJob
-from models.jobs.base.constants import JobType, Status, ErrorMessage, LeaveError, Error, LeaveType, Decision, LeaveStatus, AuthorizedDecision
+from models.jobs.base.Job import Job
+from models.jobs.base.constants import JobType, Status, ErrorMessage, Decision, AuthorizedDecision
 from models.jobs.base.utilities import is_user_status_exists
 
-from models.jobs.leave.tasks import ExtractDates, RequestConfirmation, RequestAuthorisation, ApproveLeave, RejectLeave, CancelLeave, SendError
-from models.jobs.leave.constants import TaskType, LeaveError, LeaveErrorMessage
-from models.jobs.leave.LeaveRecord import LeaveRecord
+from models.jobs.leave.constants import LeaveTaskType, LeaveError, LeaveErrorMessage, LeaveType, LeaveStatus
 
-class JobLeave(BaseJob):
+class JobLeave(Job):
+
+    __tablename__ = 'job_leave'
     
+    job_no = db.Column(db.ForeignKey("job.job_no"), primary_key=True, nullable=False)
     error = db.Column(SQLEnum(LeaveError), nullable=False)
     leave_type = db.Column(SQLEnum(LeaveType), nullable=True)
 
@@ -40,12 +41,12 @@ class JobLeave(BaseJob):
     def preprocess_msg(self, state, msg):
         '''returns the intermediate state'''
         msg_method_map = { # STATES A JOB CAN BE IN WHEN ACCEPTING A MESSAGE
-            TaskType.EXTRACT_DATES: self.get_leave_selection,
-            TaskType.REQUEST_CONFIRMATION: self.get_decision,
-            TaskType.REQUEST_AUTHORISATION: self.get_authorisation, # IN PLACE OF LEAVE_CONFIRMED
-            TaskType.APPROVE: self.get_selection_after_approval,
-            TaskType.REJECT: self.get_selection_after_rejection,
-            TaskType.CANCELLED: self.get_selection_after_cancelled,
+            LeaveTaskType.EXTRACT_DATES: self.get_leave_selection,
+            LeaveTaskType.REQUEST_CONFIRMATION: self.get_decision,
+            LeaveTaskType.REQUEST_AUTHORISATION: self.get_authorisation, # IN PLACE OF LEAVE_CONFIRMED
+            LeaveTaskType.APPROVE: self.get_selection_after_approval,
+            LeaveTaskType.REJECT: self.get_selection_after_rejection,
+            LeaveTaskType.CANCELLED: self.get_selection_after_cancelled,
         }
 
         func = msg_method_map.get(state)
@@ -53,21 +54,34 @@ class JobLeave(BaseJob):
         if func:
             return func(msg)
         else:
-            raise ReplyError(Error.UNKNOWN_ERROR)
+            raise ReplyError(
+                body=Error.UNKNOWN_ERROR,
+                user_id=self.primary_user_id,
+                job_no=self.job_no
+            )
 
     def execute(self, msg, user_id):
 
         if self.error:
             err_msg = self.get_error_message()
-            raise ReplyError(err_msg) # no need to update the error
+            raise ReplyError(
+                body=err_msg,
+                user_id=self.primary_user_id,
+                job_no=self.job_no
+            ) # no need to update the error
 
         last_task = self.get_current_state()
 
         if not last_task:
-            task = TaskType.EXTRACT_DATES
+            task = LeaveTaskType.EXTRACT_DATES
 
         elif last_task.status == Status.FAILED:
-            raise ReplyError(ErrorMessage.UNKNOWN_ERROR, LeaveError.UNKNOWN)
+            raise ReplyError(
+                body=ErrorMessage.UNKNOWN_ERROR, 
+                user_id=self.primary_user_id,
+                job_no=self.job_no,
+                error=LeaveError.UNKNOWN
+            )
         
         else:
             msg = self.get_enum(msg)
@@ -75,32 +89,40 @@ class JobLeave(BaseJob):
             
         payload = msg 
         
-        if task in [TaskType.APPROVE, TaskType.REJECT, TaskType.CANCEL]:
+        if task in [LeaveTaskType.APPROVE, LeaveTaskType.REJECT, LeaveTaskType.CANCEL]:
 
             status_map = {
-                TaskType.CANCEL: [LeaveStatus.APPROVED, LeaveStatus.PENDING],
-                TaskType.APPROVE: [LeaveStatus.PENDING],
-                TaskType.REJECT: [LeaveStatus.APPROVED]
+                LeaveTaskType.CANCEL: [LeaveStatus.APPROVED, LeaveStatus.PENDING],
+                LeaveTaskType.APPROVE: [LeaveStatus.PENDING],
+                LeaveTaskType.REJECT: [LeaveStatus.APPROVED]
             }
 
             statuses = status_map.get(task)
+
+            from models.jobs.leave.LeaveRecord import LeaveRecord
             payload = LeaveRecord.get_records(self.job_no, statuses=statuses)
         
             if not payload:
                 error_map = {
-                    TaskType.CANCEL: LeaveErrorMessage.NO_DATES_TO_CANCEL,
-                    TaskType.APPROVE: LeaveErrorMessage.NO_DATES_TO_APPROVE,
-                    TaskType.REJECT: LeaveErrorMessage.NO_DATES_TO_REJECT
+                    LeaveTaskType.CANCEL: LeaveErrorMessage.NO_DATES_TO_CANCEL,
+                    LeaveTaskType.APPROVE: LeaveErrorMessage.NO_DATES_TO_APPROVE,
+                    LeaveTaskType.REJECT: LeaveErrorMessage.NO_DATES_TO_REJECT
                 }
-                raise ReplyError(error_map[task])
+                raise ReplyError(
+                    body=error_map[task],
+                    user_id=self.primary_user_id,
+                    job_no=self.job_no,
+                )
+            
+        from models.jobs.leave.tasks import ExtractDates, RequestConfirmation, RequestAuthorisation, ApproveLeave, RejectLeave, CancelLeave
                 
         tasks_map = {
-            TaskType.EXTRACT_DATES: [ExtractDates, RequestConfirmation],
-            TaskType.REQUEST_CONFIRMATION: [RequestConfirmation],
-            TaskType.REQUEST_AUTHORISATION: [RequestAuthorisation],
-            TaskType.APPROVE: [ApproveLeave],
-            TaskType.REJECT: [RejectLeave],
-            TaskType.CANCEL: [CancelLeave]
+            LeaveTaskType.EXTRACT_DATES: [ExtractDates, RequestConfirmation],
+            LeaveTaskType.REQUEST_CONFIRMATION: [RequestConfirmation],
+            LeaveTaskType.REQUEST_AUTHORISATION: [RequestAuthorisation],
+            LeaveTaskType.APPROVE: [ApproveLeave],
+            LeaveTaskType.REJECT: [RejectLeave],
+            LeaveTaskType.CANCEL: [CancelLeave]
         }
 
         task = None
@@ -124,58 +146,75 @@ class JobLeave(BaseJob):
     def get_leave_selection(self, selection): # MESSAGE WHILE LEAVE_TYPE_NOT_FOUND
         print("Getting leave selection")
         if not isinstance(selection, LeaveType):
-            raise ReplyError(Error.UNKNOWN_ERROR)
+            raise ReplyError(
+                body=Error.UNKNOWN_ERROR,
+                user_id=self.primary_user_id,
+                job_no=self.job_no,
+            )
 
-        return TaskType.REQUEST_CONFIRMATION
+        return LeaveTaskType.REQUEST_CONFIRMATION
     
     @staticmethod
     def get_decision(selection): # MESSAGE WHILE PENDING_DECISION
         print("Getting Decision")
 
         action_map = {
-            Decision.CONFIRM: TaskType.REQUEST_AUTHORISATION,
+            Decision.CONFIRM: LeaveTaskType.REQUEST_AUTHORISATION,
             Decision.CANCEL: LeaveError.REGEX,
         }
 
         return action_map.get(selection)
     
-    @staticmethod
-    def get_authorisation(selection): # MESSAGE WHILE PENDING_AUTHORISATION
+    def get_authorisation(self, selection): # MESSAGE WHILE PENDING_AUTHORISATION
         print("Getting authorisation")
 
         if isinstance(selection, LeaveType):
-            raise ReplyError(Error.PENDING_AUTHORISATION)
+            raise ReplyError(
+                body=Error.PENDING_AUTHORISATION,
+                user_id=self.primary_user_id,
+                job_no=self.job_no
+            )
 
         action_map = {
-            AuthorizedDecision.APPROVE: TaskType.APPROVE,
-            AuthorizedDecision.REJECT: TaskType.REJECT,
-            Decision.CANCEL: TaskType.CANCEL # TODO check for last confirm message? # TODO start cancel process while pending validation
+            AuthorizedDecision.APPROVE: LeaveTaskType.APPROVE,
+            AuthorizedDecision.REJECT: LeaveTaskType.REJECT,
+            Decision.CANCEL: LeaveTaskType.CANCEL # TODO check for last confirm message? # TODO start cancel process while pending validation
         }
 
         return action_map.get(selection)
             
-    @staticmethod
-    def get_selection_after_cancelled(selection): # MESSAGE WHILE LEAVE_CANCELLED
+    def get_selection_after_cancelled(self, selection): # MESSAGE WHILE LEAVE_CANCELLED
         print("Handling selection after cancelled")
 
         if isinstance(selection, AuthorizedDecision):
-            raise ReplyError(LeaveError.AUTHORISING_CANCELLED_MSG)
+            raise ReplyError(
+                body=LeaveError.AUTHORISING_CANCELLED_MSG,
+                user_id=self.primary_user_id,
+                job_no=self.job_no
+            )
     
         elif isinstance(selection, LeaveType):
-            raise ReplyError(LeaveError.LEAVE_CANCELLED)
+            raise ReplyError(
+                body=LeaveError.LEAVE_CANCELLED,
+                user_id=self.primary_user_id,
+                job_no=self.job_no
+            )
         
         # TODO possible for Decision to be here? ie. if there are more than 1 Decision messages
     
-    @staticmethod
-    def get_selection_after_approval(selection): # MESSAGE WHILE LEAVE_APPROVED
+    def get_selection_after_approval(self, selection): # MESSAGE WHILE LEAVE_APPROVED
         print("Handling selection after approval")
 
         if isinstance(selection, LeaveType):
-            raise ReplyError(LeaveError.LEAVE_APPROVED)
+            raise ReplyError(
+                body=LeaveError.LEAVE_APPROVED,
+                user_id=self.primary_user_id,
+                job_no=self.job_no
+            )
 
         action_map = {
-            AuthorizedDecision.REJECT: TaskType.REJECT,
-            Decision.CANCEL: TaskType.CANCEL, # TODO check for last confirm message? # TODO start cancel process while pending validation
+            AuthorizedDecision.REJECT: LeaveTaskType.REJECT,
+            Decision.CANCEL: LeaveTaskType.CANCEL, # TODO check for last confirm message? # TODO start cancel process while pending validation
             AuthorizedDecision.APPROVE: LeaveError.LEAVE_APPROVED,
         }
     
@@ -183,18 +222,29 @@ class JobLeave(BaseJob):
         
         # TODO possible for Decision to be here? ie. if there are more than 1 Decision messages
     
-    @staticmethod
-    def get_selection_after_rejection(selection): # MESSAGE WHILE LEAVE_REJECTED
+    def get_selection_after_rejection(self, selection): # MESSAGE WHILE LEAVE_REJECTED
         print("Handling selection after rejection")
 
         if isinstance(selection, AuthorizedDecision) and selection == AuthorizedDecision.APPROVE:
-            raise ReplyError(LeaveError.LEAVE_REJECTED)
+            raise ReplyError(
+                body=LeaveError.LEAVE_REJECTED,
+                user_id=self.primary_user_id,
+                job_no=self.job_no
+            )
         
         elif isinstance(selection, Decision) and selection == Decision.CANCEL:
-            raise ReplyError(LeaveError.LEAVE_REJECTED)
+            raise ReplyError(
+                body=LeaveError.LEAVE_REJECTED,
+                user_id=self.primary_user_id,
+                job_no=self.job_no
+            )
     
         elif isinstance(selection, LeaveType):
-            raise ReplyError(LeaveError.LEAVE_REJECTED) # TODO job_status is now only for leave class?
+            raise ReplyError(
+                body=LeaveError.LEAVE_REJECTED,
+                user_id=self.primary_user_id,
+                job_no=self.job_no
+            ) # TODO job_status is now only for leave class?
         
         # TODO possible for Decision to be here? ie. if there are more than 1 Decision messages
         

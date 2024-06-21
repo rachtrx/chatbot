@@ -1,7 +1,10 @@
 import logging
-from models.jobs.base.constants import LOG_LEVEL
+import os
 
-def setup_logger(name, filename="app", log_dir="/var/log"):
+LOG_LEVEL = logging.ERROR if os.environ.get('LIVE') == 1 else logging.INFO
+LOG_DIR = "/var/log" if os.environ.get('LIVE') == 1 else "logs"
+
+def setup_logger(name, filename="app", log_dir=LOG_DIR):
     """
     Set up a logger with the name and log it to a file
     """

@@ -4,16 +4,16 @@ from datetime import datetime
 
 from models.exceptions import ReplyError
 
-from models.jobs.base.constants import MessageType, OutgoingMessageData, UserState, Decision, Error
+from models.jobs.base.constants import MessageType, OutgoingMessageData, UserState, Decision, ErrorMessage, Status
 from models.jobs.base.utilities import set_user_state, combine_with_key_increment
 
-from models.jobs.leave.Task import LeaveTask
-from models.jobs.leave.constants import State, LeaveIssue, LeaveError, LeaveType, Patterns, LeaveTaskType
+from models.jobs.leave.Task import TaskLeave
+from models.jobs.leave.constants import LeaveIssue, LeaveType, Patterns, LeaveTaskType
 from models.jobs.leave.utilities import set_dates_str, print_overlap_dates
 
 from models.messages.MessageKnown import MessageKnown
 
-class RequestConfirmation(LeaveTask):
+class RequestConfirmation(TaskLeave):
 
     ###########################
     # SENDING CONFIRMATION
@@ -26,11 +26,15 @@ class RequestConfirmation(LeaveTask):
     def restore_cache(self, data):
 
         if not data.get('dates', None):
-            raise ReplyError(Error.TIMEOUT_MSG)
+            raise ReplyError(
+                body=ErrorMessage.TIMEOUT_MSG,
+                job_no=self.job_no,
+                user_id=self.user_id
+            )
 
         self.dates_to_update = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in data['dates'] if data.get('dates', None)]
         self.duplicate_dates = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in data['duplicate_dates'] if data.get('duplicate_dates', None)]
-        self.validation_errors = set([LeaveError(int(value)) for value in data['validation_errors'] if data.get('validation_errors', None)])
+        self.validation_errors = set([getattr(Status, key) for key in data['validation_errors'] if data.get('validation_errors', None)])
 
     def update_cache(self):
         return {
@@ -38,7 +42,7 @@ class RequestConfirmation(LeaveTask):
             "dates_to_update": [date.strftime("%d-%m-%Y") for date in self.dates_to_update],
             "duplicate_dates": [date.strftime("%d-%m-%Y") for date in self.duplicate_dates],
             # returned by generate base
-            "validation_errors": [error.value for error in list(self.validation_errors)],
+            "validation_errors": [error.key for error in list(self.validation_errors)],
             # can be blank after genenrate base
         }
 
@@ -124,7 +128,11 @@ class RequestConfirmation(LeaveTask):
             content_sid = os.environ.get("LEAVE_CONFIRMATION_CHECK_SID")
         else:
             self.logger.error(f"UNCAUGHT errors IN CV: {errors}")
-            raise ReplyError(Error.UNKNOWN_ERROR)
+            raise ReplyError(
+                body=ErrorMessage.UNKNOWN_ERROR,
+                job_no=self.job_no,
+                user_id=self.user_id
+            )
         
         cv = json.dumps(combine_with_key_increment(base_cv, issues))
 

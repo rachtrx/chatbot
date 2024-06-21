@@ -4,9 +4,9 @@ from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.types import Enum as SQLEnum
 from sqlalchemy.orm import declared_attr
 
-from extensions import db
+from extensions import db, Session
 
-from routing.RedisQueue import RedisCache
+from routing.Redis import RedisCache
 
 from models.jobs.base.constants import JOBS_PREFIX, ErrorMessage, Status
 from models.jobs.base.utilities import current_sg_time
@@ -76,13 +76,16 @@ class Task(db.Model):
         if data:
             self.restore_cache(data)
 
+        session = Session()
         try:
             self.execute() # FINAL STATE
             self.update_cache()
             self.status = Status.COMPLETED
+            session.commit()
             self.run_background_tasks()
         except Exception as e:
             self.status = Status.FAILED
+            session.commit()
             raise
 
     def execute(self):
@@ -115,6 +118,3 @@ class Task(db.Model):
                 'wait_time': 5
             }) # TODO check if job_no and seq_no can be accessed by the callback itself?
         )
-
-    def get_callback_context(self):
-        return "your request"

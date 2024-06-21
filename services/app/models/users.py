@@ -1,8 +1,8 @@
+from __future__ import annotations
 import os
 import shortuuid
-from __future__ import annotations
 
-from extensions import db, get_session
+from extensions import db, Session
 from MessageLogger import setup_logger
 
 from models.jobs.base.utilities import join_with_commas_and
@@ -15,11 +15,11 @@ class User(db.Model):
     logger = setup_logger('models.user')
 
     __tablename__ = "users"
-    id = db.Column(db.String(80), primary_key=True, nullable=False)
+    id = db.Column(db.String(32), primary_key=True, nullable=False)
     name = db.Column(db.String(80), nullable=False)
     alias = db.Column(db.String(80), nullable=False)
     number = db.Column(db.Integer(), nullable=False)
-    dept = db.Column(db.String(50), nullable=True)
+    dept = db.Column(db.String(64), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
 
     # Self-referential relationships
@@ -52,7 +52,7 @@ class User(db.Model):
 
     @classmethod
     def get_user(cls, from_number):
-        session = get_session()
+        session = Session()
         user = session.query(cls).filter_by(number=from_number[-8:]).first()
         print(f"User: {user}")
         if user:
@@ -66,7 +66,7 @@ class User(db.Model):
 
     @classmethod
     def get_dept_admins(cls, dept):
-        session = get_session()
+        session = Session()
         query = session.query(cls).filter(
             User.is_dept_admin == True,
             User.dept == dept
@@ -76,7 +76,7 @@ class User(db.Model):
 
     @classmethod
     def get_global_admins(cls):
-        session = get_session()
+        session = Session()
         query = session.query(cls).filter(cls.is_global_admin == True)
         global_admins = query.all()
         return set(global_admins) if global_admins else set()

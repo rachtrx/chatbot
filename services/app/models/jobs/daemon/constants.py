@@ -17,10 +17,10 @@ class AccessLevel(Enum):
     STAFF = 'STAFF'
 
 class Update(Enum):
-    DEL = 'del'
-    ADD = 'add'
+    DEL = 'DEL'
+    ADD = 'ADD'
 
-class DaemonTaskType:
+class DaemonTaskType(Enum):
     NONE = 'NONE'
     ACQUIRE_TOKEN = 'ACQUIRE_TOKEN'
     SEND_REPORT = 'SEND_REPORT'

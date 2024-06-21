@@ -4,14 +4,13 @@ import logging
 
 from sqlalchemy.ext.declarative import declared_attr
 
-from extensions import db, get_session
+from extensions import db, Session
 from MessageLogger import setup_logger
 
 from models.jobs.base.constants import OutgoingMessageData, MessageType, ForwardStatus, Status
 from models.jobs.base.utilities import join_with_commas_and, run_new_context
 
 from models.messages.MessageKnown import MessageKnown
-from models.messages.SentMessageStatus import SentMessageStatus
 
 class ForwardCallback(db.Model):
     __tablename__ = 'forward_callback'
@@ -20,16 +19,16 @@ class ForwardCallback(db.Model):
     def logger(cls):
         return setup_logger(f'models.{cls.__name__.lower()}')
 
-    job_no = db.Column(db.String, db.ForeignKey('job.job_no'), primary_key=True, nullable=False)
-    seq_no = db.Column(db.Integer(), primary_key=True, nullable=False)
+    job_no = db.Column(db.String(32), db.ForeignKey('job.job_no'), primary_key=True, nullable=False)
+    seq_no = db.Column(db.Integer, primary_key=True, nullable=False)
 
     job = db.relationship('Job', backref='forward_callbacks', lazy='select')
 
     user_id = db.Column(db.ForeignKey("users.id"), nullable=False)
-    user = db.relationship('User', backref='messages', lazy='select')
+    user = db.relationship('User', backref='callbacks', lazy='select')
 
     update_count = db.Column(db.Integer, nullable=False)
-    message_context = db.Column(db.String, nullable=False)
+    message_context = db.Column(db.String(64), nullable=False)
 
     def __init__(self, job_no, seq_no, user_id, message_context):
         self.job_no = job_no
@@ -63,7 +62,7 @@ class ForwardCallback(db.Model):
 
     def check_message_forwarded(self):
 
-        session = get_session()
+        session = Session()
         logging.info(f"session id in check_message_forwarded: {id(session)}")
 
         for instance in session.identity_map.values():
@@ -75,7 +74,7 @@ class ForwardCallback(db.Model):
             forwarded_msgs = session.query(MessageKnown).filter(
                 MessageKnown.job_no == self.job_no,
                 MessageKnown.seq_no == self.seq_no,
-                MessageKnown.type == MessageType.FORWARD,
+                MessageKnown.msg_type == MessageType.FORWARD,
             ).all()
 
             if not forwarded_msgs:
@@ -87,6 +86,7 @@ class ForwardCallback(db.Model):
             sids = [f_msg.sid for f_msg in forwarded_msgs]
 
             # Fetch all SentMessageStatus records in one go using `in_`
+            from models.messages.SentMessageStatus import SentMessageStatus
             sent_messages = session.query(SentMessageStatus).filter(SentMessageStatus.sid.in_(sids)).all()
             sent_messages_dict = {sent_msg.sid: sent_msg.status for sent_msg in sent_messages}
 

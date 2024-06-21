@@ -3,20 +3,20 @@ import pandas as pd
 import numpy as np
 import shortuuid
 
-from extensions import get_session
+from extensions import Session
 
 from models.users import User
 from models.exceptions import AzureSyncError
 
 from models.jobs.base.utilities import join_with_commas_and
 
-from models.jobs.daemon.Task import DaemonTask
+from models.jobs.daemon.Task import TaskDaemon
 from models.jobs.daemon.constants import Link, DaemonTaskType, DaemonMessage
 from models.jobs.daemon.utilities import generate_header
 
 USER_COLS = ['name', 'alias', 'number', 'dept', 'is_global_admin', 'is_dept_admin']
 
-class SyncUsers(DaemonTask):
+class SyncUsers(TaskDaemon):
 
     __mapper_args__ = {
         "polymorphic_identity": DaemonTaskType.SYNC_USERS
@@ -68,7 +68,7 @@ class SyncUsers(DaemonTask):
 
     def update_user_database(self):
 
-        session = get_session()
+        session = Session()
 
         cols = ['name', 'alias', 'number', 'dept', 'reporting_officer_name', 'is_global_admin', 'is_dept_admin']
 
