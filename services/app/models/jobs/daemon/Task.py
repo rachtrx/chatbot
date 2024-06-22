@@ -15,7 +15,6 @@ class TaskDaemon(Task):
 
     __tablename__ = "task_daemon"
 
-    id = db.Column(db.Integer, primary_key=True)
     type = db.Column(SQLEnum(DaemonTaskType), nullable=False)
     job_no = db.Column(db.ForeignKey("job_daemon.job_no"), nullable=False)
     job = db.relationship("JobDaemon", backref="tasks")

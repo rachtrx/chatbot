@@ -3,6 +3,8 @@
 **/*.env
 **/*.env.db
 **/*.env.dev
+schema1.sql
+**/*.sql
 
 excel_files/
 token.txt

@@ -20,6 +20,7 @@ class Message(db.Model):
     timestamp = db.Column(db.DateTime(timezone=True), nullable=False)
     type = db.Column(SQLEnum(MessageOrigin), nullable=False)
     msg_type = db.Column(SQLEnum(MessageType), nullable=False)
+    seq_no = db.Column(db.Integer(), nullable=False)
 
     __mapper_args__ = {
         "polymorphic_identity": MessageOrigin.NONE,

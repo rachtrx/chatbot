@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 import shortuuid
+from sqlalchemy.schema import UniqueConstraint
 
 from extensions import db, Session
 from MessageLogger import setup_logger
@@ -29,6 +30,8 @@ class User(db.Model):
     
     is_global_admin = db.Column(db.Boolean, default=False, nullable=False)
     is_dept_admin = db.Column(db.Boolean, default=False, nullable=False)
+
+    __table_args__ = (UniqueConstraint('name', 'number', name='_name_number_uc'),)
 
     @property
     def sg_number(self):

@@ -5,7 +5,6 @@ load_dotenv(dotenv_path=env_path)
 import os
 import logging
 import traceback
-import jsonify
 import threading
 
 from flask import request, Response
@@ -13,7 +12,8 @@ from flask.cli import with_appcontext
 from flask_apscheduler import APScheduler
 
 from manage import create_app
-from extensions import redis_client, twilio, Session
+from extensions import twilio, Session
+from MessageLogger import LOG_LEVEL
 
 from routing.Scheduler import job_scheduler
 
@@ -26,9 +26,9 @@ from models.messages.SentMessageStatus import SentMessageStatus
 
 from models.jobs.base.Job import Job
 from models.jobs.base.constants import JobType, ErrorMessage, UserState, MessageType
-from models.jobs.base.utilities import log_level, set_user_state, check_user_state, current_sg_time
+from models.jobs.base.utilities import set_user_state, check_user_state, current_sg_time
 
-from models.jobs.daemon.constants import TaskType as DaemonTaskType
+from models.jobs.daemon.constants import DaemonTaskType
 
 # from es.manage import loop_through_files, create_index
 
@@ -57,6 +57,26 @@ app = create_app()
 scheduler = APScheduler()
 scheduler.init_app(app)
 scheduler.start()
+
+def setup_azure():
+
+    session = Session()
+
+    try:
+        job_no = Job.create_job(JobType.DAEMON, session)
+        tasks_to_run = [DaemonTaskType.ACQUIRE_TOKEN, DaemonTaskType.SYNC_USERS, DaemonTaskType.SYNC_LEAVES]
+        job_scheduler.add_to_queue(job_no, payload=tasks_to_run, session=session)
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        raise
+    finally:
+        Session.remove()
+
+def setup_es():
+    # create_new_index()
+    # loop_files()
+    pass
 
 @scheduler.task('cron', id='health_check', minute='*/15')
 def execute():
@@ -145,7 +165,7 @@ def enqueue_message():
         )
         logging.error(traceback.format_exc())
     finally:
-        return jsonify("OK"), 202
+        return Response(status=200)
 
 @app.route("/chatbot/sms/callback/", methods=['POST'])
 def sms_reply_callback():
@@ -191,9 +211,8 @@ if __name__ == "__main__":
         filename='/var/log/app.log',  # Log file path
         filemode='a',  # Append mode
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Log message format
-        level=log_level  # Log level
+        level=LOG_LEVEL  # Log level
     )
     logging.getLogger('twilio.http_client').setLevel(logging.WARNING)
-    with app.app_context():
-        start_redis_listener() # TODO
+    setup_azure()
     app.run(debug=True)

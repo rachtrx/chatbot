@@ -1,12 +1,14 @@
-from extensions import db
+from extensions import db, Session
 
 from overrides import overrides
 from sqlalchemy.types import Enum as SQLEnum
+from sqlalchemy import desc
 
 from models.users import User
 from models.exceptions import ReplyError
 
 from models.jobs.base.Job import Job
+from models.jobs.leave.Task import TaskLeave
 from models.jobs.base.constants import JobType, Status, ErrorMessage, Decision, AuthorizedDecision
 from models.jobs.base.utilities import is_user_status_exists
 
@@ -17,7 +19,7 @@ class JobLeave(Job):
     __tablename__ = 'job_leave'
     
     job_no = db.Column(db.ForeignKey("job.job_no"), primary_key=True, nullable=False)
-    error = db.Column(SQLEnum(LeaveError), nullable=False)
+    error = db.Column(SQLEnum(LeaveError), nullable=True)
     leave_type = db.Column(SQLEnum(LeaveType), nullable=True)
 
     __mapper_args__ = {
@@ -55,7 +57,7 @@ class JobLeave(Job):
             return func(msg)
         else:
             raise ReplyError(
-                body=Error.UNKNOWN_ERROR,
+                body=ErrorMessage.UNKNOWN_ERROR,
                 user_id=self.primary_user_id,
                 job_no=self.job_no
             )
@@ -70,18 +72,15 @@ class JobLeave(Job):
                 job_no=self.job_no
             ) # no need to update the error
 
-        last_task = self.get_current_state()
+        last_task = Session().query(TaskLeave).filter(
+            TaskLeave.job_no == self.job_no,
+            TaskLeave.status != Status.FAILED
+        ).order_by(
+            desc(TaskLeave.created_at)
+        )
 
         if not last_task:
             task = LeaveTaskType.EXTRACT_DATES
-
-        elif last_task.status == Status.FAILED:
-            raise ReplyError(
-                body=ErrorMessage.UNKNOWN_ERROR, 
-                user_id=self.primary_user_id,
-                job_no=self.job_no,
-                error=LeaveError.UNKNOWN
-            )
         
         else:
             msg = self.get_enum(msg)
@@ -147,7 +146,7 @@ class JobLeave(Job):
         print("Getting leave selection")
         if not isinstance(selection, LeaveType):
             raise ReplyError(
-                body=Error.UNKNOWN_ERROR,
+                body=ErrorMessage.UNKNOWN_ERROR,
                 user_id=self.primary_user_id,
                 job_no=self.job_no,
             )
@@ -170,7 +169,7 @@ class JobLeave(Job):
 
         if isinstance(selection, LeaveType):
             raise ReplyError(
-                body=Error.PENDING_AUTHORISATION,
+                body=ErrorMessage.PENDING_AUTHORISATION,
                 user_id=self.primary_user_id,
                 job_no=self.job_no
             )

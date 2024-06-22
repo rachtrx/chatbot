@@ -26,7 +26,7 @@ fi
 
 cd ${FLASK_APP_DIR}
 # alembic revision --autogenerate -m "${NEW_MIGRATION_MESSAGE}" # IMPT RUN URSELF FIRST!
-alembic upgrade head
+# alembic upgrade head
 echo "Migrations complete."
 
 host="$1"

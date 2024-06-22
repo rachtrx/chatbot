@@ -21,7 +21,7 @@ class MessageKnown(Message):
 
     __tablename__ = 'message_known'
 
-    seq_no = db.Column(db.Integer(), nullable=False)
+    sid = db.Column(db.String, db.ForeignKey('message.sid'), primary_key=True, nullable=False)
 
     job_no = db.Column(db.String, db.ForeignKey('job.job_no'), nullable=True)
     job = db.relationship('Job', backref='messages', lazy='select')

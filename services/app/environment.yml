@@ -27,6 +27,7 @@ dependencies:
   - overrides==7.4.0
   - shortuuid==1.0.12
   - alembic==1.13.1
+  - Flask-APScheduler==1.13.1
   - pip:
       - docopt==0.6.2
       - pipdeptree==2.13.1

@@ -59,7 +59,7 @@ class ApproveLeave(TaskLeave):
         users_list = self.job.user.get_relations(ignore_users=[self.user])
         alias = self.job.user.alias
         approver_alias = self.user.alias
-        self.affected_dates = LeaveRecord.update_leaves(records, LeaveStatus.CANCELLED)
+        self.affected_dates = LeaveRecord.update_leaves(records, LeaveStatus.APPROVED)
         
         cv_list = get_approve_leave_cv( # LOOP USERS
             users_list, 

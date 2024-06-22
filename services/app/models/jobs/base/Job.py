@@ -14,6 +14,8 @@ from sqlalchemy.types import Enum as SQLEnum
 
 class Job(db.Model): # system jobs
 
+    __tablename__ = 'job'
+
     @declared_attr
     def logger(cls):
         return setup_logger(f'models.{cls.__name__.lower()}')
@@ -46,7 +48,7 @@ class Job(db.Model): # system jobs
             from models.jobs.leave.Job import JobLeave
             new_job = JobLeave(*args, **kwargs)
         # Add conditions for other subclasses
-        elif intent == JobType.ES_SEARCH:
+        elif intent == JobType.SEARCH:
             pass
         elif intent == JobType.UNKNOWN:
             pass

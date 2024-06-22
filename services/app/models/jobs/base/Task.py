@@ -24,6 +24,10 @@ class Task(db.Model):
     __abstract__ = True
 
     @declared_attr
+    def id(cls):
+        return db.Column(db.String(32), primary_key=True, nullable=False)
+
+    @declared_attr
     def logger(cls):
         return setup_logger(f'models.{cls.__name__.lower()}')
     
@@ -34,6 +38,14 @@ class Task(db.Model):
     @declared_attr
     def status(cls):
         return db.Column(SQLEnum(Status), nullable=True)
+    
+    @declared_attr
+    def user_id(cls):
+        return db.Column(db.ForeignKey("users.id"), nullable=True)
+    
+    @declared_attr
+    def user(cls):
+        return db.relationship("User", backref="tasks")
 
     def __init__(self, job_no, payload=None, user_id=None):
         self.id = shortuuid.ShortUUID().random(length=8)
