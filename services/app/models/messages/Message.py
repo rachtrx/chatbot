@@ -14,6 +14,7 @@ class Message(db.Model):
     @declared_attr
     def logger(cls):
         return setup_logger(f'models.{cls.__name__.lower()}')
+    logger.propagate = False
 
     sid = db.Column(db.String(64), primary_key=True, nullable=False)
     body = db.Column(db.Text, nullable=True)

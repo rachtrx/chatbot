@@ -14,6 +14,8 @@ class TaskLeave(Task):
     job_no = db.Column(db.ForeignKey("job_leave.job_no"), nullable=False)
     job = db.relationship("JobLeave", backref="tasks")
 
+    user = db.relationship("User", backref="leave_tasks")
+
     __mapper_args__ = {
         "polymorphic_identity": LeaveTaskType.NONE,
         "polymorphic_on": type,

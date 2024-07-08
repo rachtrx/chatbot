@@ -10,14 +10,14 @@ from MessageLogger import setup_logger
 
 from models.jobs.base.utilities import current_sg_time
 
+from models.jobs.daemon.constants import Link
 from models.jobs.daemon.utilities import generate_header, delay_decorator
 
 class SpreadsheetManager:
 
     def __init__(self, mmyy=None, user=None, token=None, dev=False):
         self.template_path = '/home/app/web/excel_files/mc_template.xlsx'
-        self.drive_url = f"https://graph.microsoft.com/v1.0/drives/{os.environ.get('DRIVE_ID')}"
-        self.folder_url = self.drive_url + f"/items/{os.environ.get('FOLDER_ID')}"
+        self.folder_url = Link.DRIVE_URL + Link.LEAVE_FOLDER_ID
         if mmyy:
             self.month, self.year = mmyy
             self.month = calendar.month_name[self.month]
@@ -33,7 +33,6 @@ class SpreadsheetManager:
             self.logger = setup_logger('az.leave.spreadsheetmanager')
         else:
             self.logger = setup_logger('app', 'test', '.')
-        self.logger.info(f"drive_url: {self.drive_url}, folder_url = {self.folder_url}")
         self.headers = generate_header(token)
 
     @property
@@ -49,7 +48,7 @@ class SpreadsheetManager:
         '''
         This property can call every method below it that creates a new book, adds a worksheet and a table, and delete the original sheet. It abstracts the creation of the current month table into a single property
         
-        The final path is in the form https://graph.microsoft.com/v1.0/drives/{os.environ.get('DRIVE_ID')}/items/{book_id}/workbook/worksheets/{ws_id}/tables/{table_id}
+        The final path is in the form https://graph.microsoft.com/v1.0/drives/{os.getenv('DRIVE_ID')}/items/{book_id}/workbook/worksheets/{ws_id}/tables/{table_id}
         '''
         # get the workbook for this year
         # self.logger.info(self.query_book_url)
@@ -115,7 +114,7 @@ class SpreadsheetManager:
         else:
             book_id = book_name[0]['id']
 
-        worksheets_url = self.drive_url + f"/items/{book_id}/workbook/worksheets"
+        worksheets_url = Link.DRIVE_URL + f"{book_id}/workbook/worksheets"
         return [worksheets_url, new_book]
     
     def get_sheet_url(self, worksheets_url):
@@ -212,10 +211,10 @@ class SpreadsheetManager:
         # ADD TABLE HEADERS
         @delay_decorator("Table headers could not be initialised.", retries = 10)
         def _add_table_headers():
-            table_headers_url = f"{worksheet_url}/range(address='A1:E1')"
+            table_headers_url = f"{worksheet_url}/range(address='A1:F1')"
 
             header_values = {
-                "values": [["id", "Date", "Name", "Department", "Type"]]
+                "values": [["Date", "Name", "Department", "Type", "User ID", 'Record ID']]
             }
 
             response = requests.patch(table_headers_url, headers=self.headers, json=header_values)
@@ -227,7 +226,7 @@ class SpreadsheetManager:
             add_table_url = f"{worksheet_url}/tables/add"
 
             body = {
-                "address": "A1:E1",
+                "address": "A1:F1",
                 "hasHeaders": True,
             }
 
@@ -294,28 +293,11 @@ class SpreadsheetManager:
             response = requests.get(url=url, headers=self.headers)
             return response
         
-
         response = _find_current_dates(get_rows_url)
             
-        current_details_list = [tuple(info) for object_info in response.json()['value'] for info in object_info['values']]
-
-        self.logger.info(current_details_list[:5])
-        current_details_df = pd.DataFrame(data = current_details_list, columns = ["record_id", "date", "name", "dept", "leave_type"])
-
-        self.logger.info(current_details_df.head())
-        current_details_df['date'] = current_details_df['date'].str.strip()
-        current_details_df.replace('', np.nan, inplace=True)
-        empty_date_mask = current_details_df['date'].isna()
-        current_details_df['date'] = current_details_df['date'].astype('object')
-        current_details_df.loc[~empty_date_mask, 'date'] = pd.to_datetime(current_details_df.loc[~empty_date_mask, 'date'], format='%d/%m/%Y').dt.date
-        current_details_df = current_details_df.reset_index(drop=False).rename(columns={'index': 'az_index'})
-        current_details_df = current_details_df.astype({"record_id": str, "name": str, "dept": str, "leave_type": str, "az_index": int})
-        logging.info(current_details_df)
-
-        self.logger.info(f"DATES IN FIND CURRENT DATES: {current_details_df.date}")
-
-        return current_details_df
-    
+        data = [tuple(info) for object_info in response.json()['value'] for info in object_info['values']]
+        self.logger.info(f"Data from SpreadsheetManager: {data}")
+        return data
     
     def get_unique_current_dates(self):
 

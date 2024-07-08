@@ -2,9 +2,8 @@
 
 set -e
 
-printenv > /etc/environment
-
-export PYTHONPATH="$FLASK_APP_DIR:$PYTHONPATH"
+# printenv > /etc/environment
+# export PYTHONPATH="$FLASK_APP_DIR:$PYTHONPATH"
 
 echo "SQL USER: " $SQL_USER
 echo "SQL HOST: " $SQL_HOST
@@ -15,6 +14,7 @@ while ! pg_isready -h $SQL_HOST -p $SQL_PORT -q; do
 done
 
 echo "PostgreSQL started"
+echo "LIVE: $LIVE"
 
 # Check if the 'chatbot' database exists
 if psql -h $SQL_HOST -U $SQL_USER -lqt | cut -d \| -f 1 | grep -qw "chatbot"; then

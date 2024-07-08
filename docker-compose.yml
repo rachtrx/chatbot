@@ -10,13 +10,14 @@ services:
     expose: 
       - 5001
     environment:
+      - LIVE=0
       - PYTHONUNBUFFER=1
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD} # is this needed if its already in my flask .env file?
       # - ENV_FILE=.env.dev
     env_file:
-      - ./services/app/.env.dev
+      - ./services/app/.env
     volumes:
-      - ./services/app/logs:/var/log/
+      - ./services/app/logs:/home/app/web/logs
       - ./services/app/token.txt:${TOKEN_PATH}
       - ./services/app/alembic/versions:/home/app/web/alembic/versions # not needed for web server
       # - certs:/etc/chatbot/certs
@@ -35,11 +36,6 @@ services:
       - 5432:5432
   redis:
     image: "redis:alpine"
-    volumes:
-      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
-    ports:
-      - "6379:6379"
-    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     expose:
       - "6379"
 

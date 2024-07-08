@@ -1,4 +1,5 @@
 import threading
+import logging
 
 from manage import create_app
 from extensions import Session
@@ -7,6 +8,8 @@ from routing.Redis import RedisQueue
 
 from models.jobs.base.constants import JOBS_PREFIX
 from models.jobs.base.Job import Job
+
+from models.messages.MessageKnown import MessageKnown
 
 from models.exceptions import ReplyError
 
@@ -38,30 +41,33 @@ class BaseScheduler:
             worker_thread.start()
             self.workers[item_id] = worker_thread
         except Exception as e:
-            print(f"Failed to start worker: {e}")
+            logging.info(f"Failed to start worker: {e}")
             self.worker_semaphore.release()
 
     def worker(self, item_id):
         try:
             session = Session()
             payload = self.queues[item_id].get(block=False)  # 1st message should be available. TODO handle error?
-            print(f"Payload retrieved: {payload}")
+            logging.info(f"Payload retrieved: {payload}")
 
             completed = empty = False
 
             while not empty:
                 # Execute job in the application context
-                payload = self.queues[item_id].get(block=True, timeout=60)  # Wait for msges
-
+                # Wait for msges
                 with create_app().app_context():
                     completed = self.execute(item_id, payload) # job.execute must return True or False
                     if completed:
                         empty = self.queues[item_id].is_empty()
+                        logging.info(f"Is empty: {empty}")
                         if empty:
                             break
+                payload = self.queues[item_id].get(block=True, timeout=60)
+                if payload is None:
+                    break
         finally:
+            logging.info("Closing session")
             session.close()
-            session.remove()
             self.cleanup_worker(item_id)
             self.worker_semaphore.release()  # Release the permit when the worker finishes
 
@@ -76,7 +82,7 @@ class BaseScheduler:
 class JobScheduler(BaseScheduler): # job queue
 
     def execute(self, job_id, payload): # MESSAGE / DAEMON
-        print(f"Executing job {job_id} with data: {payload}")
+        logging.info(f"Executing job {job_id} with data: {payload}")
 
         # TODO WITH APP CONTEXT?
         session = Session()
@@ -85,5 +91,5 @@ class JobScheduler(BaseScheduler): # job queue
             return job.execute(payload) # implement whether the job can be cleaned up, for leave, once the requestor is no longer pending
         except ReplyError as re:
             re.execute()
-
+        
 job_scheduler = JobScheduler(prefix=JOBS_PREFIX)

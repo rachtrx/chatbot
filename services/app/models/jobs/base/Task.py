@@ -8,7 +8,7 @@ from extensions import db, Session
 
 from routing.Redis import RedisCache
 
-from models.jobs.base.constants import JOBS_PREFIX, ErrorMessage, Status
+from models.jobs.base.constants import JOBS_PREFIX, ErrorMessage, Status, OutgoingMessageData
 from models.jobs.base.utilities import current_sg_time
 
 from models.messages.ForwardCallback import ForwardCallback
@@ -30,6 +30,7 @@ class Task(db.Model):
     @declared_attr
     def logger(cls):
         return setup_logger(f'models.{cls.__name__.lower()}')
+    logger.propagate = False
     
     @declared_attr
     def created_at(cls):
@@ -42,10 +43,6 @@ class Task(db.Model):
     @declared_attr
     def user_id(cls):
         return db.Column(db.ForeignKey("users.id"), nullable=True)
-    
-    @declared_attr
-    def user(cls):
-        return db.relationship("User", backref="tasks")
 
     def __init__(self, job_no, payload=None, user_id=None):
         self.id = shortuuid.ShortUUID().random(length=8)
@@ -56,6 +53,9 @@ class Task(db.Model):
         self.cache = RedisCache(f"{JOBS_PREFIX}:{self.job_no}")
         self.payload = payload
         self.created_at = current_sg_time()
+        session = Session()
+        session.add(self)
+        session.commit()
 
     @property
     def cache(self):
@@ -84,16 +84,18 @@ class Task(db.Model):
         pass
 
     def run(self):
-        data = self.cache.get()
-        if data:
-            self.restore_cache(data)
+        if hasattr(self, 'type'):
+            self.logger.info(f"Task type: {self.type}; Data in cache: {self.cache.get()}")
+    
+        self.restore_cache(self.cache.get())
 
         session = Session()
         try:
             self.execute() # FINAL STATE
-            self.update_cache()
+            self.cache.set(self.update_cache())
             self.status = Status.COMPLETED
             session.commit()
+            self.logger.info("Running background tasks")
             self.run_background_tasks()
         except Exception as e:
             self.status = Status.FAILED
@@ -108,25 +110,20 @@ class Task(db.Model):
             return
         
         with ThreadPoolExecutor(max_workers=3) as executor:
-            for func, args in self.background_tasks:
-                executor.submit(func, *args)
+            for func, kwargs in self.background_tasks:
+                executor.submit(func, **kwargs)
 
-    def forwards_callback(self, successful_aliases, forward_callback: ForwardCallback):
+    def forwards_callback(self, forward_callback: ForwardCallback):
         '''names of successful forwards'''
-
-        if len(successful_aliases) == 0:
-            raise ReplyError(
-                ErrorMessage.NO_SUCCESSFUL_FORWARDS, 
-                forward_callback.user_id,
-                forward_callback.job_no, 
-            )
         
         if not forward_callback:
             return
+        
+        self.logger.info("Adding to background tasks")
 
         self.background_tasks.append(
             (forward_callback.update_on_forwards, {
                 'use_name_alias': True,
-                'wait_time': 5
+                'wait_time': 10
             }) # TODO check if job_no and seq_no can be accessed by the callback itself?
         )

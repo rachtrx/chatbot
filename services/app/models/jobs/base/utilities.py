@@ -9,7 +9,9 @@ import threading
 from functools import wraps
 from sqlalchemy import inspect as sql_inspect
 
-from extensions import ThreadSession, redis_client
+from extensions import Session, redis_client
+
+# print(f"Active thread count: {active_thread_count}")
 
 singapore_tz = ZoneInfo('Asia/Singapore')
 
@@ -133,7 +135,8 @@ def format_date_groups(groups):
 
     return join_with_commas_and(formatted_groups)
 
-def print_all_dates(dates, date_obj=False):
+def print_all_dates(dates, date_obj=True):
+    logging.info(f"Dates: {dates}")
     '''This function takes in a random array of date objects and returns it nicely as a string'''
     if date_obj:
         parsed_dates = sorted(date for date in dates)
@@ -167,12 +170,14 @@ def run_new_context(func):
 
         if kwargs.get('wait_time'):
             wait_time = kwargs.pop('wait_time')
+            logging.info(f"Waiting for {wait_time} seconds...")
             time.sleep(wait_time)
 
-        app = create_app()
-        with app.app_context():
-            session = ThreadSession()
-            logging.info("In decorator")
+        logging.info("Starting function in decorator")
+
+        with create_app().app_context():
+            session = Session()
+            logging.info("Starting function in decorator")
 
             try:                           
                 logging.info(id(session))
@@ -180,75 +185,12 @@ def run_new_context(func):
                 logging.info(f"Result in decorator: {result}")
 
             except Exception as e:
-                session.rollback()
-                logging.error("Something went wrong! Exception in decorator")
+                session.rollback() # TODO
+                logging.error("Exception caught in decorator")
                 logging.error(traceback.format_exc())
                 raise
             finally:
                 logging.info(id(session))
                 session.close()
-                session.remove()
                 return result
     return wrapper
-
-
-# from contextlib import contextmanager
-# from sqlalchemy.exc import OperationalError, DBAPIError
-
-# class User(db.Model):
-#     id = db.Column(db.Integer, primary_key=True)
-#     username = db.Column(db.String(80), unique=True, nullable=False)
-
-# @contextmanager
-# def session_scope():
-#     """Provide a transactional scope around a series of operations."""
-#     session = db.session()
-#     try:
-#         yield session
-#         session.commit()
-#     except:
-#         session.rollback()
-#         raise
-#     finally:
-#         session.close()
-
-# def retry_operation(session, func, max_attempts=5, initial_wait=0.1, backoff_factor=2):
-#     """Attempt a DB operation with retries on failure.
-
-#     Args:
-#         session (SQLAlchemy.Session): The database session.
-#         func (callable): A function to execute that performs the operation.
-#         max_attempts (int): Maximum number of retry attempts.
-#         initial_wait (float): Initial wait time between retries in seconds.
-#         backoff_factor (int): Factor by which to increase wait time after each retry.
-#     """
-#     attempt = 0
-#     wait_time = initial_wait
-#     while attempt < max_attempts:
-#         try:
-#             result = func(session)
-#             session.commit()
-#             return result  # Return or break after successful execution and commit
-#         except (OperationalError, DBAPIError) as e:
-#             session.rollback()  # Roll back the transaction before retrying
-#             attempt += 1
-#             if attempt == max_attempts:
-#                 print(f"Failed after {max_attempts} attempts.")
-#                 break  # Optionally, you can return or raise a custom exception here
-#             time.sleep(wait_time)
-#             wait_time *= backoff_factor
-#             print(f"Retrying operation, attempt {attempt}...")
-#         except Exception as e:
-#             print(f"An unexpected error occurred: {e}")
-#             session.rollback()
-#             break
-
-# def update_user(session, user_id, new_username):
-#     user = session.query(User).filter(User.id == user_id).with_for_update().one()
-#     user.username = new_username
-
-# @app.route('/update_user/<int:user_id>/<new_username>')
-# def web_update_user(user_id, new_username):
-#     with session_scope() as session:
-#         retry_operation(session, lambda s: update_user(s, user_id, new_username))
-#         return "Update attempted."

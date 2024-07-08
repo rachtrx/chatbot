@@ -4,12 +4,14 @@ from datetime import datetime, timedelta, date
 
 from models.users import User
 
+from models.jobs.base.constants import AuthorizedDecision
 from models.jobs.base.utilities import print_all_dates, current_sg_time, get_latest_date_past_hour, join_with_commas_and
 
 from models.jobs.leave.constants import LeaveIssue, Patterns
 
-def set_dates_str(dates, mark_late):
-    dates_str = print_all_dates(dates, date_obj=True)
+def set_dates_str(dates, mark_late=False):
+    logging.info(f"Dates to format: {dates}")
+    dates_str = print_all_dates(dates)
 
     if mark_late:
         cur_date = current_sg_time().date()
@@ -21,24 +23,21 @@ def set_dates_str(dates, mark_late):
     return dates_str
     
 def print_overlap_dates(dates):
-    return LeaveIssue.OVERLAP.value + print_all_dates(dates, date_obj=True)
-
-def print_updated_dates(dates_to_approve):
-    return LeaveIssue.LATE.value + print_all_dates(dates_to_approve, date_obj=True)
+    return LeaveIssue.OVERLAP.value + print_all_dates(dates)
 
 @User.loop_users # just need to pass in the user when calling get_approve_leave_cv
 def get_approve_leave_cv(relation, alias, leave_type, dates, mark_late=False, approver_alias=None):
-    '''LEAVE_NOTIFY_APPROVE_SID and LEAVE_NOTIFY_CANCEL_SID; The decorator is for SENDING MESSAGES TO ALL RELATIONS OF ONE PERSON'''
+    '''LEAVE_NOTIFY_APPROVE_SID; The decorator is for SENDING MESSAGES TO ALL RELATIONS OF ONE PERSON'''
     
     duration = len(dates)
 
     return {
         '1': relation.alias,
         '2': alias,
-        '3': leave_type.lower(),
+        '3': leave_type.value.lower(),
         '4': f"{str(duration)} {'day' if duration == 1 else 'days'}",
         '5': set_dates_str(dates, mark_late),
-        '6': approver_alias if approver_alias else 'None'
+        '6': approver_alias if approver_alias else 'Automatic'
     }
 
 @User.loop_users # just need to pass in the user when calling get_approve_leave_cv
@@ -63,24 +62,26 @@ def get_reject_leave_cv(relation, approver_alias, dates, alias):
 @User.loop_users
 def get_authorisation_cv(relation, alias, leave_type, dates, relation_aliases, mark_late=False):
     local_relation_aliases = relation_aliases.copy()
-    local_relation_aliases.discard(relation.alias)
+    local_relation_aliases.remove(relation.alias)
 
     duration = len(dates)
 
     return {
         '1': relation.alias,
         '2': alias,
-        '3': leave_type.lower(),
-        '4': f"{duration} {'day' if duration == 1 else 'days'}",
-        '5': set_dates_str(dates, mark_late),
-        '6': join_with_commas_and(list(local_relation_aliases))
+        '3': leave_type.value.lower(),
+        '4': set_dates_str(dates, mark_late),
+        '5': f"{duration} {'day' if duration == 1 else 'days'}",
+        '6': join_with_commas_and(list(local_relation_aliases)),
+        '7': AuthorizedDecision.APPROVE.value,
+        '8': AuthorizedDecision.REJECT.value,
     }
 
 
 @User.loop_users
 def get_authorisation_late_cv(relation, alias, leave_type, dates_approved, dates_to_authorise, relation_aliases, mark_late=False):
     local_relation_aliases = relation_aliases.copy()
-    local_relation_aliases.discard(relation.alias)
+    local_relation_aliases.remove(relation.alias)
 
     duration_approved = len(dates_approved)
     duration_to_authorise = len(dates_to_authorise)
@@ -88,12 +89,14 @@ def get_authorisation_late_cv(relation, alias, leave_type, dates_approved, dates
     return {
         '1': relation.alias,
         '2': alias,
-        '3': leave_type.lower(mark_late),
-        '4': f"{duration_approved} {'day' if duration_approved == 1 else 'days'}",
-        '5': set_dates_str(dates_approved, mark_late),
-        '6': f"{str(duration_to_authorise)} {'day' if duration_to_authorise == 1 else 'days'}",
-        '7': set_dates_str(dates_to_authorise, mark_late),
-        '8': join_with_commas_and(list(local_relation_aliases))
+        '3': leave_type.value.lower(),
+        '4': set_dates_str(dates_approved, mark_late),
+        '5': f"{duration_approved} {'day' if duration_approved == 1 else 'days'}",
+        '6': set_dates_str(dates_to_authorise, mark_late),
+        '7': f"{str(duration_to_authorise)} {'day' if duration_to_authorise == 1 else 'days'}",
+        '8': join_with_commas_and(list(local_relation_aliases)),
+        '9': AuthorizedDecision.APPROVE.value,
+        '10': AuthorizedDecision.REJECT.value,
     }
 
 ##################
@@ -104,7 +107,7 @@ def generate_date_obj(match_obj, date_format):
     '''returns date object from the regex groups, where there are typically 2 groups: start date and end date'''
     logging.info("matching dates")
     date = None
-    logging.info(match_obj.group("date"), match_obj.group("month"))
+    logging.info(f"{match_obj.group('date')}, {match_obj.group('month')}")
     if match_obj.group("date") and match_obj.group("month"):
         date = f'{match_obj.group("date")} {match_obj.group("month")} {current_sg_time().year}'
         date = datetime.strptime(date, date_format).date() # create datetime object

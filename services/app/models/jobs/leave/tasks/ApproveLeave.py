@@ -1,7 +1,7 @@
 import os
 
 from models.jobs.base.constants import OutgoingMessageData, MessageType
-from models.jobs.base.utilities import print_all_dates, clear_user_processing_state\
+from models.jobs.base.utilities import print_all_dates, clear_user_processing_state
 
 from models.jobs.leave.Task import TaskLeave
 from models.jobs.leave.LeaveRecord import LeaveRecord
@@ -17,24 +17,16 @@ class ApproveLeave(TaskLeave):
     }
 
     def execute(self):
-        reply_message = OutgoingMessageData( 
-            msg_type=MessageType.SENT, 
-            user=self.user.alias, 
-            job_no=self.job_no, 
-        )
         
         forward_metadata = self.approve(self.payload)
-        
-        reply_message.body = f"Leave on {print_all_dates(self.affected_dates)} has been approved for {self.job.user.alias}, relevant staff will be notified."
-        MessageKnown.send_msg(message=reply_message)
 
         follow_up_message = OutgoingMessageData(
             msg_type=MessageType.FORWARD,
-            user=self.job.user,
+            user_id=self.job.primary_user_id,
             job_no=self.job_no,
-            content_sid=os.environ.get('LEAVE_FOLLOW_UP_APPROVED_SID'),
+            content_sid=os.getenv('LEAVE_FOLLOW_UP_APPROVED_SID'),
             content_variables={
-                '1': self.job.user.alias,
+                '1': self.job.primary_user.alias,
                 '2': self.user.alias,
                 '3': print_all_dates(self.affected_dates),
                 '4': self.job_no
@@ -42,22 +34,33 @@ class ApproveLeave(TaskLeave):
         )
         MessageKnown.send_msg(message=follow_up_message)
 
-        MessageKnown.forward_template_msges(
-            self.job.job_no,
-            callback=self.forwards_callback,
-            user_id_to_update=self.job.user.id,
-            message_context="your leave",
-            **forward_metadata
+        reply_message = OutgoingMessageData( 
+            user_id=self.user.id, 
+            job_no=self.job_no, 
+            body=f"Leave on {print_all_dates(self.affected_dates)} has been approved for {self.job.primary_user.alias} and they have been notified."
         )
 
-        clear_user_processing_state(self.user_id)
+        if forward_metadata:
+            reply_message.body += " Other relevant staff will be notified."
+            
+            MessageKnown.forward_template_msges(
+                self.job_no,
+                callback=self.forwards_callback,
+                user_id_to_update=self.job.primary_user.id,
+                message_context="your leave",
+                **forward_metadata
+            )
+        else:
+            reply_message.body += " No other relevant staff were found to notify. Please notify them manually."
 
+        MessageKnown.send_msg(message=reply_message)
+
+        clear_user_processing_state(self.user_id)
         return
 
-
     def approve(self, records):
-        users_list = self.job.user.get_relations(ignore_users=[self.user])
-        alias = self.job.user.alias
+        users_list = self.job.primary_user.get_relations(ignore_users=[self.user])
+        alias = self.job.primary_user.alias
         approver_alias = self.user.alias
         self.affected_dates = LeaveRecord.update_leaves(records, LeaveStatus.APPROVED)
         
@@ -69,5 +72,5 @@ class ApproveLeave(TaskLeave):
             approver_alias=approver_alias
         )
 
-        return MessageKnown.construct_forward_metadata(os.environ.get("LEAVE_NOTIFY_APPROVE_SID"), cv_list, users_list)
+        return MessageKnown.construct_forward_metadata(os.getenv("LEAVE_NOTIFY_APPROVE_SID"), cv_list, users_list)
 

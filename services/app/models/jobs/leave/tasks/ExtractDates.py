@@ -4,7 +4,7 @@ from extensions import Session
 
 from models.exceptions import ReplyError
 
-from models.jobs.base.constants import ErrorMessage
+from models.jobs.base.constants import OutgoingMessageData
 from models.jobs.base.utilities import current_sg_time, get_latest_date_past_hour, join_with_commas_and
 
 from models.jobs.leave.Task import TaskLeave
@@ -34,12 +34,13 @@ class ExtractDates(TaskLeave):
         return
     
     def update_cache(self):
+        self.logger.info(f"Updating dates in cache after extraction: {self.dates_to_update}")
         return {
             # created by generate base
             "dates": [date.strftime("%d-%m-%Y") for date in self.dates_to_update],
             "duplicate_dates": [date.strftime("%d-%m-%Y") for date in self.duplicate_dates],
             # returned by generate base
-            "validation_errors": [error.key for error in list(self.validation_errors)],
+            "validation_errors": [error.name for error in list(self.validation_errors)],
             # can be blank after genenrate base
         }
 
@@ -52,7 +53,7 @@ class ExtractDates(TaskLeave):
         if duration_extraction(self.payload):
             self.duration = int(duration_extraction(self.payload))
 
-        duration_c = self.set_start_end_date(self.payload) # checks for conflicts and sets the dates
+        duration_c = self.set_start_end_date() # checks for conflicts and sets the dates
 
         self.logger.info("start get_dates")
         
@@ -66,10 +67,13 @@ class ExtractDates(TaskLeave):
 
                 body = f'The duration from {datetime.strftime(self.start_date, "%d/%m/%Y")} to {datetime.strftime(self.end_date, "%d/%m/%Y")} ({duration_c}) days) do not match with {self.duration} days. Please send another msg with the form "on leave from dd/mm to dd/mm" to indicate the MC. Thank you!'
 
-                raise ReplyError(
+                message = OutgoingMessageData(
                     body=body, 
                     job_no=self.job_no,
                     user_id=self.user_id,
+                )
+                raise ReplyError(
+                    message=message,
                     error=LeaveError.DURATION_MISMATCH
                 )
             
@@ -87,10 +91,13 @@ class ExtractDates(TaskLeave):
             try: # duration specified
                 self.start_date, self.end_date = calc_start_end_date(self.duration) # sets self.start_date, self.end_date
             except Exception: # start, end dates and duration not specified
-                raise ReplyError(
-                    body=ErrorMessage.DATES_NOT_FOUND, 
+                message = OutgoingMessageData(
+                    body=LeaveErrorMessage.DATES_NOT_FOUND, 
                     job_no=self.job_no,
                     user_id=self.user_id,
+                )
+                raise ReplyError(
+                    message=message,
                     error=LeaveError.DATES_NOT_FOUND
                 )
         
@@ -110,20 +117,26 @@ class ExtractDates(TaskLeave):
 
             body = f'Conflicting start dates {join_with_commas_and(datetime.strptime(date, "%d/%m/%Y") for date in start_dates)}. Please send another msg with the form "on leave from dd/mm to dd/mm" to indicate the MC. Thank you!'
 
-            raise ReplyError(
+            message = OutgoingMessageData(
                 body=body, 
                 job_no=self.job_no,
                 user_id=self.user_id,
+            )
+            raise ReplyError(
+                message=message,
                 error=LeaveError.DURATION_MISMATCH
             )
         if len(end_dates) > 1:
             
             body = f'Conflicting end dates {join_with_commas_and(datetime.strptime(date, "%d/%m/%Y") for date in end_dates)}. Please send another msg with the form "on leave from dd/mm to dd/mm" to indicate the MC. Thank you!'
 
-            raise ReplyError(
+            message = OutgoingMessageData(
                 body=body, 
                 job_no=self.job_no,
                 user_id=self.user_id,
+            )
+            raise ReplyError(
+                message=message,
                 error=LeaveError.DURATION_MISMATCH
             )
         
@@ -175,12 +188,16 @@ class ExtractDates(TaskLeave):
         if self.end_date < cur_sg_date:
             self.logger.info("date is too early cannot be fixed")
             body = f"Hi {self.user.alias}, I am no longer able to add your leave if you take it before today, sorry about the inconvenience."
-            raise ReplyError(
+            message = OutgoingMessageData(
                 body=body, 
                 job_no=self.job_no,
                 user_id=self.user_id,
+            )
+            raise ReplyError(
+                message=message,
                 error=LeaveError.ALL_PREVIOUS_DATES
             )
+        
         # the start date is before today, but end date is at least today
         elif self.start_date < earliest_possible_date:
             # if start date is before today, definitely need to reset it to at least today
@@ -193,7 +210,6 @@ class ExtractDates(TaskLeave):
 
     def check_for_overlap(self):
 
-        self.logger.info(f"in check_for_duplicates: {self.start_date}, {self.end_date}")
         start_date, duration = self.start_date, self.duration # these are actually functions
 
         def daterange():
@@ -218,10 +234,13 @@ class ExtractDates(TaskLeave):
             self.validation_errors.add(LeaveIssue.OVERLAP)
         elif len(self.duplicate_dates) != 0:
             self.logger.info("duplicates cannot be fixed")
-            raise ReplyError(
+            message = OutgoingMessageData(
                 body=LeaveErrorMessage.ALL_OVERLAPPING, 
                 job_no=self.job_no,
                 user_id=self.user_id,
+            )
+            raise ReplyError(
+                message=message,
                 error=LeaveError.ALL_OVERLAPPING
             )
         else:
@@ -229,7 +248,7 @@ class ExtractDates(TaskLeave):
     
     def check_for_late(self):
         # the start date is now at least today, but we need to inform the user if it is already past 9am
-        if current_sg_time().date() in self.dates_to_update:
+        if current_sg_time().date() in self.dates_to_update and current_sg_time().hour > 9:
             self.validation_errors.add(LeaveIssue.LATE)
 
     

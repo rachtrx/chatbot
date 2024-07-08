@@ -16,9 +16,9 @@ from models.messages.MessageKnown import MessageKnown
 
 class SendReport(TaskDaemon):
 
-    dept_order = ('Corporate', 'ICT', 'AP', 'Voc Ed', 'Lower Pri', 'Upper Pri', 'Secondary', 'High School', 'Relief')
+    name = "Morning Report"
 
-    
+    dept_order = ('Corporate', 'ICT', 'AP', 'Voc Ed', 'Lower Pri', 'Upper Pri', 'Secondary', 'High School', 'Relief')
 
     __mapper_args__ = {
         "polymorphic_identity": DaemonTaskType.SEND_REPORT
@@ -41,7 +41,7 @@ class SendReport(TaskDaemon):
                 MessageKnown.forward_template_msges(
                     job_no=self.job_no,
                     **MessageKnown.construct_forward_metadata(
-                        sid=os.environ.get("SEND_MESSAGE_TO_LEADERS_ALL_PRESENT_SID"), 
+                        sid=os.getenv("SEND_MESSAGE_TO_LEADERS_ALL_PRESENT_SID"), 
                         cv_list=[{
                             '1': global_admin.alias,
                             '2': self.date_today_full
@@ -62,7 +62,7 @@ class SendReport(TaskDaemon):
                 MessageKnown.forward_template_msges(
                     job_no=self.job_no,
                     **MessageKnown.construct_forward_metadata(
-                        sid=os.environ.get("SEND_MESSAGE_TO_LEADERS_SID"), 
+                        sid=os.getenv("SEND_MESSAGE_TO_LEADERS_SID"), 
                         cv_list = [{
                             **self.global_cv, 
                             '1': global_admin.alias, 
@@ -77,13 +77,13 @@ class SendReport(TaskDaemon):
 
                     self.logger.info(f"Preparing to send msg for department: {dept}")
                     
-                    dept_admins = User.get_dept_admins(dept)
+                    dept_admins = User.get_dept_admins_for_dept(dept)
 
                     if dept not in self.dept_aggs:
                         MessageKnown.forward_template_msges(
                             job_no=self.job_no,
                             **MessageKnown.construct_forward_metadata(
-                                sid=os.environ.get("SEND_MESSAGE_TO_HODS_ALL_PRESENT_SID"), 
+                                sid=os.getenv("SEND_MESSAGE_TO_HODS_ALL_PRESENT_SID"), 
                                 cv_list=[{
                                     '1': dept_admin.alias,
                                     '2': self.date_today_full
@@ -95,7 +95,7 @@ class SendReport(TaskDaemon):
                         MessageKnown.forward_template_msges(
                             job_no=self.job_no,
                             **MessageKnown.construct_forward_metadata(
-                                sid=os.environ.get("SEND_MESSAGE_TO_HODS_SID"), 
+                                sid=os.getenv("SEND_MESSAGE_TO_HODS_SID"), 
                                 cv_list=[{
                                     **self.dept_cv_dict[dept],
                                     '1': dept_admin.alias,
@@ -111,7 +111,7 @@ class SendReport(TaskDaemon):
             raise
 
     def get_err_body(self) -> str:
-        return DaemonMessage.REPORT_FAILED.value
+        return DaemonMessage.REPORT_FAILED
     
     def setup_cv(self):
 

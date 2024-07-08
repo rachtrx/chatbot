@@ -76,4 +76,4 @@ RUN touch /var/log/cron_sync.log
 # # Switch to the app user
 # USER app
 
-ENTRYPOINT ["/home/app/web/entrypoint.sh", "es01", "gunicorn", "-w", "4", "--bind", "0.0.0.0:5001", "--timeout", "120", "app:app"]
+ENTRYPOINT ["/home/app/web/entrypoint.sh", "es01", "gunicorn", "--bind", "0.0.0.0:5001", "--timeout", "120", "app:app"]

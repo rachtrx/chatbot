@@ -2,10 +2,17 @@
 from extensions import Session, twilio
 
 import os
+import traceback
+
+from twilio.base.exceptions import TwilioRestException
+
+from MessageLogger import setup_logger
+
+from models.jobs.base.constants import OutgoingMessageData, MessageType, ErrorMessage
+from models.jobs.base.utilities import clear_user_processing_state
 
 from models.messages.MessageKnown import MessageKnown
 from models.messages.MessageUnknown import MessageUnknown
-from models.jobs.base.constants import OutgoingMessageData, MessageType, ErrorMessage
 from models.messages.SentMessageStatus import SentMessageStatus
 
 class AzureSyncError(Exception):
@@ -13,21 +20,16 @@ class AzureSyncError(Exception):
         super().__init__(message)
 
 class UserNotFoundError(Exception):
-    def __init__(self, sid, incoming_body, user_no):
-        self.sid = sid
-        self.incoming_body = incoming_body
+    def __init__(self, user_no, err_msg=ErrorMessage.USER_NOT_FOUND):
         self.user_no = user_no
-        self.body = ErrorMessage.USER_NOT_FOUND
+        self.body = err_msg
 
     def execute(self):
-        session = Session()
-        incoming_msg = MessageUnknown(sid=self.sid, user_no=self.user_no, body=self.incoming_body)
-        session.add(incoming_msg)
-        session.commit()
+        session = Session()  
 
         sent_message_meta = twilio.messages.create(
             to=self.user_no,
-            from_=os.environ.get('TWILIO_NO'),
+            from_=os.getenv('TWILIO_NO'),
             body=self.body
         )
 
@@ -40,7 +42,7 @@ class UserNotFoundError(Exception):
         return
     
 class EnqueueMessageError(Exception):
-    def __init__(self, sid, incoming_body, user_id, body):
+    def __init__(self, sid, user_id, incoming_body, body):
         self.sid = sid
         self.incoming_body = incoming_body
         self.user_id = user_id
@@ -48,10 +50,7 @@ class EnqueueMessageError(Exception):
 
     def execute(self):
 
-        from models.users import User
-
         session = Session()
-        user = session.query(User).get(self.user_id)
 
         incoming_msg = MessageKnown(
             sid=self.sid, 
@@ -64,7 +63,7 @@ class EnqueueMessageError(Exception):
 
         message = OutgoingMessageData(
             msg_type=MessageType.SENT,
-            user=user,
+            user_id=self.user_id,
             job_no=None,
             body=self.body
         )
@@ -75,32 +74,47 @@ class EnqueueMessageError(Exception):
 class ReplyError(Exception):
     """throws error when trying to reply but message not found"""
 
-    def __init__(self, body, user_id, job_no, error=None):
-        self.body = body
-        self.user_id = user_id
-        self.job_no = job_no
+    def __init__(self, message: OutgoingMessageData, error=None):
+        self.message = message
         self.error = error
+        self.logger = setup_logger(f'replyerror')
 
     def execute(self):
-        
-        from models.users import User
+
+        self.logger.info("Running Error handling in ReplyError")
 
         session = Session()
-        user = session.query(User).get(self.user_id)
+        
+        new_err_message = None
+        try:
+            if self.error and self.message.job_no:
+                from models.jobs.base.Job import Job
+                job = session.query(Job).get(self.message.job_no)
+                job.error = self.error
+                session.commit()
+                
+                job.handle_error(self.error, self.message)
+            else:
+                self.logger.info(f"Sending non job error err_message: {self.message}")
+                MessageKnown.send_msg(self.message)
 
-        reply_message = OutgoingMessageData(
-            msg_type=MessageType.SENT,
-            user=user,
-            job_no=job.job_no,
-            body=self.body
-        )
-        MessageKnown.send_msg(reply_message)
+        except TwilioRestException:
+            self.logger.error(traceback.format_exc())
+            new_err_message = "Failed to forward any messages. You may have to inform relevant staff manually"
+        except Exception:
+            self.logger.error(traceback.format_exc())
+            new_err_message = "Another unknown error was caught when handling the error. You may have to inform relevant staff manually"
+        
+        finally:
+            if new_err_message:
+                new_message = OutgoingMessageData(
+                    job_no=job.job_no,
+                    user_id=self.message.user_id,
+                    body=new_err_message
+                )
+                MessageKnown.send_msg(new_message)
 
-        if self.error:
-            from models.jobs.base.Job import Job
-            job = session.query(Job).get(self.job_no)
-            job.error = self.error # ensure the column exists
-
-        session.commit()
+            clear_user_processing_state(self.message.user_id)
+            session.commit()
 
         return

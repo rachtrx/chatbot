@@ -12,9 +12,9 @@ from MessageLogger import setup_logger
 
 es = Elasticsearch(
     ["https://es01:9200"],
-    http_auth=("elastic", os.environ.get('ELASTIC_PASSWORD')),
+    http_auth=("elastic", os.getenv('ELASTIC_PASSWORD')),
     verify_certs=True,
-    ca_certs=os.environ.get('ES_CA_CERTS')
+    ca_certs=os.getenv('ES_CA_CERTS')
 )
 
 logger = setup_logger('es.manage', 'es')

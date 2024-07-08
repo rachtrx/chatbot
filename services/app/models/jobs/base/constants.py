@@ -1,9 +1,11 @@
 from enum import Enum
 from dataclasses import dataclass
-from models.users import User
+import os
 
 MAX_UNBLOCK_WAIT = 30
 JOBS_PREFIX = "jobs"
+MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID') if int(os.getenv('LIVE')) else os.getenv('MESSAGING_SERVICE_SID_DEV')
+TWILIO_NO = os.getenv('TWILIO_NO') if int(os.getenv('LIVE')) else os.getenv('TWILIO_NO_DEV')
 
 ##################################
 # JOB STATUSES
@@ -11,12 +13,12 @@ JOBS_PREFIX = "jobs"
 
 class ErrorMessage:
     TWILIO_ERROR = "There was an issue with the Whatsapp API provider."
+    TWILIO_EMPTY_VARIABLES = "There was an issue creating the message."
     USER_NOT_FOUND = "I'm sorry, your contact is not in our database. Please check with HR and try again in an hour."
     PENDING_DECISION = "Please reply to the previous message first, thank you!"
     DOUBLE_MESSAGE = "The previous job has not completed or there was an error completing it. If the problem persists, please try again in 2 minutes, thank you!"
     UNKNOWN_ERROR = "Something went wrong, please send the message again"
     NO_RECENT_MSG = "I'm sorry, we could not find any messages from you in the past 5 minutes, could you send it again?",
-    DATES_NOT_FOUND = "The chatbot is still in development, we regret that we could not determine your period of MC, could you specify the dates/duration again?"
     ES_REPLY_ERROR = "The chatbot is still in development, we regret that we could not determine your intent. If you need additional help, please reach out to our new helpline 87178103."
     AZURE_SYNC_ERROR = "I'm sorry, something went wrong with the code, please check with ICT."
     MESSAGE_STILL_PENDING = "Sorry, please try again in a few seconds, a message sent to you is still pending success confirmation."
@@ -29,7 +31,8 @@ class ErrorMessage:
     NOT_LAST_MSG = "Please only reply to the latest message!"
     PENDING_AUTHORISATION = "This job is currently pending authorisation."
     NO_SUCCESSFUL_MESSAGES = "All messages failed to send."
-    NO_FORWARD_MESSAGE_FOUND = "We could not find any staff to forward the request."
+    NO_FORWARD_MESSAGE_FOUND = "We could not find any staff to forward the request. Please ignore if this is normal behaviour. Otherwise, you may have to inform relevant staff manually."
+    NO_ADMINS_FOUND = "No admins found to run health check"
 
 class JobType(Enum):
     NONE = "NONE"
@@ -65,12 +68,12 @@ class MessageType(Enum):
 
 @dataclass
 class OutgoingMessageData:
-    msg_type: MessageType
-    user: User
-    job_no: str | None
-    body: str | None
-    content_sid: str | None
-    content_variables: dict | None
+    user_id: str
+    msg_type: MessageType = MessageType.SENT
+    job_no: str | None = None
+    body: str | None = None
+    content_sid: str | None = None
+    content_variables: dict | None = None
 
 class Decision(Enum):
     CONFIRM = "CONFIRM"

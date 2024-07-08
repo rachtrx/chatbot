@@ -1,3 +1,4 @@
+import traceback
 from flask import Flask
 from extensions import Session
 from config import Config
@@ -25,6 +26,7 @@ from models.messages.MessageUnknown import MessageUnknown
 from models.messages.SentMessageStatus import SentMessageStatus
 
 def create_app():
+    print("create_app called from:", traceback.format_stack(limit=2)[-2])
     app = Flask(__name__)
     app.config.from_object(Config)
 

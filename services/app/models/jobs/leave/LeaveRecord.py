@@ -27,10 +27,10 @@ class LeaveRecord(db.Model):
     job = db.relationship('JobLeave', backref=db.backref('leave_records'), lazy='select')
     leave_status = db.Column(SQLEnum(LeaveStatus), nullable=False)
 
-    def __init__(self, job, date, leave_status):
+    def __init__(self, job_no, date, leave_status):
         self.id = shortuuid.ShortUUID().random(length=8)
         # self.name = user.name
-        self.job_no = job.job_no
+        self.job_no = job_no
         self.date = date
         self.leave_status = leave_status
 
@@ -45,7 +45,7 @@ class LeaveRecord(db.Model):
         ).join(
             JobLeave, JobLeave.job_no == cls.job_no
         ).join(
-            User, JobLeave.user_id == User.id
+            User, JobLeave.primary_user_id == User.id
         ).filter(
             cls.date == current_sg_time().date(),
             cls.leave_status == LeaveStatus.APPROVED,
@@ -54,14 +54,14 @@ class LeaveRecord(db.Model):
         return all_records_today
 
     @classmethod
-    def get_duplicates(cls, job):
+    def get_duplicates(cls, leave_task):
         session = Session()
         duplicate_records = session.query(cls).join(
             JobLeave
         ).filter(
-            JobLeave.name == job.user.name,
-            cls.date >= job.start_date,
-            cls.date <= job.end_date,
+            JobLeave.primary_user_id == leave_task.user_id,
+            cls.date >= leave_task.start_date,
+            cls.date <= leave_task.end_date,
             cls.leave_status.in_([LeaveStatus.PENDING, LeaveStatus.APPROVED])
         ).all()
 
@@ -72,7 +72,9 @@ class LeaveRecord(db.Model):
         session = Session()
         new_records = []
         for date in dates:
-            new_record = cls(job=job_no, date=date, leave_status=leave_status)
+            new_record = cls(job_no=job_no, date=date, leave_status=leave_status)
+            if leave_status != LeaveStatus.PENDING:
+                new_record.sync_status = Status.PENDING
             session.add(new_record)
             new_records.append(new_record)
         session.commit()

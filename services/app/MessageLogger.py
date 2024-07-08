@@ -1,10 +1,9 @@
 import logging
 import os
 
-LOG_LEVEL = logging.ERROR if os.environ.get('LIVE') == 1 else logging.INFO
-LOG_DIR = "/var/log" if os.environ.get('LIVE') == 1 else "logs"
+LOG_LEVEL = logging.ERROR if int(os.getenv('LIVE')) else logging.INFO
 
-def setup_logger(name, filename="app", log_dir=LOG_DIR):
+def setup_logger(name, filename="app", log_dir='/home/app/web/logs'):
     """
     Set up a logger with the name and log it to a file
     """

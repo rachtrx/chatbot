@@ -1,6 +1,5 @@
 import os
 import traceback
-import logging
 
 from sqlalchemy.ext.declarative import declared_attr
 
@@ -18,6 +17,7 @@ class ForwardCallback(db.Model):
     @declared_attr
     def logger(cls):
         return setup_logger(f'models.{cls.__name__.lower()}')
+    logger.propagate = False
 
     job_no = db.Column(db.String(32), db.ForeignKey('job.job_no'), primary_key=True, nullable=False)
     seq_no = db.Column(db.Integer, primary_key=True, nullable=False)
@@ -39,20 +39,20 @@ class ForwardCallback(db.Model):
 
     @run_new_context
     def update_on_forwards(self, use_name_alias): # add job_no, seq_no??
-        statuses = self.check_message_forwarded(self.seq_no)
+        statuses = self.check_message_forwarded()
 
         content_variables = {
             '1': self.message_context, # "The following personnel have been notified about <message_type>"
-            '2': join_with_commas_and([user.alias if use_name_alias else user.name for user in statuses.OK]) if len(statuses.OK) > 0 else "NA",
-            '3': join_with_commas_and([user.alias if use_name_alias else user.name for user in statuses.SERVER_ERROR]) if len(statuses.SERVER_ERROR) > 0 else "NA",
-            '4': join_with_commas_and([user.alias if use_name_alias else user.name for user in statuses.PENDING]) if len(statuses.PENDING) > 0 else "NA"
+            '2': join_with_commas_and([user.alias if use_name_alias else user.name for user in statuses.COMPLETED]) if len(statuses.COMPLETED) > 0 else "None",
+            '3': join_with_commas_and([user.alias if use_name_alias else user.name for user in statuses.FAILED]) if len(statuses.FAILED) > 0 else "None",
+            '4': join_with_commas_and([user.alias if use_name_alias else user.name for user in statuses.PENDING]) if len(statuses.PENDING) > 0 else "None"
         }
 
         message = OutgoingMessageData(
             msg_type=MessageType.SENT,
-            user=self.user, 
+            user_id=self.user_id, 
             job_no=self.job_no, 
-            content_sid=os.environ.get("FORWARD_MESSAGES_CALLBACK_SID"),
+            content_sid=os.getenv("FORWARD_MESSAGES_CALLBACK_SID"),
             content_variables=content_variables
         )
 
@@ -60,18 +60,22 @@ class ForwardCallback(db.Model):
 
         self.update_count += 1
 
+        self.logger.info(f"Update count: {self.update_count}")
+
     def check_message_forwarded(self):
 
         session = Session()
-        logging.info(f"session id in check_message_forwarded: {id(session)}")
+        self.logger.info(f"session id in check_message_forwarded: {id(session)}")
 
         for instance in session.identity_map.values():
-            logging.info(f"Instance in check_message_forwarded session: {instance}")
+            self.logger.info(f"Instance in check_message_forwarded session: {instance}")
 
         try:
-            logging.info("in threading function")
+            self.logger.info("in threading function")
 
-            forwarded_msgs = session.query(MessageKnown).filter(
+            forwarded_msgs = session.query(
+                MessageKnown
+            ).filter(
                 MessageKnown.job_no == self.job_no,
                 MessageKnown.seq_no == self.seq_no,
                 MessageKnown.msg_type == MessageType.FORWARD,
@@ -80,9 +84,6 @@ class ForwardCallback(db.Model):
             if not forwarded_msgs:
                 return
 
-            # logging.info([f_msg.forward_status, f_msg.sid] for f_msg in forwarded_msgs)
-            logging.info(list([f_msg.status, f_msg.sid] for f_msg in forwarded_msgs))
-
             sids = [f_msg.sid for f_msg in forwarded_msgs]
 
             # Fetch all SentMessageStatus records in one go using `in_`
@@ -90,17 +91,19 @@ class ForwardCallback(db.Model):
             sent_messages = session.query(SentMessageStatus).filter(SentMessageStatus.sid.in_(sids)).all()
             sent_messages_dict = {sent_msg.sid: sent_msg.status for sent_msg in sent_messages}
 
+            self.logger.info([sid, status] for sid, status in sent_messages_dict.items())
+
             statuses = ForwardStatus()
             for f_msg in forwarded_msgs:
                 status = sent_messages_dict.get(f_msg.sid)
                 if status == Status.COMPLETED:
-                    statuses.COMPLETED.append(f_msg.to_user)
+                    statuses.COMPLETED.append(f_msg.user)
                 elif status == Status.FAILED:
-                    statuses.FAILED.append(f_msg.to_user)
+                    statuses.FAILED.append(f_msg.user)
                 else: # Assuming remaining are PENDING_CALLBACK
-                    statuses.PENDING.append(f_msg.to_user)
+                    statuses.PENDING.append(f_msg.user)
             return statuses
             
         except Exception as e:
-            logging.error(traceback.format_exc())
+            self.logger.error(traceback.format_exc())
             raise

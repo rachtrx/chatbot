@@ -6,10 +6,11 @@ from twilio.base.exceptions import TwilioRestException
 
 from extensions import db, Session, twilio
 
-from models.jobs.base.constants import ErrorMessage, MessageOrigin, MessageType, JobType, OutgoingMessageData
+from models.jobs.base.constants import ErrorMessage, MessageOrigin, MessageType, JobType, OutgoingMessageData, \
+    MESSAGING_SERVICE_SID, TWILIO_NO
 from models.jobs.base.utilities import current_sg_time
 
-from models.jobs.leave.constants import Patterns
+from models.jobs.leave.constants import Patterns, LeaveError
 
 from models.messages.Message import Message
 
@@ -45,14 +46,15 @@ class MessageKnown(Message):
             cur_seq_no = self.get_seq_no(job_no)
             self.seq_no = cur_seq_no + 1
         self.logger.info(f"new_message: {self.body}, seq no: {self.seq_no}")
-    
-    def get_intent(self):
+
+    @classmethod
+    def get_intent(cls, body):
         '''Function takes in a user input and if intent is not MC, it returns False. Else, it will return a list with the number of days, today's date and end date'''
         
-        self.logger.info(f"message: {self.body}")
+        cls.logger.info(f"message: {cls.body}")
                 
         leave_alt_words_pattern = re.compile(Patterns.LEAVE_ALT_WORDS, re.IGNORECASE)
-        if leave_alt_words_pattern.search(self.body):
+        if leave_alt_words_pattern.search(body):
             return JobType.LEAVE
             
         # return Intent.ES_SEARCH
@@ -62,6 +64,9 @@ class MessageKnown(Message):
     @staticmethod
     def get_seq_no(job_no):
         '''finds the sequence number of the message in the job, considering all message types'''
+
+        if job_no is None:
+            return 0
 
         session = Session()
 
@@ -92,63 +97,85 @@ class MessageKnown(Message):
         session.commit()
 
     @classmethod
-    def send_msg(cls, message: OutgoingMessageData, seq_no=None, serialised=False):
+    def send_msg(cls, message: OutgoingMessageData, seq_no=None):
 
         from models.exceptions import ReplyError
+        from models.users import User
+
+        to_user = Session().query(User).get(message.user_id)
 
         sent_message_meta = None
 
-        if message.body:
-            sent_message_meta = twilio.messages.create(
-                from_=os.environ.get("TWILIO_NO"),
-                to=message.to_no,
-                body=message.body
-            )
-        else:
-            if not message.content_variables:
-                message.content_variables = {}
-            elif not serialised:
-                message.content_variables = json.dumps(message.content_variables)
-            # else it is already serialised
-
-            cls.logger.info(message.content_variables)
-
-            try:
+        try:
+            if message.body:
+                cls.logger.info(f"to_user_no: {to_user.sg_number}")
                 sent_message_meta = twilio.messages.create(
-                    to=message.to_no,
-                    from_=os.environ.get("MESSAGING_SERVICE_SID"),
+                    from_=TWILIO_NO,
+                    to=to_user.sg_number,
+                    body=message.body
+                )
+            else:
+                if not all(isinstance(value, str) for value in message.content_variables.values()):
+                    raise Exception
+
+                message.content_variables = json.dumps(message.content_variables)
+
+                cls.logger.info(f"Message SID: {message.content_sid}")
+                cls.logger.info(f"Message CV: {message.content_variables}")
+
+                if int(os.getenv('LIVE')) or to_user.number in json.loads(os.getenv('ACTIVE_NUMBERS')):
+                    to_no = to_user.sg_number
+                    cls.logger.info('Sending to User')
+                else:
+                    to_no = os.getenv('DEV_NO')
+                    cls.logger.info('Sending to Dev')
+                
+                cls.logger.info(f"SANITY CHECK: MESSAGING_SERVICE_SID = {MESSAGING_SERVICE_SID}")
+                sent_message_meta = twilio.messages.create(
+                    to=to_no,
+                    from_=MESSAGING_SERVICE_SID,
                     content_sid=message.content_sid,
                     content_variables=message.content_variables
                 )
-            except TwilioRestException:
-                raise ReplyError(
-                    body=ErrorMessage.TWILIO_ERROR, 
-                    user_id=message.user.id, 
-                    job_no=message.job_no
-                )
 
-        sent_msg = cls.__init__( # used init for code readability
-            sid=sent_message_meta.sid,
-            msg_type=message.msg_type, 
-            body=message.body if message.body else None,
-            job_no=message.job_no, 
-            user_id=message.user.id, 
-            seq_no=seq_no, 
+            sent_msg = cls(
+                sid=sent_message_meta.sid,
+                msg_type=message.msg_type,
+                body=message.body if message.body else None,
+                job_no=message.job_no, 
+                user_id=message.user_id, 
+                seq_no=seq_no, 
             )
-        
-        from models.messages.SentMessageStatus import SentMessageStatus
-        sent_msg_status = SentMessageStatus(sid=sent_message_meta.sid)
 
-        session = Session()
-        session.add(sent_msg)
-        session.add(sent_msg_status)
-        session.commit()
+            from models.messages.SentMessageStatus import SentMessageStatus
+            sent_msg_status = SentMessageStatus(sid=sent_message_meta.sid)
+
+            session = Session()
+            session.add(sent_msg)
+            session.add(sent_msg_status)
+            session.commit()
+
+        except TwilioRestException:
+            message = OutgoingMessageData(
+                body=ErrorMessage.TWILIO_ERROR, 
+                user_id=message.user_id, 
+                job_no=message.job_no
+            )
+            raise ReplyError(message, error=LeaveError.UNKNOWN)
 
     @classmethod
     def forward_template_msges(cls, job_no, sid_list, cv_list, users_list, user_id_to_update=None, callback=None, message_context=None):
-        '''Ensure the callback accepts 2 arguments successful_aliases and forward_callback object'''
+        '''Ensure the callback accepts 1 forward_callback object as the arg'''
 
-        cv_list = [json.dumps(cv) for cv in cv_list]
+        from models.exceptions import ReplyError
+        
+        if len(users_list) == 0:
+            message = OutgoingMessageData(
+                user_id=user_id_to_update,
+                job_no=job_no,
+                body=ErrorMessage.NO_FORWARD_MESSAGE_FOUND
+            )
+            raise ReplyError(message)
 
         seq_no = cls.get_seq_no(job_no) + 1
         successful_aliases = []
@@ -157,22 +184,31 @@ class MessageKnown(Message):
             try:
                 message = OutgoingMessageData(
                     msg_type = MessageType.FORWARD,
-                    user = to_user,
+                    user_id = to_user.id,
                     job_no = job_no,
                     content_sid=sid, # cannot be body, due to 24hr period of Twilio standards
                     content_variables=content_variables # TODO
                     )
                 cls.send_msg(
-                    message=message, seq_no=seq_no, serialised=True
+                    message=message, seq_no=seq_no
                 )
                 successful_aliases.append(to_user.alias)
             except Exception:
                 cls.logger.error(traceback.format_exc()) # TODO? 
                 continue
 
+        if len(successful_aliases) == 0:
+            message = OutgoingMessageData(
+                user_id=user_id_to_update,
+                job_no=job_no,
+                body=ErrorMessage.NO_SUCCESSFUL_MESSAGES
+            )
+            raise ReplyError(message)
+
         if user_id_to_update:
             from models.messages.ForwardCallback import ForwardCallback
             session = Session()
+            cls.logger.info("Forward Callback Created")
             forward_callback = ForwardCallback(job_no=job_no, seq_no=seq_no, user_id=user_id_to_update, message_context=message_context)
             session.add(forward_callback)
             session.commit()
@@ -180,11 +216,10 @@ class MessageKnown(Message):
             forward_callback = None
 
         if callback:
-            callback(successful_aliases, forward_callback)
+            callback(forward_callback)
 
 
     def construct_forward_metadata(sid, cv_list, users_list):
-        sid_list = None
 
         if isinstance(sid, list):
             sid_list = sid

@@ -1,7 +1,10 @@
 import os
 from sqlalchemy.types import Enum as SQLEnum
+from sqlalchemy.ext.declarative import declared_attr
 
 from extensions import db, Session, twilio
+
+from MessageLogger import setup_logger
 
 from models.jobs.base.constants import MessageType, Status
 
@@ -13,6 +16,11 @@ from models.messages.ForwardCallback import ForwardCallback
 class SentMessageStatus(db.Model):
 
     __tablename__ = "sent_message_status"
+
+    @declared_attr
+    def logger(cls):
+        return setup_logger(f'models.{cls.__name__.lower()}')
+    logger.propagate = False
 
     sid = db.Column(db.ForeignKey("message.sid"), primary_key=True)
     status = db.Column(SQLEnum(Status), nullable=False)
@@ -36,15 +44,20 @@ class SentMessageStatus(db.Model):
 
         elif status == "delivered" or status == "failed":
 
+            session = Session()
+
             self.status = Status.COMPLETED if status == "delivered" else Status.FAILED
-            logging.info(f"message {self.sid} committed with COMPLETED")
+
+            session.commit()
+
+            self.logger.info(f"message {self.sid} committed with COMPLETED")
             
             if self.message.msg_type == MessageType.FORWARD:
-                logging.info(f"forwarded message {self.sid} was sent successfully")
-                session = Session()
-
+                self.logger.info(f"forwarded message {self.sid} was forwarded successfully")
+                
                 callback = session.query(ForwardCallback).get((self.message.job_no, self.message.seq_no))
                 if callback and callback.update_count > 0:
+                    self.logger.info(f"update count: {callback.update_count}")
                     callback.update_on_forwards(use_name_alias=True)
 
         return None

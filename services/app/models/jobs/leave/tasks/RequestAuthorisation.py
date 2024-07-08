@@ -3,7 +3,7 @@ from datetime import datetime
 
 from models.exceptions import ReplyError
 
-from models.jobs.base.constants import ErrorMessage, OutgoingMessageData, MessageType, Status
+from models.jobs.base.constants import ErrorMessage, OutgoingMessageData, MessageType
 from models.jobs.base.utilities import print_all_dates, current_sg_time, clear_user_processing_state
 
 from models.jobs.leave.Task import TaskLeave
@@ -21,17 +21,15 @@ class RequestAuthorisation(TaskLeave):
     }
 
     def restore_cache(self, data):
-
-        if not data.get('dates_to_update', None):
-            raise ReplyError(
+        if not data:
+            message = OutgoingMessageData(
                 body=ErrorMessage.TIMEOUT_MSG,
                 job_no=self.job_no,
                 user_id=self.user_id
             )
+            raise ReplyError(message, LeaveError.TIMEOUT)
 
-        self.dates_to_update = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in data['dates_to_update'] if data.get('dates_to_update', None)]
-        self.duplicate_dates = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in data['duplicate_dates'] if data.get('duplicate_dates', None)]
-        self.validation_errors = set([getattr(Status, key) for key in data['validation_errors'] if data.get('validation_errors', None)])
+        self.dates_to_update = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in data['dates'] if data.get('dates', None)]
 
     def handle_dates(self):
 
@@ -42,7 +40,7 @@ class RequestAuthorisation(TaskLeave):
             self.dates_to_authorise = set()
         else:
             self.dates_to_approve = {date for date in self.dates_to_update if date == cur_date}
-            self.dates_to_authorise = set(self.dates_to_update) - self.dates_to_pass
+            self.dates_to_authorise = set(self.dates_to_update) - self.dates_to_approve
 
         self.dates_to_approve = list(self.dates_to_approve)
         self.dates_to_authorise = list(self.dates_to_authorise)
@@ -51,11 +49,12 @@ class RequestAuthorisation(TaskLeave):
 
         ro = self.user.get_ro()
         if len(ro) == 0:
-            raise ReplyError(
+            message = OutgoingMessageData(
                 body=LeaveErrorMessage.NO_USERS_TO_NOTIFY,
                 job_no=self.job_no,
                 user_id=self.user_id
             )
+            raise ReplyError(message)
 
         self.handle_dates()
         
@@ -65,30 +64,33 @@ class RequestAuthorisation(TaskLeave):
         forward_metadata = None
 
         reply_message = OutgoingMessageData(
-            msg_type=MessageType.SENT, user=self.user, job_no=self.job_no
+            msg_type=MessageType.SENT, 
+            user_id=self.user_id, 
+            job_no=self.job_no
         )
 
         relations_list = self.user.get_relations()
 
         if len(self.dates_to_authorise) == 0 and len(self.dates_to_approve) == 0: # NO DATES FOUND
-            raise ReplyError(
+            message = OutgoingMessageData(
                 body=ErrorMessage.DATES_NOT_FOUND,
                 job_no=self.job_no,
                 user_id=self.user_id
-            ) # TODO
+            )
+            raise ReplyError(message) # TODO
 
         elif len(self.dates_to_authorise) == 0 and len(self.dates_to_approve) > 0: # ALL TO APPROVE IMMEDIATELY
             cv_list = get_approve_leave_cv( # LOOP RELATIONS
                 relations_list, 
                 alias=self.user.alias, 
                 leave_type=self.job.leave_type, 
-                dates=self.dates_to_authorise,
+                dates=self.dates_to_approve,
                 mark_late=True
             )
 
-            forward_metadata = MessageKnown.construct_forward_metadata(sid=os.environ.get("LEAVE_NOTIFY_APPROVE_SID"), cv_list=cv_list, users_list=relations_list)
+            forward_metadata = MessageKnown.construct_forward_metadata(sid=os.getenv("LEAVE_NOTIFY_APPROVE_SID"), cv_list=cv_list, users_list=relations_list)
 
-            reply_message.content_sid = os.environ.get('NOTIFY_FORWARDS_SENT_APPROVED_SID')
+            reply_message.content_sid = os.getenv('NOTIFY_FORWARDS_SENT_APPROVED_SID')
             reply_message.content_variables = {
                 '1': self.job_no,
                 '2': print_all_dates(self.dates_to_approve)
@@ -108,9 +110,9 @@ class RequestAuthorisation(TaskLeave):
                     mark_late=True
                 )
 
-                forward_metadata = MessageKnown.construct_forward_metadata(sid=os.environ.get("LEAVE_AUTHORISATION_REQUEST_SID"), cv_list=cv_list, users_list=authorisers_list)
+                forward_metadata = MessageKnown.construct_forward_metadata(sid=os.getenv("LEAVE_AUTHORISATION_REQUEST_SID"), cv_list=cv_list, users_list=authorisers_list)
 
-                reply_message.content_sid = os.environ.get('NOTIFY_FORWARDS_SENT_PENDING_APPROVAL')
+                reply_message.content_sid = os.getenv('NOTIFY_FORWARDS_SENT_PENDING_APPROVAL_SID')
                 reply_message.content_variables = {
                     '1': self.job_no,
                     '2': print_all_dates(self.dates_to_authorise)
@@ -126,17 +128,17 @@ class RequestAuthorisation(TaskLeave):
                     relation_aliases=relations_name_list,
                     mark_late=True
                 )
-                authorisation_sid_list = [os.environ.get("LEAVE_AUTHORISATION_REQUEST_LATE_SID")] * len(authorisation_cv_list)
+                authorisation_sid_list = [os.getenv("LEAVE_AUTHORISATION_REQUEST_LATE_SID")] * len(authorisation_cv_list)
 
                 other_relations_list = self.user.get_relations(ignore_users=authorisers_list)
                 notify_cv_list = get_approve_leave_cv( # LOOP RELATIONS
                     other_relations_list, 
                     alias=self.user.alias, 
                     leave_type=self.job.leave_type, 
-                    duration=len(self.dates_to_authorise),
+                    dates=self.dates_to_approve,
                     mark_late=True
                 )
-                notify_sid_list = [os.environ.get("LEAVE_NOTIFY_APPROVE_SID")] * len(notify_cv_list)
+                notify_sid_list = [os.getenv("LEAVE_NOTIFY_APPROVE_SID")] * len(notify_cv_list)
 
                 forward_metadata = MessageKnown.construct_forward_metadata(
                     sid=[*authorisation_sid_list, *notify_sid_list], 
@@ -144,7 +146,7 @@ class RequestAuthorisation(TaskLeave):
                     users_list=[*authorisers_list, *other_relations_list]
                 )
 
-                reply_message.content_sid = os.environ.get('NOTIFY_FORWARDS_SENT_PARTIAL_APPROVED_SID')
+                reply_message.content_sid = os.getenv('NOTIFY_FORWARDS_SENT_PARTIAL_APPROVED_SID')
                 reply_message.content_variables = {
                     '1': self.job_no,
                     '2': print_all_dates(self.dates_to_approve),
@@ -152,19 +154,12 @@ class RequestAuthorisation(TaskLeave):
                 }
 
         MessageKnown.send_msg(message=reply_message)
-
-        if not forward_metadata:
-            raise ReplyError(
-                body=ErrorMessage.NO_FORWARD_MESSAGE_FOUND,
-                job_no=self.job_no,
-                user_id=self.user_id
-            ) # IMMEDIATTELY APPROVE?
         
         MessageKnown.forward_template_msges(
             job_no=self.job.job_no, 
             callback=self.forwards_callback,
             user_id_to_update=self.user_id,
-            message_context="your leave / leave request",
+            message_context=f"your leave / leave request with Ref No. {self.job_no}",
             **forward_metadata,
         )
 
@@ -172,6 +167,3 @@ class RequestAuthorisation(TaskLeave):
         clear_user_processing_state(self.user_id)
 
         return
-    
-    def get_callback_context(self):
-        return f'your leave request with Ref No. {self.job.job_no}'

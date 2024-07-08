@@ -8,10 +8,11 @@ class LeaveType(Enum):
     PARENTCARE = "PARENTCARE"
     HOSPITALISATION = "HOSPITALISATION"
     COMPASSIONATE = "COMPASSIONATE"
-    # Paternity = "PATERNITY"
-    # Maternity = "MATERNITY"
-    # Anniversary = "ANNIVERSARY"
-    # Marriage = "MARRIAGE"
+    MATERNITY = "MATERNITY"
+    PATERNITY = "PATERNITY"
+    BIRTHDAY = "BIRTHDAY"
+    WEDDING = "WEDDING"
+    MARRIAGE = "MARRIAGE"
 
 class Patterns:
 
@@ -21,10 +22,11 @@ class Patterns:
         LeaveType.PARENTCARE: ["parentcare leave", "parent care leave", "pcl"],
         LeaveType.HOSPITALISATION: ["hospitalisation leave", "hospitalization leave", "hl"],
         LeaveType.COMPASSIONATE: ["compassionate leave", "cl"],
-        # LeaveType.Paternity: ["paternity leave"],
-        # LeaveType.Maternity: ['maternity leave'],
-        # LeaveType.Anniversary: ['birthday leave', 'wedding leave', 'anniversary leave'],
-        # LeaveType.Marriage: ['marriage leave']
+        LeaveType.PATERNITY: ["paternity leave"],
+        LeaveType.MATERNITY: ['maternity leave'],
+        LeaveType.BIRTHDAY: ['birthday leave', 'anniversary leave'], # TODO
+        LeaveType.WEDDING: ['wedding leave', 'anniversary leave'],
+        LeaveType.MARRIAGE: ['marriage leave']
     }
 
     LEAVE_KEYWORDS = re.compile(
@@ -161,29 +163,30 @@ class Patterns:
     DAYS_STRICT = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 class LeaveErrorMessage:
-    REGEX = "I'm sorry, if I got the dates and duration wrong, please send it again!"
+    REGEX = "Sorry, I got the dates and duration wrong."
     CONFIRMING_CANCELLED_MSG = "Leave has already been cancelled!"
-    ALL_OVERLAPPING = "You are already on leave for all these dates"
+    ALL_OVERLAPPING = "You are already on leave for all these dates."
     NO_DATES_TO_APPROVE = "No dates were found past 9am today that are still pending approval."
     NO_DATES_TO_CANCEL = "No dates were found past 9am today that are still active."
     NO_DATES_TO_REJECT = "No dates were found past 9am today that are still active."
-    CANCELLED_AFTER_REJECTION = "Leave has already been cancelled by _____" # TODO
     AUTHORISING_CANCELLED_MSG = "Leave has already been cancelled!"
     LEAVE_CANCELLED = "Leave has already been cancelled!"
     LEAVE_APPROVED = "Leave has already been approved!"
     LEAVE_REJECTED = "Leave has already been rejected!"
-    NO_USERS_TO_NOTIFY = "Really sorry, there doesn't seem to be anyone to inform about your leave. Please contact the school HR."
+    REQUEST_EXPIRED = "This request has expired."
+    NO_USERS_TO_NOTIFY = "No staff found to forward message to. Please contact the school HR."
 
 class LeaveError(Enum):
-    REGEX = 'regex'
-    ALL_OVERLAPPING = 'all_overlapping'
-    ALL_PREVIOUS_DATES = 'all_previous_dates'
-    DURATION_MISMATCH = 'duration_mismatch'
-    DATES_NOT_FOUND = 'dates_not_found'
-    NO_USERS_TO_NOTIFY = 'no_users_to_notify'
-    UNKNOWN = 'unknown'
+    REGEX = 'REGEX'
+    ALL_OVERLAPPING = 'ALL_OVERLAPPING'
+    ALL_PREVIOUS_DATES = 'ALL_PREVIOUS_DATES'
+    DURATION_MISMATCH = 'DURATION_MISMATCH'
+    DATES_NOT_FOUND = 'DATES_NOT_FOUND'
+    NO_USERS_TO_NOTIFY = 'NO_USERS_TO_NOTIFY'
+    TIMEOUT = 'TIMEOUT'
+    UNKNOWN = 'UNKNOWN'
 
-class LeaveIssue: # ERRORS THAT CAN BE FIXED
+class LeaveIssue(Enum): # ERRORS THAT CAN BE FIXED
     UPDATED = "I am unable to add leaves before today; the earliest date is today." # start date was even before today and was accepted nonetheless; need to inform user about dates change
     LATE = "You have missed out the morning report for today's leave as it has already been sent out at 9am, but I am still able to update the records and inform your reporting contacts." # start date was today, need to inform user about missed morning report
     OVERLAP = "There are overlapping dates on "

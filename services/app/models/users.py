@@ -56,7 +56,10 @@ class User(db.Model):
     @classmethod
     def get_user(cls, from_number):
         session = Session()
-        user = session.query(cls).filter_by(number=from_number[-8:]).first()
+        user = session.query(cls).filter(
+            cls.number == from_number[-8:],
+            cls.is_active == True, # TODO set number and is_active to be SPECIAL
+        ).first()
         print(f"User: {user}")
         if user:
             return user
@@ -68,11 +71,22 @@ class User(db.Model):
         return {self.reporting_officer} if self.reporting_officer else set()
 
     @classmethod
-    def get_dept_admins(cls, dept):
+    def get_dept_admins_for_dept(cls, dept): # CLASS METHOD
         session = Session()
         query = session.query(cls).filter(
             User.is_dept_admin == True,
-            User.dept == dept
+            User.dept == dept,
+            cls.is_active == True,
+        )
+        dept_admins = query.all()
+        return set(dept_admins) if dept_admins else set()
+    
+    def get_dept_admins(self): # INSTANCE METHOD
+        session = Session()
+        query = session.query(User).filter(
+            User.is_dept_admin == True,
+            User.dept == self.dept,
+            User.is_active == True,
         )
         dept_admins = query.all()
         return set(dept_admins) if dept_admins else set()
@@ -80,14 +94,17 @@ class User(db.Model):
     @classmethod
     def get_global_admins(cls):
         session = Session()
-        query = session.query(cls).filter(cls.is_global_admin == True)
+        query = session.query(cls).filter(
+            cls.is_global_admin == True,
+            cls.is_active == True,
+        )
         global_admins = query.all()
         return set(global_admins) if global_admins else set()
 
     def get_relations(self, ignore_users: list[User] = []):
         # Using list unpacking to handle both list and empty list cases
-        relations = list(self.get_ro() | self.get_dept_admins(self.dept) | self.get_global_admins())
-        if os.environ.get('LIVE') == "1":
+        relations = list(self.get_ro() | self.get_dept_admins() | self.get_global_admins())
+        if int(os.getenv('LIVE')): # IMPT
             ignore_ids = {self.id}
             ignore_ids.update(user.id for user in ignore_users)
             relations = [user for user in relations if user.id not in ignore_ids]
@@ -116,6 +133,6 @@ class User(db.Model):
     def print_relations_list(self):
         user_list = []
         for relation in self.get_relations():
-            user_list.append(f"{relation.alias} ({relation.number})")
+            user_list.append(f"{relation.alias}")
 
-        return join_with_commas_and(user_list)
+        return join_with_commas_and(user_list) if len(user_list) > 0 else "No relevant staff found"

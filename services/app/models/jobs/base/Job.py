@@ -19,6 +19,7 @@ class Job(db.Model): # system jobs
     @declared_attr
     def logger(cls):
         return setup_logger(f'models.{cls.__name__.lower()}')
+    logger.propagate = False
 
     job_no = db.Column(db.String(32), primary_key=True)
     created_at = db.Column(db.DateTime(timezone=True))

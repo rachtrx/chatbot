@@ -117,4 +117,4 @@
 #             content_variables = json.dumps(content_variables)
 
 
-#             return os.environ.get("SEARCH_DOCUMENTS_SID"), content_variables
+#             return os.getenv("SEARCH_DOCUMENTS_SID"), content_variables

@@ -88,8 +88,8 @@ def upgrade() -> None:
     )
     op.create_table('new_job_leave',
         sa.Column('job_no', sa.String(length=32), nullable=False),
-        sa.Column('error', ENUM('REGEX', 'ALL_OVERLAPPING', 'ALL_PREVIOUS_DATES', 'DURATION_MISMATCH', 'DATES_NOT_FOUND', 'NO_USERS_TO_NOTIFY', 'UNKNOWN', name='leaveerror'), nullable=True),
-        sa.Column('leave_type', ENUM('MEDICAL', 'CHILDCARE', 'PARENTCARE', 'HOSPITALISATION', 'COMPASSIONATE', name='leavetype'), nullable=True),
+        sa.Column('error', ENUM('REGEX', 'ALL_OVERLAPPING', 'ALL_PREVIOUS_DATES', 'DURATION_MISMATCH', 'DATES_NOT_FOUND', 'NO_USERS_TO_NOTIFY', 'TIMEOUT', 'UNKNOWN', name='leaveerror'), nullable=True),
+        sa.Column('leave_type', ENUM('MEDICAL', 'CHILDCARE', 'PARENTCARE', 'HOSPITALISATION', 'COMPASSIONATE', 'MATERNITY', 'PATERNITY', 'BIRTHDAY', 'WEDDING', 'MARRIAGE', name='leavetype'), nullable=True),
         sa.ForeignKeyConstraint(['job_no'], ['new_job.job_no'], ),
         sa.PrimaryKeyConstraint('job_no')
         )
@@ -98,12 +98,12 @@ def upgrade() -> None:
         sa.Column('job_no', sa.String(length=32), nullable=False),
         sa.Column('date', sa.Date(), nullable=False),
         sa.Column('sync_status', ENUM('COMPLETED', 'FAILED', 'PENDING', name='status'), nullable=True),
-        sa.Column('leave_status', ENUM('PENDING', 'APPROVED', 'CANCELLED', 'REJECTED', 'ERROR', name='leavestatus'), nullable=False),
+        sa.Column('leave_status', ENUM('PENDING', 'APPROVED', 'CANCELLED', 'REJECTED', name='leavestatus'), nullable=False),
         sa.ForeignKeyConstraint(['job_no'], ['new_job_leave.job_no'], ),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_table('task_daemon',
-        sa.Column('type', ENUM('NONE', 'ACQUIRE_TOKEN', 'SEND_REPORT', 'SYNC_LEAVES', 'SYNC_USERS', name='daemontasktype'), nullable=False),
+        sa.Column('type', ENUM('NONE', 'ACQUIRE_TOKEN', 'SEND_REPORT', 'SYNC_LEAVES', 'SYNC_USERS', 'SEND_HEALTH', name='daemontasktype'), nullable=False),
         sa.Column('job_no', sa.String(length=32), nullable=False),
         sa.Column('id', sa.String(length=32), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),

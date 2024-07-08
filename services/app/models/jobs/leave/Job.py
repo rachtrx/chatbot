@@ -1,18 +1,20 @@
 from extensions import db, Session
 
-from overrides import overrides
+import traceback
 from sqlalchemy.types import Enum as SQLEnum
 from sqlalchemy import desc
 
-from models.users import User
 from models.exceptions import ReplyError
 
 from models.jobs.base.Job import Job
 from models.jobs.leave.Task import TaskLeave
-from models.jobs.base.constants import JobType, Status, ErrorMessage, Decision, AuthorizedDecision
+from models.jobs.base.constants import JobType, Status, ErrorMessage, Decision, AuthorizedDecision, OutgoingMessageData, MessageType
 from models.jobs.base.utilities import is_user_status_exists
 
 from models.jobs.leave.constants import LeaveTaskType, LeaveError, LeaveErrorMessage, LeaveType, LeaveStatus
+from models.jobs.leave.utilities import print_all_dates
+
+from models.messages.MessageKnown import MessageKnown
 
 class JobLeave(Job):
 
@@ -31,6 +33,7 @@ class JobLeave(Job):
     ###########################
 
     def get_enum(self, message):
+        self.logger.info(f"Message before converting enum: {message}")
         if message in Decision._value2member_map_:
             return Decision(message)
         elif message in LeaveType._value2member_map_:
@@ -42,13 +45,15 @@ class JobLeave(Job):
         
     def preprocess_msg(self, state, msg):
         '''returns the intermediate state'''
+        self.logger.info(f"Enum: {msg}")
+
         msg_method_map = { # STATES A JOB CAN BE IN WHEN ACCEPTING A MESSAGE
             LeaveTaskType.EXTRACT_DATES: self.get_leave_selection,
             LeaveTaskType.REQUEST_CONFIRMATION: self.get_decision,
             LeaveTaskType.REQUEST_AUTHORISATION: self.get_authorisation, # IN PLACE OF LEAVE_CONFIRMED
             LeaveTaskType.APPROVE: self.get_selection_after_approval,
             LeaveTaskType.REJECT: self.get_selection_after_rejection,
-            LeaveTaskType.CANCELLED: self.get_selection_after_cancelled,
+            LeaveTaskType.CANCEL: self.get_selection_after_cancelled,
         }
 
         func = msg_method_map.get(state)
@@ -56,86 +61,109 @@ class JobLeave(Job):
         if func:
             return func(msg)
         else:
-            raise ReplyError(
+            message = OutgoingMessageData(
                 body=ErrorMessage.UNKNOWN_ERROR,
                 user_id=self.primary_user_id,
                 job_no=self.job_no
             )
+            raise ReplyError(message)
 
-    def execute(self, msg, user_id):
-
-        if self.error:
-            err_msg = self.get_error_message()
-            raise ReplyError(
-                body=err_msg,
-                user_id=self.primary_user_id,
-                job_no=self.job_no
-            ) # no need to update the error
-
-        last_task = Session().query(TaskLeave).filter(
-            TaskLeave.job_no == self.job_no,
-            TaskLeave.status != Status.FAILED
-        ).order_by(
-            desc(TaskLeave.created_at)
-        )
-
-        if not last_task:
-            task = LeaveTaskType.EXTRACT_DATES
+    def execute(self, msg_sid):
         
-        else:
-            msg = self.get_enum(msg)
-            task = self.preprocess_msg(last_task, msg) # raise other replyerrors
+        self.logger.info(f"Message SID: {msg_sid}")
+        msg = Session().query(MessageKnown).get(msg_sid)
+        
+        try:
+
+            if self.error:
+                err_msg = self.get_error_message()
+                message = OutgoingMessageData(
+                    body=err_msg,
+                    user_id=self.primary_user_id,
+                    job_no=self.job_no
+                )
+                raise ReplyError(message) # no need to update the error
+
+            last_task = Session().query(TaskLeave).filter(
+                TaskLeave.job_no == self.job_no,
+                TaskLeave.status != Status.FAILED
+            ).order_by(
+                desc(TaskLeave.created_at)
+            ).first()
+
+            if not last_task:
+                payload = msg.body
+                task_type = LeaveTaskType.EXTRACT_DATES
+            else:
+                self.logger.info(f"Last task found: {last_task}")
+                payload = self.get_enum(msg.body.upper())
+                task_type = self.preprocess_msg(last_task.type, payload) # raise other replyerrors
             
-        payload = msg 
-        
-        if task in [LeaveTaskType.APPROVE, LeaveTaskType.REJECT, LeaveTaskType.CANCEL]:
+            if task_type in [LeaveTaskType.APPROVE, LeaveTaskType.REJECT, LeaveTaskType.CANCEL]:
 
-            status_map = {
-                LeaveTaskType.CANCEL: [LeaveStatus.APPROVED, LeaveStatus.PENDING],
-                LeaveTaskType.APPROVE: [LeaveStatus.PENDING],
-                LeaveTaskType.REJECT: [LeaveStatus.APPROVED]
+                payload = self.look_for_records(task_type)
+            
+                if not payload:
+                    error_map = {
+                        LeaveTaskType.CANCEL: LeaveErrorMessage.NO_DATES_TO_CANCEL,
+                        LeaveTaskType.APPROVE: LeaveErrorMessage.NO_DATES_TO_APPROVE,
+                        LeaveTaskType.REJECT: LeaveErrorMessage.NO_DATES_TO_REJECT
+                    }
+                    err_message = OutgoingMessageData(
+                        body=error_map[task_type],
+                        user_id=self.primary_user_id,
+                        job_no=self.job_no
+                    )
+                    raise ReplyError(err_message)
+                
+            self.logger.info(f"Payload: {payload}")
+                
+            from models.jobs.leave.tasks import ExtractDates, RequestConfirmation, RequestAuthorisation, ApproveLeave, RejectLeave, CancelLeave
+                    
+            tasks_map = {
+                LeaveTaskType.EXTRACT_DATES: [ExtractDates, RequestConfirmation],
+                LeaveTaskType.REQUEST_CONFIRMATION: [RequestConfirmation],
+                LeaveTaskType.REQUEST_AUTHORISATION: [RequestAuthorisation],
+                LeaveTaskType.APPROVE: [ApproveLeave],
+                LeaveTaskType.REJECT: [RejectLeave],
+                LeaveTaskType.CANCEL: [CancelLeave]
             }
 
-            statuses = status_map.get(task)
+            task_classes = tasks_map.get(task_type)
+            for task_class in task_classes:
+                task = task_class(self.job_no, payload, msg.user_id)
+                task.run()
 
-            from models.jobs.leave.LeaveRecord import LeaveRecord
-            payload = LeaveRecord.get_records(self.job_no, statuses=statuses)
-        
-            if not payload:
-                error_map = {
-                    LeaveTaskType.CANCEL: LeaveErrorMessage.NO_DATES_TO_CANCEL,
-                    LeaveTaskType.APPROVE: LeaveErrorMessage.NO_DATES_TO_APPROVE,
-                    LeaveTaskType.REJECT: LeaveErrorMessage.NO_DATES_TO_REJECT
-                }
-                raise ReplyError(
-                    body=error_map[task],
-                    user_id=self.primary_user_id,
-                    job_no=self.job_no,
-                )
+            if not is_user_status_exists(msg.user_id): 
+                return True
             
-        from models.jobs.leave.tasks import ExtractDates, RequestConfirmation, RequestAuthorisation, ApproveLeave, RejectLeave, CancelLeave
-                
-        tasks_map = {
-            LeaveTaskType.EXTRACT_DATES: [ExtractDates, RequestConfirmation],
-            LeaveTaskType.REQUEST_CONFIRMATION: [RequestConfirmation],
-            LeaveTaskType.REQUEST_AUTHORISATION: [RequestAuthorisation],
-            LeaveTaskType.APPROVE: [ApproveLeave],
-            LeaveTaskType.REJECT: [RejectLeave],
-            LeaveTaskType.CANCEL: [CancelLeave]
+            return False
+        
+        except Exception as e:
+            self.logger.error(traceback.format_exc())
+            if not isinstance(e, ReplyError):
+                message = OutgoingMessageData(
+                    body="Really sorry, you caught an error that we did not find during development, please let us know!",
+                    user_id=msg.user_id,
+                    job_no=self.job_no
+                )
+                raise ReplyError(message, LeaveError.UNKNOWN)
+            else:
+                self.logger.info("Re raising ReplyError in Leave")
+                raise
+
+    def look_for_records(self, task_type):
+        status_map = {
+            LeaveTaskType.CANCEL: [LeaveStatus.APPROVED, LeaveStatus.PENDING],
+            LeaveTaskType.APPROVE: [LeaveStatus.PENDING],
+            LeaveTaskType.REJECT: [LeaveStatus.APPROVED]
         }
 
-        task = None
+        statuses = status_map.get(task_type)
 
-        task_classes = tasks_map.get(task)
-        for task_class in task_classes:
-            task = task_class(self.job_no, user_id, payload)
-            task.run()
-
-        if not is_user_status_exists(user_id): 
-            return True
-        
-        return False
-            
+        from models.jobs.leave.LeaveRecord import LeaveRecord
+        payload = LeaveRecord.get_records(self.job_no, statuses=statuses)
+        return payload
 
     ###########################
     # HANDLING SELECTIONS
@@ -145,34 +173,45 @@ class JobLeave(Job):
     def get_leave_selection(self, selection): # MESSAGE WHILE LEAVE_TYPE_NOT_FOUND
         print("Getting leave selection")
         if not isinstance(selection, LeaveType):
-            raise ReplyError(
+            message = OutgoingMessageData(
                 body=ErrorMessage.UNKNOWN_ERROR,
                 user_id=self.primary_user_id,
                 job_no=self.job_no,
             )
-
+            raise ReplyError(message)
         return LeaveTaskType.REQUEST_CONFIRMATION
     
-    @staticmethod
-    def get_decision(selection): # MESSAGE WHILE PENDING_DECISION
+    def get_decision(self, selection): # MESSAGE WHILE PENDING_DECISION
         print("Getting Decision")
 
-        action_map = {
-            Decision.CONFIRM: LeaveTaskType.REQUEST_AUTHORISATION,
-            Decision.CANCEL: LeaveError.REGEX,
-        }
+        if selection == Decision.CANCEL:
+            message = OutgoingMessageData(
+                body=LeaveErrorMessage.REGEX,
+                user_id=self.primary_user_id,
+                job_no=self.job_no
+            )
+            raise ReplyError(message, LeaveError.REGEX)
+        
+        elif isinstance(selection, LeaveType):
+            message = OutgoingMessageData(
+                body=ErrorMessage.PENDING_DECISION,
+                user_id=self.primary_user_id,
+                job_no=self.job_no
+            )
+            raise ReplyError(message)
 
-        return action_map.get(selection)
+        return LeaveTaskType.REQUEST_AUTHORISATION # TODO only left Decision.CONFIRM right?
     
     def get_authorisation(self, selection): # MESSAGE WHILE PENDING_AUTHORISATION
         print("Getting authorisation")
 
         if isinstance(selection, LeaveType):
-            raise ReplyError(
+            message = OutgoingMessageData(
                 body=ErrorMessage.PENDING_AUTHORISATION,
                 user_id=self.primary_user_id,
                 job_no=self.job_no
             )
+            raise ReplyError(message)
 
         action_map = {
             AuthorizedDecision.APPROVE: LeaveTaskType.APPROVE,
@@ -186,18 +225,20 @@ class JobLeave(Job):
         print("Handling selection after cancelled")
 
         if isinstance(selection, AuthorizedDecision):
-            raise ReplyError(
-                body=LeaveError.AUTHORISING_CANCELLED_MSG,
+            message = OutgoingMessageData(
+                body=LeaveErrorMessage.AUTHORISING_CANCELLED_MSG,
                 user_id=self.primary_user_id,
                 job_no=self.job_no
             )
+            raise ReplyError(message)
     
         elif isinstance(selection, LeaveType):
-            raise ReplyError(
-                body=LeaveError.LEAVE_CANCELLED,
+            message = OutgoingMessageData(
+                body=LeaveErrorMessage.LEAVE_CANCELLED,
                 user_id=self.primary_user_id,
                 job_no=self.job_no
             )
+            raise ReplyError(message)
         
         # TODO possible for Decision to be here? ie. if there are more than 1 Decision messages
     
@@ -205,16 +246,23 @@ class JobLeave(Job):
         print("Handling selection after approval")
 
         if isinstance(selection, LeaveType):
-            raise ReplyError(
-                body=LeaveError.LEAVE_APPROVED,
+            message = OutgoingMessageData(
+                body=LeaveErrorMessage.LEAVE_APPROVED,
                 user_id=self.primary_user_id,
                 job_no=self.job_no
             )
+            raise ReplyError(message)
+        elif selection == AuthorizedDecision.APPROVE:
+            message = OutgoingMessageData(
+                body=LeaveErrorMessage.LEAVE_APPROVED,
+                user_id=self.primary_user_id,
+                job_no=self.job_no
+            )
+            raise ReplyError(message)
 
         action_map = {
             AuthorizedDecision.REJECT: LeaveTaskType.REJECT,
             Decision.CANCEL: LeaveTaskType.CANCEL, # TODO check for last confirm message? # TODO start cancel process while pending validation
-            AuthorizedDecision.APPROVE: LeaveError.LEAVE_APPROVED,
         }
     
         return action_map.get(selection)
@@ -224,26 +272,29 @@ class JobLeave(Job):
     def get_selection_after_rejection(self, selection): # MESSAGE WHILE LEAVE_REJECTED
         print("Handling selection after rejection")
 
-        if isinstance(selection, AuthorizedDecision) and selection == AuthorizedDecision.APPROVE:
-            raise ReplyError(
-                body=LeaveError.LEAVE_REJECTED,
+        if selection == AuthorizedDecision.APPROVE:
+            message = OutgoingMessageData(
+                body=LeaveErrorMessage.LEAVE_REJECTED,
                 user_id=self.primary_user_id,
                 job_no=self.job_no
             )
+            raise ReplyError(message)
         
-        elif isinstance(selection, Decision) and selection == Decision.CANCEL:
-            raise ReplyError(
-                body=LeaveError.LEAVE_REJECTED,
+        elif selection == Decision.CANCEL:
+            message = OutgoingMessageData(
+                body=LeaveErrorMessage.LEAVE_REJECTED,
                 user_id=self.primary_user_id,
                 job_no=self.job_no
             )
+            raise ReplyError(message)
     
         elif isinstance(selection, LeaveType):
-            raise ReplyError(
-                body=LeaveError.LEAVE_REJECTED,
+            message = OutgoingMessageData(
+                body=LeaveErrorMessage.LEAVE_REJECTED,
                 user_id=self.primary_user_id,
                 job_no=self.job_no
-            ) # TODO job_status is now only for leave class?
+            )
+            raise ReplyError(message) # TODO job_status is now only for leave class?
         
         # TODO possible for Decision to be here? ie. if there are more than 1 Decision messages
         
@@ -251,6 +302,50 @@ class JobLeave(Job):
 
         message_map = {
             LeaveError.REGEX: LeaveErrorMessage.CONFIRMING_CANCELLED_MSG,
+            LeaveError.TIMEOUT: LeaveErrorMessage.REQUEST_EXPIRED
         }
 
         return message_map.get(status, ErrorMessage.UNKNOWN_ERROR)
+    
+    def handle_error(self, error: LeaveError, err_message: OutgoingMessageData):
+
+        if error in [LeaveError.REGEX, LeaveError.ALL_OVERLAPPING, LeaveError.ALL_PREVIOUS_DATES, LeaveError.DURATION_MISMATCH, LeaveError.DATES_NOT_FOUND]:
+            # guranteed that user_id == self.primary_user_id
+            self.logger.info(f"Error message: {err_message}")
+            err_message.body += " You may submit the request again."
+            MessageKnown.send_msg(err_message)
+            return
+        
+        records = self.look_for_records(task_type=LeaveTaskType.CANCEL)
+
+        is_primary_user = err_message.user_id == self.primary_user_id
+
+        self.logger.info(f"is_primary_user: {is_primary_user}; records: {records}")
+
+        # UPDATE PRIMARY USER
+        if not records:
+            body=f"Leave request with Ref No. {self.job_no} has failed. No records pending or approved were found for deletion. You may submit the request again."
+        else:
+            body = f"Leave request with Ref No. {self.job_no} has failed. Attempting to cancel any pending or approved records."
+            
+        message = OutgoingMessageData( # TODO FORWARD NEED TEMPLATE
+            user_id=self.primary_user_id,
+            msg_type=MessageType.SENT if is_primary_user else MessageType.FORWARD,
+            job_no=self.job_no,
+            body=body
+        )
+        MessageKnown.send_msg(message=message)
+
+        # UPDATE NON PRIMARY USER
+        if not is_primary_user:
+            err_message.body += f" {self.primary_user.alias} has been informed."
+            if records:
+                err_message.body += f" Attempting to cancel records."
+
+        self.logger.info(f"Error message: {err_message}")
+        MessageKnown.send_msg(err_message)
+
+        from models.jobs.leave.tasks import CancelLeave
+        task = CancelLeave(self.job_no, records, self.primary_user_id)
+        task.run()
+        

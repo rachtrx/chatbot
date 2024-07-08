@@ -21,22 +21,26 @@ class CancelLeave(TaskLeave):
         forward_metadata = self.cancel(self.payload)
 
         reply_message = OutgoingMessageData( 
-            msg_type=MessageType.SENT, 
-            user=self.user.alias, 
+            user_id=self.user_id, 
             job_no=self.job_no, 
-            body=f"Leave on {print_all_dates(self.affected_dates)} has been cancelled, relevant staff have been notified."
+            body=f"Leave on {print_all_dates(self.affected_dates)} have been cancelled."
         )
+
+        if forward_metadata:
+            reply_message.body += " Relevant staff have been notified."
+
+            MessageKnown.forward_template_msges(
+                self.job.job_no,
+                callback=self.forwards_callback,
+                user_id_to_update=self.job.primary_user.id,
+                message_context="your leave cancellation",
+                **forward_metadata
+            )
+        else:
+            reply_message.body += " No relevant staff were found to notify. Please notify them manually."
 
         MessageKnown.send_msg(message=reply_message)
-
-        MessageKnown.forward_template_msges(
-            self.job.job_no,
-            callback=self.forwards_callback,
-            user_id_to_update=self.job.user.id,
-            message_context="your leave cancellation",
-            **forward_metadata
-        )
-
+            
         clear_user_processing_state(self.user_id)
 
         return
@@ -45,14 +49,17 @@ class CancelLeave(TaskLeave):
         # FORWARD MESSAGES
         is_approved = users_list = None
 
-        if any(record.status == LeaveStatus.APPROVED for record in records):
+        if any(record.leave_status == LeaveStatus.APPROVED for record in records):
             is_approved = True
-            users_list = self.job.user.get_relations()
+            users_list = self.job.primary_user.get_relations()
         else:
             is_approved = False
             users_list = list(self.user.get_ro().union(self.user.get_dept_admins()))
 
         self.affected_dates = LeaveRecord.update_leaves(records, LeaveStatus.CANCELLED)
+
+        if not len(users_list) > 0:
+            return None 
             
         cv_list = get_cancel_leave_cv( # LOOP USERS
             users_list,
@@ -61,4 +68,4 @@ class CancelLeave(TaskLeave):
             dates=self.affected_dates, # Don't need to mark late
         )
 
-        return MessageKnown.construct_forward_metadata(os.environ.get("LEAVE_NOTIFY_CANCEL_SID"), cv_list, users_list)
+        return MessageKnown.construct_forward_metadata(os.getenv("LEAVE_NOTIFY_CANCEL_SID"), cv_list, users_list)

@@ -6,7 +6,7 @@ from models.exceptions import AzureSyncError
 def generate_header(token=None):
     
     if not token:
-        with open(os.environ.get('TOKEN_PATH'), 'r') as file:
+        with open(os.getenv('TOKEN_PATH'), 'r') as file:
             token = file.read().strip()
 
     headers = {

@@ -16,20 +16,22 @@ from models.jobs.daemon.utilities import generate_header
 
 class AcquireToken(TaskDaemon):
 
+    name = "Token Retrieval"
+
     __mapper_args__ = {
         "polymorphic_identity": DaemonTaskType.ACQUIRE_TOKEN
     }
 
     config = {
-        'client_id': os.environ.get('CLIENT_ID'),
-        'client_secret': os.environ.get('CLIENT_SECRET'),
-        'authority': os.environ.get('AUTHORITY'),
-        'scope': [os.environ.get('SCOPE')],
-        'site_id': os.environ.get('SITE_ID'),
+        'client_id': os.getenv('CLIENT_ID'),
+        'client_secret': os.getenv('CLIENT_SECRET'),
+        'authority': os.getenv('AUTHORITY'),
+        'scope': [os.getenv('SCOPE')],
+        'site_id': os.getenv('SITE_ID'),
     }
 
     def get_err_body(self) -> str:
-        return DaemonMessage.TOKEN_NOT_ACQUIRED.value
+        return DaemonMessage.TOKEN_NOT_ACQUIRED
 
     def execute(self):
 
@@ -37,26 +39,28 @@ class AcquireToken(TaskDaemon):
         scope = self.config['scope']
 
         try:
-            self.token = msal_instance.acquire_token_silent(scope, account=None)
+            token = msal_instance.acquire_token_silent(scope, account=None)
             # If the token is not available in cache, acquire a new one from Azure AD and save it to a variable
-            if not self.token:
-                self.token = self.msal_instance.acquire_token_for_client(scopes=self.scope)
+            if not token:
+                token = msal_instance.acquire_token_for_client(scopes=scope)
 
-            access_token = 'Bearer ' + self.token['access_token']
+            access_token = 'Bearer ' + token['access_token']
+
+            self.logger.info(token['access_token'])
 
         except Exception as e:
-            self.body = DaemonMessage.SECRET_EXPIRED.value
+            self.body = DaemonMessage.SECRET_EXPIRED
             raise
 
-        with open(os.environ.get('TOKEN_PATH'), 'w') as file:
-            file.write(access_token)
-
         try:
+            with open(os.getenv('TOKEN_PATH'), 'w') as file:
+                file.write(access_token)
+        
             self.update_table_urls()
-            self.body = DaemonMessage.TOKEN_ACQUIRED.value
+            self.body = DaemonMessage.TOKEN_ACQUIRED
         except Exception as e:
             logging.error(traceback.format_exc())
-            self.body = DaemonMessage.TABLE_URL_CHANGED.value
+            self.body = DaemonMessage.TABLE_URL_CHANGED
             raise
 
         return

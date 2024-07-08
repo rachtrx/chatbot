@@ -5,8 +5,8 @@ import os
 
 conn = psycopg2.connect(
     dbname="chatbot",
-    user=os.environ.get('SQL_USER'),
-    password=os.environ.get('PGPASSWORD'),
+    user=os.getenv('SQL_USER'),
+    password=os.getenv('PGPASSWORD'),
     host="localhost"
 )
 
