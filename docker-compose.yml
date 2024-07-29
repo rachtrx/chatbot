@@ -14,7 +14,7 @@ services:
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD} # is this needed if its already in my flask .env file?
       # - ENV_FILE=.env.dev
     env_file:
-      - ./services/app/.env.dev
+      - ./services/app/.env
     volumes:
       - ./services/app/logs:/var/log/
       - ./services/app/token.txt:${TOKEN_PATH}
