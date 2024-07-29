@@ -34,7 +34,7 @@ class ErrorMessage:
     NO_FORWARD_MESSAGE_FOUND = "We could not find any staff to forward the request. Please ignore if this is normal behaviour. Otherwise, you may have to inform relevant staff manually."
     NO_ADMINS_FOUND = "No admins found to run health check"
 
-class JobType(Enum):
+class JobType:
     NONE = "NONE"
     LEAVE = "LEAVE"
     DAEMON = "DAEMON"
@@ -45,7 +45,7 @@ class UserState(Enum):
     PENDING = 'PENDING'
     BLOCKED = 'BLOCKED'
 
-class Status(Enum):
+class Status:
     COMPLETED = 'COMPLETED'
     FAILED = 'FAILED'
     PENDING = 'PENDING'
@@ -55,12 +55,12 @@ class ForwardStatus:
         for status in Status:
             setattr(self, status.name, [])
 
-class MessageOrigin(Enum):
+class MessageOrigin:
     KNOWN = 'KNOWN'
     UNKNOWN = 'UNKNOWN'
     NONE = 'NONE'
 
-class MessageType(Enum):
+class MessageType:
     SENT = 'SENT'
     RECEIVED = 'RECEIVED'
     FORWARD = 'FORWARD'

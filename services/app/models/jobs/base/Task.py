@@ -1,7 +1,6 @@
 import shortuuid
 from concurrent.futures import ThreadPoolExecutor
 
-from sqlalchemy.types import Enum as SQLEnum
 from sqlalchemy.orm import declared_attr
 
 from extensions import db, Session
@@ -38,7 +37,7 @@ class Task(db.Model):
     
     @declared_attr
     def status(cls):
-        return db.Column(SQLEnum(Status), nullable=True)
+        return db.Column(db.String(10), nullable=True)
     
     @declared_attr
     def user_id(cls):

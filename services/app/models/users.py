@@ -9,7 +9,6 @@ from MessageLogger import setup_logger
 from models.jobs.base.utilities import join_with_commas_and
 
 # from models.jobs.daemon.constants import AccessLevel # KEEP OLD IMPLEMENTATION FOR NOW
-# from sqlalchemy.types import Enum as SQLEnum
 
 class User(db.Model):
 

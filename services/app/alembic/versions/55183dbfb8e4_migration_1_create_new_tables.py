@@ -7,7 +7,6 @@ Create Date: 2024-06-22 14:41:49.658577
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import ENUM
 
 # revision identifiers, used by Alembic.
 revision = '55183dbfb8e4'
@@ -24,8 +23,8 @@ def upgrade() -> None:
         sa.Column('body', sa.Text(), nullable=True),
         sa.Column('timestamp', sa.DateTime(timezone=True), nullable=False),
         sa.Column('seq_no', sa.Integer(), nullable=False),
-        sa.Column('type', ENUM('KNOWN', 'UNKNOWN', 'NONE', name='messageorigin'), nullable=False),
-        sa.Column('msg_type', ENUM('SENT', 'RECEIVED', 'FORWARD', 'NONE', name='messagetype'), nullable=False),
+        sa.Column('type', sa.String(length=10), nullable=False),
+        sa.Column('msg_type', sa.String(length=10), nullable=False),
         sa.PrimaryKeyConstraint('sid')
     )
     op.create_table('new_users',
@@ -52,13 +51,13 @@ def upgrade() -> None:
         sa.Column('job_no', sa.String(length=32), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('primary_user_id', sa.String(length=32), nullable=True),
-        sa.Column('type', ENUM('NONE', 'LEAVE', 'DAEMON', 'SEARCH', name='jobtype'), nullable=False),
+        sa.Column('type', sa.String(length=10), nullable=False),
         sa.ForeignKeyConstraint(['primary_user_id'], ['new_users.id'], ),
         sa.PrimaryKeyConstraint('job_no')
     )
     op.create_table('sent_message_status',
         sa.Column('sid', sa.String(length=64), nullable=False),
-        sa.Column('status', ENUM('COMPLETED', 'FAILED', 'PENDING', name='status'), nullable=False),
+        sa.Column('status', sa.String(length=10), nullable=False),
         sa.ForeignKeyConstraint(['sid'], ['new_message.sid'], ),
         sa.PrimaryKeyConstraint('sid')
     )
@@ -88,8 +87,8 @@ def upgrade() -> None:
     )
     op.create_table('new_job_leave',
         sa.Column('job_no', sa.String(length=32), nullable=False),
-        sa.Column('error', ENUM('REGEX', 'ALL_OVERLAPPING', 'ALL_PREVIOUS_DATES', 'DURATION_MISMATCH', 'DATES_NOT_FOUND', 'NO_USERS_TO_NOTIFY', 'TIMEOUT', 'UNKNOWN', name='leaveerror'), nullable=True),
-        sa.Column('leave_type', ENUM('MEDICAL', 'CHILDCARE', 'PARENTCARE', 'HOSPITALISATION', 'COMPASSIONATE', 'MATERNITY', 'PATERNITY', 'BIRTHDAY', 'WEDDING', 'MARRIAGE', name='leavetype'), nullable=True),
+        sa.Column('error', sa.String(length=32), nullable=True),
+        sa.Column('leave_type', sa.String(length=32), nullable=True),
         sa.ForeignKeyConstraint(['job_no'], ['new_job.job_no'], ),
         sa.PrimaryKeyConstraint('job_no')
         )
@@ -97,28 +96,28 @@ def upgrade() -> None:
         sa.Column('id', sa.String(length=32), nullable=False),
         sa.Column('job_no', sa.String(length=32), nullable=False),
         sa.Column('date', sa.Date(), nullable=False),
-        sa.Column('sync_status', ENUM('COMPLETED', 'FAILED', 'PENDING', name='status'), nullable=True),
-        sa.Column('leave_status', ENUM('PENDING', 'APPROVED', 'CANCELLED', 'REJECTED', name='leavestatus'), nullable=False),
+        sa.Column('sync_status', sa.String(length=10), nullable=True),
+        sa.Column('leave_status', sa.String(length=32), nullable=False),
         sa.ForeignKeyConstraint(['job_no'], ['new_job_leave.job_no'], ),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_table('task_daemon',
-        sa.Column('type', ENUM('NONE', 'ACQUIRE_TOKEN', 'SEND_REPORT', 'SYNC_LEAVES', 'SYNC_USERS', 'SEND_HEALTH', name='daemontasktype'), nullable=False),
+        sa.Column('type', sa.String(length=16), nullable=False),
         sa.Column('job_no', sa.String(length=32), nullable=False),
         sa.Column('id', sa.String(length=32), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-        sa.Column('status', ENUM('COMPLETED', 'FAILED', 'PENDING', name='status'), nullable=True),
+        sa.Column('status', sa.String(length=10), nullable=True),
         sa.Column('user_id', sa.String(length=32), nullable=True),
         sa.ForeignKeyConstraint(['job_no'], ['job_daemon.job_no'], ),
         sa.ForeignKeyConstraint(['user_id'], ['new_users.id'], ),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_table('task_leave',
-        sa.Column('type', ENUM('NONE', 'EXTRACT_DATES', 'REQUEST_CONFIRMATION', 'REQUEST_AUTHORISATION', 'APPROVE', 'REJECT', 'CANCEL', name='leavetasktype'), nullable=False),
+        sa.Column('type', sa.String(length=32), nullable=False),
         sa.Column('job_no', sa.String(length=32), nullable=False),
         sa.Column('id', sa.String(length=32), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-        sa.Column('status', ENUM('COMPLETED', 'FAILED', 'PENDING', name='status'), nullable=True),
+        sa.Column('status', sa.String(length=10), nullable=True),
         sa.Column('user_id', sa.String(length=32), nullable=True),
         sa.ForeignKeyConstraint(['job_no'], ['new_job_leave.job_no'], ),
         sa.ForeignKeyConstraint(['user_id'], ['new_users.id'], ),
@@ -142,6 +141,4 @@ def downgrade() -> None:
     op.drop_table('new_users')
     op.drop_table('new_message')
 
-    for enum_type in ['leavetasktype', 'status', 'daemontasktype', 'leavestatus', 'leavetype', 'leaveerror', 'jobtype', 'messagetype', 'messageorigin']:
-        op.execute(f'DROP TYPE {enum_type}')
     # ### end Alembic commands ###

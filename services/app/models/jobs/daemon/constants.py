@@ -23,7 +23,7 @@ class Update(Enum):
     DEL = 'DEL'
     ADD = 'ADD'
 
-class DaemonTaskType(Enum):
+class DaemonTaskType:
     NONE = 'NONE'
     ACQUIRE_TOKEN = 'ACQUIRE_TOKEN'
     SEND_REPORT = 'SEND_REPORT'

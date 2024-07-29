@@ -1,5 +1,4 @@
 from sqlalchemy import desc
-from sqlalchemy.types import Enum as SQLEnum
 
 from extensions import db, Session
 
@@ -15,7 +14,7 @@ class TaskDaemon(Task):
 
     __tablename__ = "task_daemon"
 
-    type = db.Column(SQLEnum(DaemonTaskType), nullable=False)
+    type = db.Column(db.String(32), nullable=False)
     job_no = db.Column(db.ForeignKey("job_daemon.job_no"), nullable=False)
     job = db.relationship("JobDaemon", backref="tasks")
 

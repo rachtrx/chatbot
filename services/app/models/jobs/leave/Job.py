@@ -1,7 +1,6 @@
 from extensions import db, Session
 
 import traceback
-from sqlalchemy.types import Enum as SQLEnum
 from sqlalchemy import desc
 
 from models.exceptions import ReplyError
@@ -21,8 +20,8 @@ class JobLeave(Job):
     __tablename__ = 'job_leave'
     
     job_no = db.Column(db.ForeignKey("job.job_no"), primary_key=True, nullable=False)
-    error = db.Column(SQLEnum(LeaveError), nullable=True)
-    leave_type = db.Column(SQLEnum(LeaveType), nullable=True)
+    error = db.Column(db.String(32), nullable=True)
+    leave_type = db.Column(db.String(32), nullable=True)
 
     __mapper_args__ = {
         "polymorphic_identity": JobType.LEAVE,

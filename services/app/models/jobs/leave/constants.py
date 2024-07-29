@@ -2,7 +2,7 @@ from enum import Enum
 
 import re
 
-class LeaveType(Enum):
+class LeaveType:
     MEDICAL = "MEDICAL"
     CHILDCARE = "CHILDCARE"
     PARENTCARE = "PARENTCARE"
@@ -176,7 +176,7 @@ class LeaveErrorMessage:
     REQUEST_EXPIRED = "This request has expired."
     NO_USERS_TO_NOTIFY = "No staff found to forward message to. Please contact the school HR."
 
-class LeaveError(Enum):
+class LeaveError:
     REGEX = 'REGEX'
     ALL_OVERLAPPING = 'ALL_OVERLAPPING'
     ALL_PREVIOUS_DATES = 'ALL_PREVIOUS_DATES'
@@ -191,7 +191,7 @@ class LeaveIssue(Enum): # ERRORS THAT CAN BE FIXED
     LATE = "You have missed out the morning report for today's leave as it has already been sent out at 9am, but I am still able to update the records and inform your reporting contacts." # start date was today, need to inform user about missed morning report
     OVERLAP = "There are overlapping dates on "
 
-class LeaveTaskType(Enum):
+class LeaveTaskType:
     NONE = 'NONE'
     EXTRACT_DATES = 'EXTRACT_DATES'
     REQUEST_CONFIRMATION = 'REQUEST_CONFIRMATION'
@@ -200,7 +200,7 @@ class LeaveTaskType(Enum):
     REJECT = 'REJECT'
     CANCEL = 'CANCEL'
 
-class LeaveStatus(Enum):
+class LeaveStatus:
     PENDING = "PENDING"
     APPROVED = "APPROVED"
     CANCELLED = "CANCELLED"

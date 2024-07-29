@@ -1,5 +1,4 @@
 import os
-from sqlalchemy.types import Enum as SQLEnum
 from sqlalchemy.ext.declarative import declared_attr
 
 from extensions import db, Session, twilio
@@ -23,7 +22,7 @@ class SentMessageStatus(db.Model):
     logger.propagate = False
 
     sid = db.Column(db.ForeignKey("message.sid"), primary_key=True)
-    status = db.Column(SQLEnum(Status), nullable=False)
+    status = db.Column(db.String(10), nullable=False)
 
     message = db.relationship('Message', backref='sent_status', lazy='select')
 

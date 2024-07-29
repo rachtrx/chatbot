@@ -1,6 +1,5 @@
 import shortuuid
 from sqlalchemy import func
-from sqlalchemy.types import Enum as SQLEnum
 
 from extensions import db, Session
 from MessageLogger import setup_logger
@@ -22,10 +21,10 @@ class LeaveRecord(db.Model):
     job_no = db.Column(db.ForeignKey("job_leave.job_no"), nullable=False)
 
     date = db.Column(db.Date(), nullable=False)
-    sync_status = db.Column(SQLEnum(Status), default=None, nullable=True)
+    sync_status = db.Column(db.String(10), default=None, nullable=True)
 
     job = db.relationship('JobLeave', backref=db.backref('leave_records'), lazy='select')
-    leave_status = db.Column(SQLEnum(LeaveStatus), nullable=False)
+    leave_status = db.Column(db.String(32), nullable=False)
 
     def __init__(self, job_no, date, leave_status):
         self.id = shortuuid.ShortUUID().random(length=8)

@@ -1,4 +1,3 @@
-from sqlalchemy.types import Enum as SQLEnum
 from sqlalchemy.ext.declarative import declared_attr
 
 from extensions import db
@@ -19,8 +18,8 @@ class Message(db.Model):
     sid = db.Column(db.String(64), primary_key=True, nullable=False)
     body = db.Column(db.Text, nullable=True)
     timestamp = db.Column(db.DateTime(timezone=True), nullable=False)
-    type = db.Column(SQLEnum(MessageOrigin), nullable=False)
-    msg_type = db.Column(SQLEnum(MessageType), nullable=False)
+    type = db.Column(db.String(10), nullable=False)
+    msg_type = db.Column(db.String(10), nullable=False)
     seq_no = db.Column(db.Integer(), nullable=False)
 
     __mapper_args__ = {

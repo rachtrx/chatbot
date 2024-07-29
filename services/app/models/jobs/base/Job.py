@@ -10,8 +10,6 @@ from models.jobs.base.utilities import current_sg_time, log_instances
 
 from sqlalchemy.orm import declared_attr
 
-from sqlalchemy.types import Enum as SQLEnum
-
 class Job(db.Model): # system jobs
 
     __tablename__ = 'job'
@@ -25,7 +23,7 @@ class Job(db.Model): # system jobs
     created_at = db.Column(db.DateTime(timezone=True))
     primary_user_id = db.Column(db.ForeignKey("users.id"), nullable=True)
     primary_user = db.relationship('User', backref='jobs', lazy='select')
-    type = db.Column(SQLEnum(JobType), nullable=False)
+    type = db.Column(db.String(10), nullable=False)
 
     __mapper_args__ = {
         "polymorphic_identity": JobType.NONE,
