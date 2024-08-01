@@ -81,6 +81,12 @@ def get_latest_date_past_hour(hour=9, day_offset=0):
         return next_day.date()
     else:
         return present_day.date()
+    
+def get_previous_weekday(date):
+    previous_day = date - timedelta(days=1)
+    while previous_day.weekday() > 4:  # Mon-Fri are 0-4
+        previous_day -= timedelta(days=1)
+    return previous_day
 
 def join_with_commas_and(lst):
     if not lst:
@@ -103,11 +109,19 @@ def find_consecutive_date_groups(dates):
     current_group = [dates[0]]
 
     for i in range(1, len(dates)):
-        if (dates[i] - dates[i-1]) == timedelta(days=1):
-            current_group.append(dates[i])
+        current_date = dates[i]
+        previous_date = dates[i-1]
+
+        if (current_date - previous_date) == timedelta(days=1):
+            current_group.append(current_date)
+        elif (previous_date.weekday() == 4 and current_date.weekday() == 0 and (current_date - previous_date) == timedelta(days=3)):
+            # Detect Fridays and Mondays that are 3 days apart (indicating a weekend in between)
+            current_group.append(previous_date + timedelta(days=1))  # Add Saturday
+            current_group.append(previous_date + timedelta(days=2))  # Add Sunday
+            current_group.append(current_date)
         else:
             groups.append(current_group)
-            current_group = [dates[i]]
+            current_group = [current_date]
     
     groups.append(current_group)
     return groups

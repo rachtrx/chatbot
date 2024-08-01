@@ -43,7 +43,7 @@ class RequestConfirmation(TaskLeave):
     def update_cache(self):
         return {
             "dates": [date.strftime("%d-%m-%Y") for date in self.dates_to_update],
-            "validation_errors": self.validation_errors
+            # "validation_errors": self.validation_errors
         }
 
     def execute(self): # LEAVE_TYPE_FOUND
@@ -105,7 +105,7 @@ class RequestConfirmation(TaskLeave):
             2: self.user.alias,
             3: self.job.leave_type.lower(),
             4: set_dates_str(self.dates_to_update, mark_late=True), # TODO DONT NEED TO MARK LATE?
-            5: str(len(self.dates_to_update)),
+            5: str(len(self.dates_to_update)) + ' week',
             6: Decision.CONFIRM,
             7: Decision.CANCEL
         }

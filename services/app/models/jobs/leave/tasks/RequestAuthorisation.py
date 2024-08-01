@@ -87,7 +87,7 @@ class RequestAuthorisation(TaskLeave):
                     leave_type=self.job.leave_type, 
                     dates=self.dates_to_authorise,
                     relation_aliases=self.relations_name_list,
-                    mark_late=True
+                    mark_late=False
                 )
 
                 self.forward_metadata = MessageKnown.construct_forward_metadata(sid=os.getenv("LEAVE_AUTHORISATION_REQUEST_SID"), cv_list=cv_list, users_list=self.ro_set)

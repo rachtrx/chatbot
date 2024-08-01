@@ -33,7 +33,9 @@ class JobLeave(Job):
         
     def preprocess_msg(self, state, msg):
         '''returns the intermediate state'''
-        self.logger.info(f"Enum: {msg}")
+
+        text = msg.body.upper()
+        self.logger.info(f"text: {text}")
 
         msg_method_map = { # STATES A JOB CAN BE IN WHEN ACCEPTING A MESSAGE
             LeaveTaskType.EXTRACT_DATES: self.get_leave_selection,
@@ -47,7 +49,7 @@ class JobLeave(Job):
         func = msg_method_map.get(state)
     
         if func:
-            return func(msg)
+            return func(text, msg.user_id)
         else:
             message = OutgoingMessageData(
                 body=ErrorMessage.UNKNOWN_ERROR,
@@ -55,12 +57,17 @@ class JobLeave(Job):
                 job_no=self.job_no
             )
             raise ReplyError(message)
+        
+    def get_last_task(self):
+        return Session().query(TaskLeave).filter(
+            TaskLeave.job_no == self.job_no,
+            TaskLeave.status != Status.FAILED
+        ).order_by(
+            desc(TaskLeave.created_at)
+        ).first()
 
-    def execute(self, msg_sid):
-        
-        self.logger.info(f"Message SID: {msg_sid}")
-        msg = Session().query(MessageKnown).get(msg_sid)
-        
+    def execute(self, payload=None):
+
         try:
             if self.error:
                 err_msg = self.get_error_message()
@@ -70,29 +77,35 @@ class JobLeave(Job):
                     job_no=self.job_no
                 )
                 raise ReplyError(message) # no need to update the error
+            
+            last_task = self.get_last_task()
 
-            last_task = Session().query(TaskLeave).filter(
-                TaskLeave.job_no == self.job_no,
-                TaskLeave.status != Status.FAILED
-            ).order_by(
-                desc(TaskLeave.created_at)
-            ).first()
-
-            if not last_task:
-                task_type = LeaveTaskType.EXTRACT_DATES
+            task_type = msg_sid = None
+            if payload in LeaveTaskType.values():
+                task_type = payload
             else:
-                self.logger.info(f"Last task found: {last_task}")
-                task_type = self.preprocess_msg(last_task.type, msg.body.upper()) # raise other replyerrors
+                msg_sid = payload
+
+            if msg_sid:
+        
+                self.logger.info(f"Message SID: {msg_sid}")
+                msg = Session().query(MessageKnown).get(msg_sid)
+
+                if not last_task:
+                    task_type = LeaveTaskType.EXTRACT_DATES
+                else:
+                    self.logger.info(f"Last task found: {last_task}")
+                    task_type = self.preprocess_msg(last_task.type, msg) # raise other replyerrors
             
             if task_type in [LeaveTaskType.APPROVE, LeaveTaskType.REJECT, LeaveTaskType.CANCEL]:
 
                 payload = self.look_for_records(task_type)
                 self.logger.info(f"Payload: {payload}")
             
-                if not payload:
+                if not payload and msg_sid:
                     error_map = {
                         LeaveTaskType.CANCEL: LeaveErrorMessage.NO_DATES_TO_CANCEL,
-                        LeaveTaskType.APPROVE: LeaveErrorMessage.NO_DATES_TO_APPROVE,
+                        LeaveTaskType.APPROVE: LeaveErrorMessage.NO_DATES_TO_APPROVE, # this should work because daemon approve will set last task to approve as well
                         LeaveTaskType.REJECT: LeaveErrorMessage.NO_DATES_TO_REJECT
                     }
                     err_message = OutgoingMessageData(
@@ -101,6 +114,8 @@ class JobLeave(Job):
                         job_no=self.job_no
                     )
                     raise ReplyError(err_message, LeaveError.DATES_NOT_FOUND)
+                else:
+                    return True # dont hold up the scheduler and release the job no
             else:
                 payload = msg.body
                 
@@ -164,7 +179,7 @@ class JobLeave(Job):
     ###########################
         
 
-    def get_leave_selection(self, selection): # MESSAGE WHILE LEAVE_TYPE_NOT_FOUND
+    def get_leave_selection(self, selection, user_id): # MESSAGE WHILE LEAVE_TYPE_NOT_FOUND
         print("Getting leave selection")
         if selection not in LeaveType.values():
             message = OutgoingMessageData(
@@ -175,7 +190,7 @@ class JobLeave(Job):
             raise ReplyError(message)
         return LeaveTaskType.REQUEST_CONFIRMATION
     
-    def get_decision(self, selection): # MESSAGE WHILE PENDING_DECISION
+    def get_decision(self, selection, user_id): # MESSAGE WHILE PENDING_DECISION
         print("Getting Decision")
 
         if selection == Decision.CANCEL:
@@ -196,7 +211,7 @@ class JobLeave(Job):
 
         return LeaveTaskType.REQUEST_AUTHORISATION # TODO only left Decision.CONFIRM right?
     
-    def get_authorisation(self, selection): # MESSAGE WHILE PENDING_AUTHORISATION
+    def get_authorisation(self, selection, user_id): # MESSAGE WHILE PENDING_AUTHORISATION
         print("Getting authorisation")
 
         if selection in LeaveType.values():
@@ -215,13 +230,13 @@ class JobLeave(Job):
 
         return action_map.get(selection)
             
-    def get_selection_after_cancelled(self, selection): # MESSAGE WHILE LEAVE_CANCELLED
+    def get_selection_after_cancelled(self, selection, user_id): # MESSAGE WHILE LEAVE_CANCELLED
         print("Handling selection after cancelled")
 
         if selection in AuthorizedDecision.values():
             message = OutgoingMessageData(
                 body=LeaveErrorMessage.AUTHORISING_CANCELLED_MSG,
-                user_id=self.primary_user_id,
+                user_id=user_id,
                 job_no=self.job_no
             )
             raise ReplyError(message)
@@ -236,7 +251,7 @@ class JobLeave(Job):
         
         # TODO possible for Decision to be here? ie. if there are more than 1 Decision messages
     
-    def get_selection_after_approval(self, selection): # MESSAGE WHILE LEAVE_APPROVED
+    def get_selection_after_approval(self, selection, user_id): # MESSAGE WHILE LEAVE_APPROVED
         print("Handling selection after approval")
 
         if selection in LeaveType.values():
@@ -249,7 +264,7 @@ class JobLeave(Job):
         elif selection == AuthorizedDecision.APPROVE:
             message = OutgoingMessageData(
                 body=LeaveErrorMessage.LEAVE_APPROVED,
-                user_id=self.primary_user_id,
+                user_id=user_id,
                 job_no=self.job_no
             )
             raise ReplyError(message)
@@ -263,13 +278,13 @@ class JobLeave(Job):
         
         # TODO possible for Decision to be here? ie. if there are more than 1 Decision messages
     
-    def get_selection_after_rejection(self, selection): # MESSAGE WHILE LEAVE_REJECTED
+    def get_selection_after_rejection(self, selection, user_id): # MESSAGE WHILE LEAVE_REJECTED
         print("Handling selection after rejection")
 
         if selection == AuthorizedDecision.APPROVE:
             message = OutgoingMessageData(
                 body=LeaveErrorMessage.LEAVE_REJECTED,
-                user_id=self.primary_user_id,
+                user_id=user_id,
                 job_no=self.job_no
             )
             raise ReplyError(message)

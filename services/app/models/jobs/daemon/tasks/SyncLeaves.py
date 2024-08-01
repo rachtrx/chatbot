@@ -271,10 +271,11 @@ class SyncLeaves(TaskDaemon):
         ).join(
             User, JobLeave.primary_user_id == User.id
         ).filter(
-            LeaveRecord.leave_status != LeaveStatus.PENDING,
+            LeaveRecord.leave_status != LeaveStatus.PENDING, # need cancelled and rejected ones
             extract('month', LeaveRecord.date) == mm,
             extract('year', LeaveRecord.date) == yy,
-            LeaveRecord.date >= self.latest_date
+            extract('dow', LeaveRecord.date).in_([0, 1, 2, 3, 4]),
+            LeaveRecord.date >= self.latest_date,
         ).all()
 
         df = pd.DataFrame(

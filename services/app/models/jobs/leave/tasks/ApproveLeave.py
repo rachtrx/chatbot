@@ -21,7 +21,7 @@ class ApproveLeave(TaskLeave):
     def execute(self):
 
         self.affected_dates = LeaveRecord.update_leaves(self.payload, LeaveStatus.APPROVED)
-        reply_body = f"Leave on {print_all_dates(self.affected_dates)} has been approved, notifying {self.job.primary_user.alias}"
+        reply_body = f"Leave on {print_all_dates(self.affected_dates)} has been acknowledged, notifying {self.job.primary_user.alias}"
 
         forward_metadata = None
         try:

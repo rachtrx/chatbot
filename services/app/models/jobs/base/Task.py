@@ -131,7 +131,7 @@ class Task(db.Model):
 
         self.background_tasks.append(
             (ForwardCallback.update_on_forwards, {
-                'wait_time': 10,
+                'wait_time': 15,
                 'use_name_alias': True,
                 'job_no': forward_callback.job_no,
                 'seq_no': forward_callback.seq_no,

@@ -1,4 +1,5 @@
 import re
+import numpy as np
 import logging
 from datetime import datetime, timedelta, date
 
@@ -22,17 +23,20 @@ def set_dates_str(dates, mark_late=False):
 
     return dates_str
 
+def weekday_count(dates):
+    return sum(np.is_busday(d.strftime('%Y-%m-%d')) for d in dates)
+
 @User.loop_users # just need to pass in the user when calling get_approve_leave_cv
 def get_approve_leave_cv(relation, alias, leave_type, dates, mark_late=False, approver_alias=None):
     '''LEAVE_NOTIFY_APPROVE_SID; The decorator is for SENDING MESSAGES TO ALL RELATIONS OF ONE PERSON'''
-    
-    duration = len(dates)
+
+    duration = str(len(dates))
 
     return {
         '1': relation.alias,
         '2': alias,
         '3': leave_type.lower(),
-        '4': f"{str(duration)} {'day' if duration == 1 else 'days'}",
+        '4': f"{duration} {'weekday' if duration == 1 else 'weekdays'}",
         '5': set_dates_str(dates, mark_late),
         '6': approver_alias if approver_alias else 'Automatic'
     }
@@ -57,18 +61,31 @@ def get_reject_leave_cv(relation, approver_alias, dates, alias):
     }
 
 @User.loop_users
+def get_authorisation_reminder_cv(relation, alias, leave_type, dates, deadline, mark_late=False):
+
+    return {
+        '1': relation.alias,
+        '2': f"acknowledge {alias}'s {leave_type.lower()}",
+        '4': set_dates_str(dates, mark_late),
+        '5': "acknowledged",
+        '6': deadline,
+        '7': AuthorizedDecision.APPROVE,
+        '8': AuthorizedDecision.REJECT,
+    }
+
+@User.loop_users
 def get_authorisation_cv(relation, alias, leave_type, dates, relation_aliases, mark_late=False):
     local_relation_aliases = relation_aliases.copy()
     local_relation_aliases.remove(relation.alias)
 
-    duration = len(dates)
+    duration = str(len(dates))
 
     return {
         '1': relation.alias,
         '2': alias,
         '3': leave_type.lower(),
         '4': set_dates_str(dates, mark_late),
-        '5': f"{duration} {'day' if duration == 1 else 'days'}",
+        '5': f"{duration} {'weekday' if duration == 1 else 'weekdays'}",
         '6': join_with_commas_and(local_relation_aliases) if len(local_relation_aliases) > 0 else "NIL",
         '7': AuthorizedDecision.APPROVE,
         '8': AuthorizedDecision.REJECT,
@@ -80,15 +97,15 @@ def get_authorisation_late_cv(relation, alias, leave_type, dates_approved, dates
     local_relation_aliases = relation_aliases.copy()
     local_relation_aliases.remove(relation.alias)
 
-    duration_approved = len(dates_approved)
-    duration_to_authorise = len(dates_to_authorise)
+    duration_approved = str(len(dates_approved))
+    duration_to_authorise = str(len(dates_to_authorise))
     
     return {
         '1': relation.alias,
         '2': alias,
         '3': leave_type.lower(),
         '4': set_dates_str(dates_approved, mark_late),
-        '5': f"{duration_approved} {'day' if duration_approved == 1 else 'days'}",
+        '5': f"{duration_approved} {'weekday' if duration_approved == 1 else 'weekdays'}",
         '6': set_dates_str(dates_to_authorise, mark_late),
         '7': f"{str(duration_to_authorise)} {'day' if duration_to_authorise == 1 else 'days'}",
         '8': join_with_commas_and(local_relation_aliases) if len(local_relation_aliases) > 0 else "NIL",

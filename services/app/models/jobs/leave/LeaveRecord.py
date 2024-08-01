@@ -34,21 +34,38 @@ class LeaveRecord(db.Model):
         self.leave_status = leave_status
 
     @classmethod
-    def get_all_leaves_today(cls):
+    def get_all_leaves(cls, start_date=None, end_date=None, status=LeaveStatus.APPROVED):
+
         from models.users import User
+
+        if not end_date:
+            end_date = start_date
+
         session = Session()
-        all_records_today = session.query(
+        query = session.query(
             cls.date,
             func.concat(User.name, ' (', JobLeave.leave_type, ')').label('name'),
             User.dept,
+            cls.job_no
         ).join(
             JobLeave, JobLeave.job_no == cls.job_no
         ).join(
             User, JobLeave.primary_user_id == User.id
         ).filter(
-            cls.date == current_sg_time().date(),
-            cls.leave_status == LeaveStatus.APPROVED,
-        ).all()
+            cls.leave_status == status,
+        )
+
+        if end_date:
+            query = query.filter(
+                cls.date <= end_date
+            )
+        else:
+            query = query.filter(
+                cls.date >= start_date
+            )
+
+        # Execute the query
+        all_records_today = query.all()
 
         return all_records_today
 

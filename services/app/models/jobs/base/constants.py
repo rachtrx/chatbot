@@ -90,5 +90,5 @@ class Decision(Constants):
     CANCEL = "CANCEL"
 
 class AuthorizedDecision(Constants):
-    APPROVE = "APPROVE"
+    APPROVE = "ACKNOWLEDGE"
     REJECT = "REJECT"

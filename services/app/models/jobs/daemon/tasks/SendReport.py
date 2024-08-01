@@ -18,7 +18,7 @@ class SendReport(TaskDaemon):
 
     name = "Morning Report"
 
-    dept_order = ('Corporate', 'ICT', 'AP', 'Voc Ed', 'Lower Pri', 'Upper Pri', 'Secondary', 'High School', 'Relief')
+    dept_order = ('Corporate', 'ICT', 'AP', 'Voc Ed', 'AM Session', 'PM Session') # Relief?
 
     __mapper_args__ = {
         "polymorphic_identity": DaemonTaskType.SEND_REPORT
@@ -36,7 +36,9 @@ class SendReport(TaskDaemon):
         try:
             global_admins = User.get_global_admins()
 
-            all_records_today = LeaveRecord.get_all_leaves_today()
+            today_date = current_sg_time().date()
+
+            all_records_today = LeaveRecord.get_all_leaves(today_date, today_date)
             if len(all_records_today) == 0:
                 MessageKnown.forward_template_msges(
                     job_no=self.job_no,
@@ -50,7 +52,7 @@ class SendReport(TaskDaemon):
                     )
                 )
             else:
-                self.all_records_today_df = pd.DataFrame(data = all_records_today, columns=["date", "name", "dept"])
+                self.all_records_today_df = pd.DataFrame(data = all_records_today, columns=["date", "name", "dept", "job_no"])
                 #groupby
                 leave_today_by_dept = self.all_records_today_df.groupby("dept").agg(total_by_dept = ("name", "count"), names = ("name", lambda x: ', '.join(x)))
                 # convert to a dictionary where the dept is the key

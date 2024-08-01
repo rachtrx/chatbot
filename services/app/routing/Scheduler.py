@@ -88,8 +88,8 @@ class JobScheduler(BaseScheduler): # job queue
 
         # TODO WITH APP CONTEXT?
         session = Session()
-        job = session.query(Job).get(job_id)
         try:
+            job = session.query(Job).get(job_id)
             return job.execute(payload) # implement whether the job can be cleaned up, for leave, once the requestor is no longer pending
         except ReplyError as re:
             re.execute()

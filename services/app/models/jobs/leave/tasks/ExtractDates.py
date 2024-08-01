@@ -1,4 +1,5 @@
 import re
+import numpy as np
 
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
@@ -11,7 +12,7 @@ from models.jobs.base.utilities import current_sg_time, print_all_dates, join_wi
 
 from models.jobs.leave.Task import TaskLeave
 from models.jobs.leave.constants import LeaveIssue, LeaveError, LeaveErrorMessage, LeaveTaskType, LeaveStatus
-from models.jobs.leave.utilities import duration_extraction, calc_start_end_date, named_month_extraction, named_ddmm_extraction, named_day_extraction
+from models.jobs.leave.utilities import duration_extraction, calc_start_end_date, named_month_extraction, named_ddmm_extraction, named_day_extraction, weekday_count
 from models.jobs.leave.LeaveRecord import LeaveRecord
 
 class ExtractDates(TaskLeave):
@@ -216,7 +217,19 @@ class ExtractDates(TaskLeave):
             for n in range(duration):
                 yield start_date + timedelta(n)
 
-        all_dates_set = set(daterange())
+        all_dates_set = {d for d in set(daterange()) if np.is_busday(d.strftime('%Y-%m-%d'))}
+        if weekday_count(all_dates_set) == 0:
+            body = f"Hi {self.user.alias}, no weekdays were detected in your request."
+            message = OutgoingMessageData(
+                body=body, 
+                job_no=self.job_no,
+                user_id=self.user_id,
+            )
+            raise ReplyError(
+                message=message,
+                error=LeaveError.DATES_NOT_FOUND
+            )
+
         duplicate_records = LeaveRecord.get_duplicates(self)
         duplicate_dates_set = set([record.date for record in duplicate_records])
         self.logger.info(f"Duplicate dates set: {duplicate_dates_set}")
