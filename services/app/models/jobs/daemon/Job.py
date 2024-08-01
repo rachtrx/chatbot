@@ -73,8 +73,6 @@ class JobDaemon(Job):
 
         self.logger.info(f"Tasks to run: {len(tasks_to_run)}")
 
-        tasks_to_run = [DaemonTaskType(value) for value in tasks_to_run]
-
         is_daily_update = DaemonTaskType.SEND_REPORT in tasks_to_run
         send_health_status = is_daily_update
 
@@ -87,11 +85,11 @@ class JobDaemon(Job):
 
             try:
                 task_body = None
-                self.logger.info(f"Task Type: {task_type.value}")
+                self.logger.info(f"Task Type: {task_type}")
                 if task_type in tasks_to_run:
                     previous_task = TaskDaemon.get_latest_tasks(task_type=task_type, count=1)
 
-                    task_class = self.tasks_map.get(DaemonTaskType(task_type))
+                    task_class = self.tasks_map.get(task_type)
                     # TODO catch errors?
                     self.logger.info(f"Task Class: {task_class.__name__.lower()}")
                     latest_task = task_class(self.job_no)

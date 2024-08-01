@@ -30,6 +30,7 @@ class DaemonTaskType:
     SYNC_LEAVES = 'SYNC_LEAVES'
     SYNC_USERS = 'SYNC_USERS'
     SEND_HEALTH = 'SEND_HEALTH'
+    SEND_REMINDER = 'SEND_REMINDER'
 
 class DaemonMessage:
     TOKEN_ACQUIRED = "Access token retrieved."

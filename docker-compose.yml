@@ -30,6 +30,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - postgres_chatbot:/var/lib/postgresql/data/
+      - ./db_backup_chatbot.sql:/db_backup_chatbot.sql
     env_file:
       - ./.env.db
     ports:

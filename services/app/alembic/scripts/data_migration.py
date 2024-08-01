@@ -7,7 +7,7 @@ conn = psycopg2.connect(
     dbname="chatbot",
     user=os.getenv('SQL_USER'),
     password=os.getenv('PGPASSWORD'),
-    host="localhost"
+    host="db"
 )
 
 # USERS
@@ -18,7 +18,7 @@ records = cur.fetchall()
 
 # Insert new users into the new_users table
 for record in records:
-    user_id = shortuuid.ShortUUID().random(length=8)
+    user_id = shortuuid.ShortUUID().random(length=8).upper()
     try:
         cur.execute(
             "INSERT INTO new_users (id, name, alias, number, dept, is_active, is_global_admin, is_dept_admin) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
@@ -52,7 +52,6 @@ cur.close()
 
 
 # GET JOB LEAVE
-
 cur = conn.cursor(cursor_factory=NamedTupleCursor)
 
 leave_type_map = {
@@ -87,7 +86,7 @@ for record in records:
             if last_date is None:
                 continue
             task_type = 'CANCEL' if last_date.is_cancelled else 'CONFIRM' # NOT APPROVE
-            new_id = shortuuid.ShortUUID().random(length=8)
+            new_id = shortuuid.ShortUUID().random(length=8).upper()
             cur.execute(
                 "INSERT INTO task_leave (id, type, job_no, created_at, status, user_id) VALUES (%s, %s, %s, %s, %s, %s)",
                 (new_id, task_type, record.job_no, record.created_at, 'COMPLETED', record.id)
@@ -132,7 +131,7 @@ for record in records:
             task_type = task_type_map.get(record.type)
             if not current_job_no or not task_type:
                 continue
-            new_id = shortuuid.ShortUUID().random(length=8)
+            new_id = shortuuid.ShortUUID().random(length=8).upper()
             cur.execute(
                 "INSERT INTO task_daemon (id, type, job_no, created_at, status, user_id) VALUES (%s, %s, %s, %s, %s, %s)",
                 (new_id, task_type, current_job_no, record.created_at, 'FAILED' if record.status == 402 else 'COMPLETED', record.id)
@@ -287,11 +286,11 @@ for record in records:
 conn.commit()
 cur.close()
 
-# LEAVE RECORDS
+# LEAVE RECORDS: Some leave jobs whose user has resigned is unfortunately lost
 
 cur = conn.cursor(cursor_factory=NamedTupleCursor)
 
-cur.execute("SELECT lr.id, lr.job_no, lr.date, lr.sync_status, lr.is_cancelled FROM leave_records lr")
+cur.execute("SELECT lr.id, lr.job_no, lr.date, lr.sync_status, lr.is_cancelled FROM leave_records lr JOIN new_job_leave ON lr.job_no = new_job_leave.job_no")
 records = cur.fetchall()
 
 for record in records:
@@ -331,7 +330,7 @@ for record in records:
             "INSERT INTO message_unknown (sid, user_no) VALUES (%s, %s)",
             (record.sid, user_no)
         )
-        if message.type == 'message_sent' or message.type == 'message_forward':
+        if record.type == 'message_sent' or record.type == 'message_forward':
             cur.execute("SELECT message_sent.status FROM message_sent WHERE message_sent.sid = %s", (message.sid, ))
             sent_msg = cur.fetchone()
 

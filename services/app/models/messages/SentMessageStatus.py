@@ -55,9 +55,11 @@ class SentMessageStatus(db.Model):
                 self.logger.info(f"forwarded message {self.sid} was forwarded successfully")
                 
                 callback = session.query(ForwardCallback).get((self.message.job_no, self.message.seq_no))
+                if callback:
+                    self.logger.info(f"update_count in updating status: {callback.update_count} ")
                 if callback and callback.update_count > 0:
                     self.logger.info(f"update count: {callback.update_count}")
-                    callback.update_on_forwards(use_name_alias=True)
+                    ForwardCallback.update_on_forwards(use_name_alias=True, job_no=self.message.job_no, seq_no=self.message.seq_no)
 
         return None
     

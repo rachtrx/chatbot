@@ -104,10 +104,10 @@ class SendReport(TaskDaemon):
                                 users_list=dept_admins
                             )
                         )
-            self.body = DaemonMessage.REPORT_SENT.value
+            self.body = DaemonMessage.REPORT_SENT
         except AzureSyncError as e:
             self.logger.error(e)
-            self.body = DaemonMessage.AZURE_CONN_FAILED.value
+            self.body = DaemonMessage.AZURE_CONN_FAILED
             raise
 
     def get_err_body(self) -> str:

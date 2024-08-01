@@ -1,5 +1,7 @@
 import os
 
+from models.exceptions import NoRelationsError
+
 from models.jobs.base.constants import OutgoingMessageData, MessageType
 from models.jobs.base.utilities import print_all_dates, clear_user_processing_state
 
@@ -17,32 +19,34 @@ class ApproveLeave(TaskLeave):
     }
 
     def execute(self):
-        
-        forward_metadata = self.approve(self.payload)
 
+        self.affected_dates = LeaveRecord.update_leaves(self.payload, LeaveStatus.APPROVED)
+        reply_body = f"Leave on {print_all_dates(self.affected_dates)} has been approved, notifying {self.job.primary_user.alias}"
+
+        forward_metadata = None
+        try:
+            forward_metadata = self.get_approval_forward_cv()
+            others_body = ". Other staff will be notified."
+        except NoRelationsError:
+            others_body = ". No other staff were found to notify."
+            
         follow_up_message = OutgoingMessageData(
             msg_type=MessageType.FORWARD,
             user_id=self.job.primary_user_id,
             job_no=self.job_no,
             content_sid=os.getenv('LEAVE_FOLLOW_UP_APPROVED_SID'),
             content_variables={
-                '1': self.job.primary_user.alias,
-                '2': self.user.alias,
-                '3': print_all_dates(self.affected_dates),
-                '4': self.job_no
+                '1': self.job_no,
+                '2': self.job.primary_user.alias,
+                '3': self.user.alias,
+                '4': 'acknowledged',
+                '5': print_all_dates(self.affected_dates) + others_body, # TODO ADD REPLY BODY??
             }
         )
+
         MessageKnown.send_msg(message=follow_up_message)
 
-        reply_message = OutgoingMessageData( 
-            user_id=self.user.id, 
-            job_no=self.job_no, 
-            body=f"Leave on {print_all_dates(self.affected_dates)} has been approved for {self.job.primary_user.alias} and they have been notified."
-        )
-
         if forward_metadata:
-            reply_message.body += " Other relevant staff will be notified."
-            
             MessageKnown.forward_template_msges(
                 self.job_no,
                 callback=self.forwards_callback,
@@ -50,19 +54,23 @@ class ApproveLeave(TaskLeave):
                 message_context="your leave",
                 **forward_metadata
             )
-        else:
-            reply_message.body += " No other relevant staff were found to notify. Please notify them manually."
+
+        reply_message = OutgoingMessageData( 
+            user_id=self.user.id, 
+            job_no=self.job_no, 
+            body=reply_body + others_body
+        )
 
         MessageKnown.send_msg(message=reply_message)
 
         clear_user_processing_state(self.user_id)
         return
 
-    def approve(self, records):
+    def get_approval_forward_cv(self):
+
         users_list = self.job.primary_user.get_relations(ignore_users=[self.user])
         alias = self.job.primary_user.alias
         approver_alias = self.user.alias
-        self.affected_dates = LeaveRecord.update_leaves(records, LeaveStatus.APPROVED)
         
         cv_list = get_approve_leave_cv( # LOOP USERS
             users_list, 

@@ -155,7 +155,7 @@ class SyncUsers(TaskDaemon):
 
             COLS_TO_ADD = ['id'] + [col for col in USER_COLS if col != 'is_active'] # 7 cols
             new_users = merged_users.loc[merged_users['_merge'] == 'left_only', COLS_TO_ADD]
-            new_users['id'] = [shortuuid.ShortUUID().random(length=8) for _ in range(len(new_users))]
+            new_users['id'] = [shortuuid.ShortUUID().random(length=8).upper() for _ in range(len(new_users))]
             new_users_tuples = [tuple(new_user) for new_user in new_users.values]
             
             self.logger.info(f"Updating users.")

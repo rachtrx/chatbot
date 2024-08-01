@@ -63,7 +63,8 @@ def setup_azure():
 
     try:
         job_no = Job.create_job(JobType.DAEMON)
-        tasks_to_run = [DaemonTaskType.ACQUIRE_TOKEN.value]
+        # tasks_to_run = [DaemonTaskType.ACQUIRE_TOKEN]
+        tasks_to_run = [DaemonTaskType.ACQUIRE_TOKEN, DaemonTaskType.SYNC_USERS, DaemonTaskType.SYNC_LEAVES]
         job_scheduler.add_to_queue(item_id=job_no, payload=tasks_to_run)
         session.commit()
         logging.info("Added daemon job")
@@ -90,14 +91,17 @@ def execute():
     logging.info(f"{minute}, {cur_datetime.hour}")
 
     if minute % 15 == 0:
-        tasks_to_run.append(DaemonTaskType.SYNC_LEAVES.value)
-        tasks_to_run.append(DaemonTaskType.SYNC_USERS.value) # this should be more regular than acquire
+        tasks_to_run.append(DaemonTaskType.SYNC_LEAVES)
+        tasks_to_run.append(DaemonTaskType.SYNC_USERS) # this should be more regular than acquire
 
         if minute % 30 == 0:
-            tasks_to_run.append(DaemonTaskType.ACQUIRE_TOKEN.value)
-        
-    if minute == 0 and cur_datetime.hour == 9 and cur_datetime.weekday() not in [5, 6]: # bool
-        tasks_to_run.append(DaemonTaskType.SEND_REPORT.value)
+            tasks_to_run.append(DaemonTaskType.ACQUIRE_TOKEN)
+    
+    if cur_datetime.weekday() not in [5, 6]:
+        if minute == 0 and cur_datetime.hour == 9: # bool
+            tasks_to_run.append(DaemonTaskType.SEND_REPORT)
+        # if minute == 0 and cur_datetime.hour == 5:
+        #     tasks_to_run.append(DaemonTaskType.SEND_REMINDER)
 
     if len(tasks_to_run) == 0:
         return
@@ -201,7 +205,6 @@ def sms_reply_callback():
         session = Session()
 
         sent_msg = session.query(SentMessageStatus).get(sid)
-
 
         if sent_msg:
             if sent_msg.message.body is None:

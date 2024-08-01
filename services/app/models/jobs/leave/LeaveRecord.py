@@ -27,7 +27,7 @@ class LeaveRecord(db.Model):
     leave_status = db.Column(db.String(32), nullable=False)
 
     def __init__(self, job_no, date, leave_status):
-        self.id = shortuuid.ShortUUID().random(length=8)
+        self.id = shortuuid.ShortUUID().random(length=8).upper()
         # self.name = user.name
         self.job_no = job_no
         self.date = date

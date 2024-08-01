@@ -6,6 +6,7 @@ from sqlalchemy.schema import UniqueConstraint
 from extensions import db, Session
 from MessageLogger import setup_logger
 
+from models.exceptions import NoRelationsError
 from models.jobs.base.utilities import join_with_commas_and
 
 # from models.jobs.daemon.constants import AccessLevel # KEEP OLD IMPLEMENTATION FOR NOW
@@ -43,7 +44,7 @@ class User(db.Model):
         self._sg_number = value
 
     def __init__(self, name, alias, number, dept, is_global_admin, is_dept_admin, reporting_officer=None):
-        self.id = shortuuid.ShortUUID().random(length=8)
+        self.id = shortuuid.ShortUUID().random(length=8).upper()
         self.name = name
         self.alias = alias
         self.number = number
@@ -100,14 +101,19 @@ class User(db.Model):
         global_admins = query.all()
         return set(global_admins) if global_admins else set()
 
-    def get_relations(self, ignore_users: list[User] = []):
+    def get_relations(self, ignore_users: list[User] = [], allow_none=False):
         # Using list unpacking to handle both list and empty list cases
-        relations = list(self.get_ro() | self.get_dept_admins() | self.get_global_admins())
-        if int(os.getenv('LIVE')): # IMPT
-            ignore_ids = {self.id}
-            ignore_ids.update(user.id for user in ignore_users)
-            relations = [user for user in relations if user.id not in ignore_ids]
+        relations = self.get_ro() | self.get_dept_admins() | self.get_global_admins()
+        # if int(os.getenv('LIVE', 0)):  # Default to 0 if 'LIVE' is not set
+        # # Create a set of IDs to ignore
+        ignore_ids = {self.id}
+        ignore_ids.update(user.id for user in ignore_users)
+        relations = {user for user in relations if user.id not in ignore_ids}
             # self.logger.info(f"Final relations: {relations}")
+        self.logger.info(f"Relations: {relations}")
+
+        if not allow_none and len(relations) == 0:
+            raise NoRelationsError()
         return relations
     
     @staticmethod

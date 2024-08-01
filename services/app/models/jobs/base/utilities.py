@@ -17,11 +17,11 @@ singapore_tz = ZoneInfo('Asia/Singapore')
 
 def set_user_state(user_id, state, timeout=30):
     """Set the user as active with a specified timeout."""
-    redis_client.setex(f"user:{user_id}:status", timeout, state.value)
+    redis_client.setex(f"user:{user_id}:status", timeout, state)
 
 def check_user_state(user_id, state):
     """Check if the user is currently marked as active."""
-    return redis_client.exists(f"user:{user_id}:status") == state.value
+    return redis_client.exists(f"user:{user_id}:status") == state
 
 def is_user_status_exists(user_id):
     """Check if the user's status has been deleted."""
@@ -63,32 +63,24 @@ def convert_utc_to_sg_tz(utc_timestamp, dt_type=None):
         return singapore_time
     
 
-def current_sg_time(dt_type=None, day_offset = 0): # removed hour_offset
+def current_sg_time(day_offset = 0): # removed hour_offset
 
     dt = datetime.now(singapore_tz)
-
-    # if hour_offset:
-    #     dt = dt.replace(hour=hour_offset, minute=0, second=0, microsecond=0)
-
     if day_offset:
         dt = dt + timedelta(days=day_offset)
-
-    if dt_type:
-        return dt.strftime(dt_type)
-    else:
-        return dt
+    return dt
     
-def get_latest_date_past_hour(hour=9):
+def get_latest_date_past_hour(hour=9, day_offset=0):
 
-    timenow = current_sg_time()
+    present_day = current_sg_time(day_offset)
 
-    logging.info(f"TIMENOW: {timenow}")
+    logging.info(f"present_day: {present_day}")
 
-    if timenow.hour >= hour:
-        tomorrow = timenow + timedelta(days=1)
-        return tomorrow.date()
+    if present_day.hour >= hour:
+        next_day = present_day + timedelta(days=1)
+        return next_day.date()
     else:
-        return timenow.date()
+        return present_day.date()
 
 def join_with_commas_and(lst):
     if not lst:
@@ -163,7 +155,7 @@ def check_obj_state(obj):
 def run_new_context(func):
     '''used on instance methods that are ran in a new thread'''
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(*args, **kwargs):
         from manage import create_app
 
         result = None
@@ -177,11 +169,14 @@ def run_new_context(func):
 
         with create_app().app_context():
             session = Session()
-            logging.info("Starting function in decorator")
+            logging.info(f" Opening session in new context: {id(session)}")
 
             try:                           
-                logging.info(id(session))
-                result = func(self, *args, **kwargs)
+                instance_or_class = args[0]
+                if isinstance(instance_or_class, type):
+                    result = func(*args, **kwargs)
+                else:
+                    result = func(instance_or_class, *args[1:], **kwargs)
                 logging.info(f"Result in decorator: {result}")
 
             except Exception as e:
@@ -190,7 +185,7 @@ def run_new_context(func):
                 logging.error(traceback.format_exc())
                 raise
             finally:
-                logging.info(id(session))
+                logging.info(f" Closing session in new context: {id(session)}")
                 session.close()
                 return result
     return wrapper

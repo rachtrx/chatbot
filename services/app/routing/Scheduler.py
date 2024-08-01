@@ -47,6 +47,8 @@ class BaseScheduler:
     def worker(self, item_id):
         try:
             session = Session()
+            logging.info(f"Opening session in worker: {id(session)}")
+
             payload = self.queues[item_id].get(block=False)  # 1st message should be available. TODO handle error?
             logging.info(f"Payload retrieved: {payload}")
 
@@ -66,7 +68,7 @@ class BaseScheduler:
                 if payload is None:
                     break
         finally:
-            logging.info("Closing session")
+            logging.info(f"Closing session in worker: {id(session)}")
             session.close()
             self.cleanup_worker(item_id)
             self.worker_semaphore.release()  # Release the permit when the worker finishes

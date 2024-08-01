@@ -79,7 +79,7 @@ def upgrade() -> None:
     op.create_table('message_known',
         sa.Column('sid', sa.String(), nullable=False),
         sa.Column('job_no', sa.String(), nullable=True),
-        sa.Column('user_id', sa.String(length=32), nullable=False),
+        sa.Column('user_id', sa.String(length=32), nullable=True),
         sa.ForeignKeyConstraint(['job_no'], ['new_job.job_no'], ),
         sa.ForeignKeyConstraint(['sid'], ['new_message.sid'], ),
         sa.ForeignKeyConstraint(['user_id'], ['new_users.id'], ),

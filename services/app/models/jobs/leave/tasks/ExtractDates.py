@@ -1,3 +1,5 @@
+import re
+
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from extensions import Session
@@ -5,10 +7,10 @@ from extensions import Session
 from models.exceptions import ReplyError
 
 from models.jobs.base.constants import OutgoingMessageData
-from models.jobs.base.utilities import current_sg_time, get_latest_date_past_hour, join_with_commas_and
+from models.jobs.base.utilities import current_sg_time, print_all_dates, join_with_commas_and
 
 from models.jobs.leave.Task import TaskLeave
-from models.jobs.leave.constants import LeaveIssue, LeaveError, LeaveErrorMessage, LeaveTaskType
+from models.jobs.leave.constants import LeaveIssue, LeaveError, LeaveErrorMessage, LeaveTaskType, LeaveStatus
 from models.jobs.leave.utilities import duration_extraction, calc_start_end_date, named_month_extraction, named_ddmm_extraction, named_day_extraction
 from models.jobs.leave.LeaveRecord import LeaveRecord
 
@@ -19,7 +21,10 @@ class ExtractDates(TaskLeave):
     }
 
     def execute(self):
-    
+
+        self.setup_other_users()
+        
+        self.payload = re.sub(r'\s+', ' ', self.payload).strip()
         self.extract_dates()
         self.logger.info(f"{self.start_date}, {self.end_date}")
 
@@ -38,9 +43,8 @@ class ExtractDates(TaskLeave):
         return {
             # created by generate base
             "dates": [date.strftime("%d-%m-%Y") for date in self.dates_to_update],
-            "duplicate_dates": [date.strftime("%d-%m-%Y") for date in self.duplicate_dates],
             # returned by generate base
-            "validation_errors": [error.name for error in list(self.validation_errors)],
+            "validation_errors": list(self.validation_errors),
             # can be blank after genenrate base
         }
 
@@ -180,9 +184,7 @@ class ExtractDates(TaskLeave):
     def check_for_past_dates(self):
         '''Checks if start date is valid, otherwise tries to set the start date and duration'''
         cur_sg_date = current_sg_time().date()
-        earliest_possible_date = get_latest_date_past_hour()
-        
-        self.logger.info(earliest_possible_date)
+
         self.logger.info(f"{self.start_date}, {self.end_date}")
         # if end date is earlier than today, immediately reject
         if self.end_date < cur_sg_date:
@@ -199,14 +201,12 @@ class ExtractDates(TaskLeave):
             )
         
         # the start date is before today, but end date is at least today
-        elif self.start_date < earliest_possible_date:
-            # if start date is before today, definitely need to reset it to at least today
-            if self.start_date < cur_sg_date:
-                self.logger.info("date is too early but can be fixed")
-                self.start_date = cur_sg_date
-                self.duration = (self.end_date - self.start_date).days + 1
-                self.logger.info(f"committed in validate_start_date in session {id(Session())}")
-                self.validation_errors.add(LeaveIssue.UPDATED)
+        if self.start_date < cur_sg_date:
+            self.logger.info("date is too early but can be fixed")
+            self.start_date = cur_sg_date
+            self.duration = (self.end_date - self.start_date).days + 1
+            self.logger.info(f"committed in validate_start_date in session {id(Session())}")
+            self.validation_errors.add(LeaveIssue.UPDATED)
 
     def check_for_overlap(self):
 
@@ -223,19 +223,23 @@ class ExtractDates(TaskLeave):
 
         non_duplicate_dates_set = all_dates_set - duplicate_dates_set
 
-        self.duplicate_dates = sorted(list(duplicate_dates_set))
+        duplicate_dates = sorted(list(duplicate_dates_set))
         self.dates_to_update = sorted(list(non_duplicate_dates_set))
         # self.logger.info(f"Type of date: {type(self.dates_to_update[0])}")
 
         self.duration = len(self.dates_to_update)
 
-        if len(self.duplicate_dates) != 0 and len(self.dates_to_update) != 0:
+        if len(duplicate_dates) != 0 and len(self.dates_to_update) != 0:
             self.logger.info("duplicates but can be fixed")
-            self.validation_errors.add(LeaveIssue.OVERLAP)
-        elif len(self.duplicate_dates) != 0:
+            self.validation_errors.add(LeaveIssue.OVERLAP + print_all_dates(duplicate_dates))
+        elif len(duplicate_dates) != 0:
+            if all(duplicate_record.leave_status == LeaveStatus.APPROVED for duplicate_record in duplicate_records):
+                err = LeaveErrorMessage.ALL_OVERLAPPING
+            else:
+                err = LeaveErrorMessage.SOME_OVERLAPPING
             self.logger.info("duplicates cannot be fixed")
             message = OutgoingMessageData(
-                body=LeaveErrorMessage.ALL_OVERLAPPING, 
+                body=err, 
                 job_no=self.job_no,
                 user_id=self.user_id,
             )
@@ -253,4 +257,9 @@ class ExtractDates(TaskLeave):
 
     
 
-    
+if __name__ == "__main__":
+    sentence = input("Input a sentence")
+    sentence = re.sub(r'\s+', ' ', sentence).strip()
+
+    extract_dates_instance = ExtractDates(job_no='1')
+    extract_dates_instance.extract_dates()

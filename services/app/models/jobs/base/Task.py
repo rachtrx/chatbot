@@ -43,8 +43,8 @@ class Task(db.Model):
     def user_id(cls):
         return db.Column(db.ForeignKey("users.id"), nullable=True)
 
-    def __init__(self, job_no, payload=None, user_id=None):
-        self.id = shortuuid.ShortUUID().random(length=8)
+    def __init__(self, job_no, payload=None, user_id=None, add_session=True):
+        self.id = shortuuid.ShortUUID().random(length=8).upper()
         self.job_no = job_no # JOB_NO IS IMPLEMENTED IN THE CHILD CLASS
         self.user_id = user_id
         self.status = Status.PENDING
@@ -52,9 +52,10 @@ class Task(db.Model):
         self.cache = RedisCache(f"{JOBS_PREFIX}:{self.job_no}")
         self.payload = payload
         self.created_at = current_sg_time()
-        session = Session()
-        session.add(self)
-        session.commit()
+        if add_session:
+            session = Session()
+            session.add(self)
+            session.commit()
 
     @property
     def cache(self):
@@ -95,10 +96,12 @@ class Task(db.Model):
             self.status = Status.COMPLETED
             session.commit()
             self.logger.info("Running background tasks")
+            self.logger.info(self.background_tasks)
             self.run_background_tasks()
         except Exception as e:
-            self.status = Status.FAILED
-            session.commit()
+            if self.status != Status.COMPLETED:
+                self.status = Status.FAILED
+                session.commit()
             raise
 
     def execute(self):
@@ -108,9 +111,14 @@ class Task(db.Model):
         if len(self.background_tasks) == 0:
             return
         
+        # for func, kwargs in self.background_tasks:
+        #     func(**kwargs)
+        
         with ThreadPoolExecutor(max_workers=3) as executor:
             for func, kwargs in self.background_tasks:
                 executor.submit(func, **kwargs)
+                self.logger.info(func)
+                self.logger.info(kwargs)
 
     def forwards_callback(self, forward_callback: ForwardCallback):
         '''names of successful forwards'''
@@ -119,10 +127,13 @@ class Task(db.Model):
             return
         
         self.logger.info("Adding to background tasks")
+        self.logger.info(f"Job No: {forward_callback.job_no}, Seq No.: {forward_callback.seq_no}, Update Count: {forward_callback.update_count}")
 
         self.background_tasks.append(
-            (forward_callback.update_on_forwards, {
+            (ForwardCallback.update_on_forwards, {
+                'wait_time': 10,
                 'use_name_alias': True,
-                'wait_time': 10
+                'job_no': forward_callback.job_no,
+                'seq_no': forward_callback.seq_no,
             }) # TODO check if job_no and seq_no can be accessed by the callback itself?
         )

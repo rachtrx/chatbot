@@ -1,6 +1,8 @@
 import os
 import traceback
+import shortuuid
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import declared_attr
 
 from extensions import db, Session
@@ -37,12 +39,18 @@ class ForwardCallback(db.Model):
         self.update_count = 0
         self.message_context = message_context
 
+    @classmethod
     @run_new_context
-    def update_on_forwards(self, use_name_alias): # add job_no, seq_no??
-        statuses = self.check_message_forwarded()
+    def update_on_forwards(cls, use_name_alias, job_no, seq_no): # add job_no, seq_no??
+        
+        session = Session()
+        callback = session.query(cls).get((job_no, seq_no))
+        cls.logger.info(f"Job No: {callback.job_no}, Seq No.: {callback.seq_no}, Update Count: {callback.update_count}")
+
+        statuses = callback.check_message_forwarded()
 
         content_variables = {
-            '1': self.message_context, # "The following personnel have been notified about <message_type>"
+            '1': callback.message_context, # "The following personnel have been notified about <message_type>"
             '2': join_with_commas_and([user.alias if use_name_alias else user.name for user in statuses.COMPLETED]) if len(statuses.COMPLETED) > 0 else "None",
             '3': join_with_commas_and([user.alias if use_name_alias else user.name for user in statuses.FAILED]) if len(statuses.FAILED) > 0 else "None",
             '4': join_with_commas_and([user.alias if use_name_alias else user.name for user in statuses.PENDING]) if len(statuses.PENDING) > 0 else "None"
@@ -50,17 +58,18 @@ class ForwardCallback(db.Model):
 
         message = OutgoingMessageData(
             msg_type=MessageType.SENT,
-            user_id=self.user_id, 
-            job_no=self.job_no, 
+            user_id=callback.user_id, 
+            job_no=callback.job_no, 
             content_sid=os.getenv("FORWARD_MESSAGES_CALLBACK_SID"),
             content_variables=content_variables
         )
 
         MessageKnown.send_msg(message)
 
-        self.update_count += 1
-
-        self.logger.info(f"Update count: {self.update_count}")
+        callback.update_count += 1
+        session.commit()
+    
+        cls.logger.info(f"Update count: {callback.update_count}")
 
     def check_message_forwarded(self):
 

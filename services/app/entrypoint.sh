@@ -7,6 +7,7 @@ set -e
 
 echo "SQL USER: " $SQL_USER
 echo "SQL HOST: " $SQL_HOST
+echo "FLASK_APP_DIR: $cd ${FLASK_APP_DIR}"
 
 while ! pg_isready -h $SQL_HOST -p $SQL_PORT -q; do
     echo "Waiting for postgrew..."
@@ -26,7 +27,9 @@ fi
 
 cd ${FLASK_APP_DIR}
 # alembic revision --autogenerate -m "${NEW_MIGRATION_MESSAGE}" # IMPT RUN URSELF FIRST!
-# alembic upgrade head
+# alembic upgrade 55183dbfb8e4
+# python3 ./alembic/scripts/data_migration.py
+# alembic upgrade 5ee15a07d356
 echo "Migrations complete."
 
 host="$1"

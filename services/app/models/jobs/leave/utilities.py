@@ -21,9 +21,6 @@ def set_dates_str(dates, mark_late=False):
             dates_str = re.sub(cur_date_str, cur_date_str + ' (*LATE*)', dates_str)
 
     return dates_str
-    
-def print_overlap_dates(dates):
-    return LeaveIssue.OVERLAP.value + print_all_dates(dates)
 
 @User.loop_users # just need to pass in the user when calling get_approve_leave_cv
 def get_approve_leave_cv(relation, alias, leave_type, dates, mark_late=False, approver_alias=None):
@@ -34,7 +31,7 @@ def get_approve_leave_cv(relation, alias, leave_type, dates, mark_late=False, ap
     return {
         '1': relation.alias,
         '2': alias,
-        '3': leave_type.value.lower(),
+        '3': leave_type.lower(),
         '4': f"{str(duration)} {'day' if duration == 1 else 'days'}",
         '5': set_dates_str(dates, mark_late),
         '6': approver_alias if approver_alias else 'Automatic'
@@ -69,12 +66,12 @@ def get_authorisation_cv(relation, alias, leave_type, dates, relation_aliases, m
     return {
         '1': relation.alias,
         '2': alias,
-        '3': leave_type.value.lower(),
+        '3': leave_type.lower(),
         '4': set_dates_str(dates, mark_late),
         '5': f"{duration} {'day' if duration == 1 else 'days'}",
-        '6': join_with_commas_and(list(local_relation_aliases)),
-        '7': AuthorizedDecision.APPROVE.value,
-        '8': AuthorizedDecision.REJECT.value,
+        '6': join_with_commas_and(local_relation_aliases) if len(local_relation_aliases) > 0 else "NIL",
+        '7': AuthorizedDecision.APPROVE,
+        '8': AuthorizedDecision.REJECT,
     }
 
 
@@ -89,14 +86,14 @@ def get_authorisation_late_cv(relation, alias, leave_type, dates_approved, dates
     return {
         '1': relation.alias,
         '2': alias,
-        '3': leave_type.value.lower(),
+        '3': leave_type.lower(),
         '4': set_dates_str(dates_approved, mark_late),
         '5': f"{duration_approved} {'day' if duration_approved == 1 else 'days'}",
         '6': set_dates_str(dates_to_authorise, mark_late),
         '7': f"{str(duration_to_authorise)} {'day' if duration_to_authorise == 1 else 'days'}",
-        '8': join_with_commas_and(list(local_relation_aliases)),
-        '9': AuthorizedDecision.APPROVE.value,
-        '10': AuthorizedDecision.REJECT.value,
+        '8': join_with_commas_and(local_relation_aliases) if len(local_relation_aliases) > 0 else "NIL",
+        '9': AuthorizedDecision.APPROVE,
+        '10': AuthorizedDecision.REJECT,
     }
 
 ##################

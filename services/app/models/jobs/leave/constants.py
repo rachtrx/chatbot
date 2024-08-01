@@ -2,7 +2,9 @@ from enum import Enum
 
 import re
 
-class LeaveType:
+from models.jobs.base.constants import Constants
+
+class LeaveType(Constants):
     MEDICAL = "MEDICAL"
     CHILDCARE = "CHILDCARE"
     PARENTCARE = "PARENTCARE"
@@ -165,7 +167,8 @@ class Patterns:
 class LeaveErrorMessage:
     REGEX = "Sorry, I got the dates and duration wrong."
     CONFIRMING_CANCELLED_MSG = "Leave has already been cancelled!"
-    ALL_OVERLAPPING = "You are already on leave for all these dates."
+    ALL_OVERLAPPING = "You are already on leave for all dates."
+    SOME_OVERLAPPING = "You are already on leave or pending acknowledgement for all dates."
     NO_DATES_TO_APPROVE = "No dates were found past 9am today that are still pending approval."
     NO_DATES_TO_CANCEL = "No dates were found past 9am today that are still active."
     NO_DATES_TO_REJECT = "No dates were found past 9am today that are still active."
@@ -186,7 +189,7 @@ class LeaveError:
     TIMEOUT = 'TIMEOUT'
     UNKNOWN = 'UNKNOWN'
 
-class LeaveIssue(Enum): # ERRORS THAT CAN BE FIXED
+class LeaveIssue: # ERRORS THAT CAN BE FIXED
     UPDATED = "I am unable to add leaves before today; the earliest date is today." # start date was even before today and was accepted nonetheless; need to inform user about dates change
     LATE = "You have missed out the morning report for today's leave as it has already been sent out at 9am, but I am still able to update the records and inform your reporting contacts." # start date was today, need to inform user about missed morning report
     OVERLAP = "There are overlapping dates on "

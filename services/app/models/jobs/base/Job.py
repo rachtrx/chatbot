@@ -32,7 +32,7 @@ class Job(db.Model): # system jobs
 
     def __init__(self, primary_user_id=None):
         logging.info(f"current time: {current_sg_time()}")
-        self.job_no = shortuuid.ShortUUID().random(length=8)
+        self.job_no = shortuuid.ShortUUID().random(length=8).upper()
         self.logger.info(f"new job: {self.job_no}")
         self.created_at = current_sg_time()
         self.primary_user_id = primary_user_id

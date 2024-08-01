@@ -19,6 +19,10 @@ class AzureSyncError(Exception):
     def __init__(self, message):
         super().__init__(message)
 
+class NoRelationsError(Exception):
+    def __init__(self, message=None):
+        super().__init__(message)
+
 class UserNotFoundError(Exception):
     def __init__(self, user_no, err_msg=ErrorMessage.USER_NOT_FOUND):
         self.user_no = user_no
@@ -90,8 +94,6 @@ class ReplyError(Exception):
             if self.error and self.message.job_no:
                 from models.jobs.base.Job import Job
                 job = session.query(Job).get(self.message.job_no)
-                job.error = self.error
-                session.commit()
                 
                 job.handle_error(self.error, self.message)
             else:
@@ -102,13 +104,14 @@ class ReplyError(Exception):
             self.logger.error(traceback.format_exc())
             new_err_message = "Failed to forward any messages. You may have to inform relevant staff manually"
         except Exception:
+            self.logger.error("New error caught")
             self.logger.error(traceback.format_exc())
             new_err_message = "Another unknown error was caught when handling the error. You may have to inform relevant staff manually"
         
         finally:
             if new_err_message:
                 new_message = OutgoingMessageData(
-                    job_no=job.job_no,
+                    job_no=self.message.job_no,
                     user_id=self.message.user_id,
                     body=new_err_message
                 )

@@ -7,6 +7,11 @@ JOBS_PREFIX = "jobs"
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID') if int(os.getenv('LIVE')) else os.getenv('MESSAGING_SERVICE_SID_DEV')
 TWILIO_NO = os.getenv('TWILIO_NO') if int(os.getenv('LIVE')) else os.getenv('TWILIO_NO_DEV')
 
+class Constants:
+    @classmethod
+    def values(cls):
+        return {v for k, v in cls.__dict__.items() if not k.startswith('__') and not callable(v)}
+
 ##################################
 # JOB STATUSES
 ##################################
@@ -40,12 +45,16 @@ class JobType:
     DAEMON = "DAEMON"
     SEARCH = "SEARCH"
 
-class UserState(Enum):
+class UserState:
     PROCESSING = 'PROCESSING'
     PENDING = 'PENDING'
     BLOCKED = 'BLOCKED'
 
-class Status:
+class StatusMeta(type):
+    def __iter__(cls):
+        return (attr for attr in cls.__dict__ if not attr.startswith('__') and not callable(getattr(cls, attr)))
+
+class Status(metaclass=StatusMeta):
     COMPLETED = 'COMPLETED'
     FAILED = 'FAILED'
     PENDING = 'PENDING'
@@ -53,7 +62,8 @@ class Status:
 class ForwardStatus:
     def __init__(self):
         for status in Status:
-            setattr(self, status.name, [])
+            status_value = getattr(Status, status)
+            setattr(self, status_value, [])
 
 class MessageOrigin:
     KNOWN = 'KNOWN'
@@ -75,10 +85,10 @@ class OutgoingMessageData:
     content_sid: str | None = None
     content_variables: dict | None = None
 
-class Decision(Enum):
+class Decision(Constants):
     CONFIRM = "CONFIRM"
     CANCEL = "CANCEL"
 
-class AuthorizedDecision(Enum):
+class AuthorizedDecision(Constants):
     APPROVE = "APPROVE"
     REJECT = "REJECT"

@@ -104,6 +104,17 @@ class MessageKnown(Message):
 
         to_user = Session().query(User).get(message.user_id)
 
+        cls.logger.info(f"Current number: {to_user.number}")
+        cls.logger.info(f"Active numbers: {json.loads(os.getenv('ACTIVE_NUMBERS'))}, Type: {type(json.loads(os.getenv('ACTIVE_NUMBERS')))}")
+
+        if int(os.getenv('LIVE')) or int(to_user.number) in json.loads(os.getenv('ACTIVE_NUMBERS')):
+            cls.logger.info("Current number in active numbers")
+            to_no = to_user.sg_number
+            cls.logger.info('Sending to User')
+        else:
+            to_no = os.getenv('DEV_NO')
+            cls.logger.info('Sending to Dev')
+
         sent_message_meta = None
 
         try:
@@ -111,24 +122,17 @@ class MessageKnown(Message):
                 cls.logger.info(f"to_user_no: {to_user.sg_number}")
                 sent_message_meta = twilio.messages.create(
                     from_=TWILIO_NO,
-                    to=to_user.sg_number,
+                    to=to_no,
                     body=message.body
                 )
             else:
-                if not all(isinstance(value, str) for value in message.content_variables.values()):
-                    raise Exception
-
-                message.content_variables = json.dumps(message.content_variables)
+                if message.content_variables:
+                    if not all(isinstance(value, str) for value in message.content_variables.values()):
+                        raise Exception
+                    message.content_variables = json.dumps(message.content_variables)
 
                 cls.logger.info(f"Message SID: {message.content_sid}")
                 cls.logger.info(f"Message CV: {message.content_variables}")
-
-                if int(os.getenv('LIVE')) or to_user.number in json.loads(os.getenv('ACTIVE_NUMBERS')):
-                    to_no = to_user.sg_number
-                    cls.logger.info('Sending to User')
-                else:
-                    to_no = os.getenv('DEV_NO')
-                    cls.logger.info('Sending to Dev')
                 
                 cls.logger.info(f"SANITY CHECK: MESSAGING_SERVICE_SID = {MESSAGING_SERVICE_SID}")
                 sent_message_meta = twilio.messages.create(
@@ -212,12 +216,9 @@ class MessageKnown(Message):
             forward_callback = ForwardCallback(job_no=job_no, seq_no=seq_no, user_id=user_id_to_update, message_context=message_context)
             session.add(forward_callback)
             session.commit()
-        else:
-            forward_callback = None
-
-        if callback:
-            callback(forward_callback)
-
+            if callback:
+                callback(forward_callback)
+            session.expunge(forward_callback)
 
     def construct_forward_metadata(sid, cv_list, users_list):
 

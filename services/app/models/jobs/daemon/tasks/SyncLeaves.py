@@ -71,6 +71,9 @@ class SyncLeaves(TaskDaemon):
             # get azure df
             cur_az_df = self.get_az_df(cur_manager)
 
+            self.logger.info("current AZ dataframe: ")
+            self.logger.info(cur_az_df)
+
             # get db df, including cancelled records
             cur_db_df = self.get_db_df(mm, yy)
 
@@ -280,7 +283,7 @@ class SyncLeaves(TaskDaemon):
             dtype='object'
         )
 
-        df['leave_type'] = df['leave_type'].apply(lambda x: x.value)
+        # df['leave_type'] = df['leave_type'].apply(lambda x: x.value)
 
         df = df.astype({
             "date": 'object',
