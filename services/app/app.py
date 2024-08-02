@@ -100,8 +100,10 @@ def execute():
     if cur_datetime.weekday() not in [5, 6]:
         if minute == 0 and cur_datetime.hour == 9: # bool
             tasks_to_run.append(DaemonTaskType.SEND_REPORT)
-        # if minute == 0 and cur_datetime.hour == 5:
-        #     tasks_to_run.append(DaemonTaskType.SEND_REMINDER)
+        if minute == 0 and cur_datetime.hour == 17:
+            tasks_to_run.append(DaemonTaskType.SEND_REMINDER)
+        if minute == 0 and cur_datetime.hour == 8:
+            tasks_to_run.append(DaemonTaskType.AUTO_APPROVE)
 
     if len(tasks_to_run) == 0:
         return

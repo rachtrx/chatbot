@@ -25,7 +25,7 @@ from models.messages.MessageKnown import MessageKnown
 
 from routing.Scheduler import job_scheduler
 
-class SendReminders(TaskDaemon):
+class AutoApprove(TaskDaemon):
 
     name = "Leave Reminder"
 

@@ -40,7 +40,7 @@ class JobLeave(Job):
         msg_method_map = { # STATES A JOB CAN BE IN WHEN ACCEPTING A MESSAGE
             LeaveTaskType.EXTRACT_DATES: self.get_leave_selection,
             LeaveTaskType.REQUEST_CONFIRMATION: self.get_decision,
-            LeaveTaskType.REQUEST_AUTHORISATION: self.get_authorisation, # IN PLACE OF LEAVE_CONFIRMED
+            LeaveTaskType.REQUEST_AUTHORISATION: self.get_authorisation,
             LeaveTaskType.APPROVE: self.get_selection_after_approval,
             LeaveTaskType.REJECT: self.get_selection_after_rejection,
             LeaveTaskType.CANCEL: self.get_selection_after_cancelled,
@@ -80,7 +80,7 @@ class JobLeave(Job):
             
             last_task = self.get_last_task()
 
-            task_type = msg_sid = None
+            task_type = msg_sid = user_id = None
             if payload in LeaveTaskType.values():
                 task_type = payload
             else:
@@ -90,6 +90,7 @@ class JobLeave(Job):
         
                 self.logger.info(f"Message SID: {msg_sid}")
                 msg = Session().query(MessageKnown).get(msg_sid)
+                user_id = msg.user_id
 
                 if not last_task:
                     task_type = LeaveTaskType.EXTRACT_DATES
@@ -132,10 +133,10 @@ class JobLeave(Job):
 
             task_classes = tasks_map.get(task_type)
             for task_class in task_classes:
-                task = task_class(self.job_no, payload, msg.user_id)
+                task = task_class(self.job_no, payload, user_id)
                 task.run()
 
-            if not is_user_status_exists(msg.user_id): 
+            if user_id and not is_user_status_exists(user_id): 
                 return True
             
             return False

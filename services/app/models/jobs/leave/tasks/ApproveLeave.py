@@ -56,7 +56,7 @@ class ApproveLeave(TaskLeave):
             )
 
         reply_message = OutgoingMessageData( 
-            user_id=self.user.id, 
+            user_id=self.user.id,
             job_no=self.job_no, 
             body=reply_body + others_body
         )
