@@ -4,7 +4,7 @@ from datetime import datetime
 from models.exceptions import ReplyError, NoRelationsError
 
 from models.jobs.base.constants import ErrorMessage, OutgoingMessageData, MessageType
-from models.jobs.base.utilities import print_all_dates, get_latest_date_past_hour, clear_user_processing_state
+from models.jobs.base.utilities import print_all_dates, clear_user_processing_state
 
 from models.jobs.leave.Task import TaskLeave
 from models.jobs.leave.constants import LeaveErrorMessage, LeaveError, LeaveType, LeaveStatus, LeaveTaskType
@@ -30,18 +30,6 @@ class RequestAuthorisation(TaskLeave):
             raise ReplyError(message, LeaveError.TIMEOUT)
 
         self.dates_to_update = [datetime.strptime(date_str, "%d-%m-%Y").date() for date_str in data['dates'] if data.get('dates', None)]
-
-    def handle_dates(self):
-
-        if self.job.leave_type == LeaveType.MEDICAL or self.user.is_global_admin:
-            self.dates_to_approve = set(self.dates_to_update)
-            self.dates_to_authorise = set()
-        else:
-            self.dates_to_approve = {date for date in self.dates_to_update if date < get_latest_date_past_hour(day_offset=3)} # approve dates within 3 days
-            self.dates_to_authorise = set(self.dates_to_update) - self.dates_to_approve
-
-        self.dates_to_approve = list(self.dates_to_approve)
-        self.dates_to_authorise = list(self.dates_to_authorise)
     
     def execute(self): # LEAVE_TYPE_FOUND
 
@@ -132,11 +120,11 @@ class RequestAuthorisation(TaskLeave):
         self.reply_message.content_variables = {
             '1': self.job_no,
             '2': print_all_dates(self.dates_to_approve),
-            '3': 'acknowledged'
+            '3': 'acknowledged automatically'
         }
 
         if len(self.ro_set) == 0:
-            self.reply_message.content_variables['3'] += '. Also: No RO found which can cause issues in future'
+            self.reply_message.content_variables['3'] += '. Also, No RO was found which can cause issues for future acknowledgement'
 
     def handle_approve_partial(self): # PARTIAL APPROVE
         self.reply_message.content_sid = os.getenv('AUTHORISATION_REPLY_PARTIAL_SID')
@@ -150,7 +138,7 @@ class RequestAuthorisation(TaskLeave):
         authorisation_cv_list = authorisation_sid_list = []
 
         if len(self.ro_set) == 0:
-            self.reply_message.content_variables['4'] += ' has been voided as RO is not found. Please contact HR/ICT, thank you!'
+            self.reply_message.content_variables['4'] += ' has been voided as RO is not found. Please contact HR/ICT, thank you'
 
         else:
             self.reply_message.content_variables['4'] += ' is pending acknowledgement.'

@@ -3,12 +3,13 @@ from extensions import Session, twilio
 
 import os
 import traceback
+import logging
 
 from twilio.base.exceptions import TwilioRestException
 
 from MessageLogger import setup_logger
 
-from models.jobs.base.constants import OutgoingMessageData, MessageType, ErrorMessage
+from models.jobs.base.constants import OutgoingMessageData, MessageType, MESSAGING_SERVICE_SID
 from models.jobs.base.utilities import clear_user_processing_state
 
 from models.messages.MessageKnown import MessageKnown
@@ -22,27 +23,31 @@ class AzureSyncError(Exception):
 class NoRelationsError(Exception):
     def __init__(self, message=None):
         super().__init__(message)
+        self.message = message
+
+class DaemonTaskError(Exception):
+    def __init__(self, message=None):
+        super().__init__(message)
+        self.message = message
 
 class UserNotFoundError(Exception):
-    def __init__(self, user_no, err_msg=ErrorMessage.USER_NOT_FOUND):
+    def __init__(self, user_no):
         self.user_no = user_no
-        self.body = err_msg
 
     def execute(self):
-        session = Session()  
+        session = Session()
 
         sent_message_meta = twilio.messages.create(
             to=self.user_no,
-            from_=os.getenv('TWILIO_NO'),
-            body=self.body
+            from_=MESSAGING_SERVICE_SID,
+            content_sid=os.getenv('USER_NOT_FOUND_ERROR_SID'),
         )
 
-        outgoing_msg = MessageUnknown(sid=sent_message_meta.sid, user_no=self.user_no, body=self.body)
+        outgoing_msg = MessageUnknown(user_no=self.user_no, sid=sent_message_meta.sid, msg_type=MessageType.SENT) # let body be none since sometimes non user may be outside the 24 hour window too
         sent_msg_status = SentMessageStatus(sid=sent_message_meta.sid)
         session.add(outgoing_msg)
         session.add(sent_msg_status)
         session.commit()
-
         return
     
 class EnqueueMessageError(Exception):
@@ -94,8 +99,7 @@ class ReplyError(Exception):
             if self.error and self.message.job_no:
                 from models.jobs.base.Job import Job
                 job = session.query(Job).get(self.message.job_no)
-                
-                job.handle_error(self.error, self.message)
+                job.handle_error(self.message, self.error)
             else:
                 self.logger.info(f"Sending non job error err_message: {self.message}")
                 MessageKnown.send_msg(self.message)

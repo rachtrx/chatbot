@@ -1,5 +1,5 @@
 from extensions import db
-from models.jobs.base.constants import MessageOrigin
+from models.jobs.base.constants import MessageOrigin, MessageType
 from models.messages.Message import Message
 
 class MessageUnknown(Message):
@@ -13,8 +13,8 @@ class MessageUnknown(Message):
         "polymorphic_identity": MessageOrigin.UNKNOWN,
     }
 
-    def __init__(self, sid, user_no, body):
-        super().__init__(sid, body)
+    def __init__(self, user_no, sid, msg_type, body=None):
+        super().__init__(sid, msg_type, body)
         idx = user_no.find('+')
         if idx != -1:
             user_no = user_no[idx:]

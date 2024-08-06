@@ -66,7 +66,7 @@ class JobLeave(Job):
             desc(TaskLeave.created_at)
         ).first()
 
-    def execute(self, payload=None):
+    def execute(self, queue_payload): # msg_sid if user msg received, LeaveTaskType.APPROVE if Daemon's AutoApprove Task
 
         try:
             if self.error:
@@ -77,20 +77,22 @@ class JobLeave(Job):
                     job_no=self.job_no
                 )
                 raise ReplyError(message) # no need to update the error
-            
-            last_task = self.get_last_task()
 
-            task_type = msg_sid = user_id = None
-            if payload in LeaveTaskType.values():
-                task_type = payload
+            task_payload = user_id = None
+
+            if queue_payload == LeaveTaskType.APPROVE:
+                task_payload = self.look_for_records(LeaveTaskType.APPROVE)
+                if not task_payload: # dont hold up the scheduler and release the job no
+                    return True
+                task_type = LeaveTaskType.APPROVE
+                user_id = None
+
             else:
-                msg_sid = payload
-
-            if msg_sid:
-        
-                self.logger.info(f"Message SID: {msg_sid}")
-                msg = Session().query(MessageKnown).get(msg_sid)
+                self.logger.info(f"Message SID: {queue_payload}")
+                msg = Session().query(MessageKnown).get(queue_payload)
                 user_id = msg.user_id
+
+                last_task = self.get_last_task()
 
                 if not last_task:
                     task_type = LeaveTaskType.EXTRACT_DATES
@@ -98,27 +100,25 @@ class JobLeave(Job):
                     self.logger.info(f"Last task found: {last_task}")
                     task_type = self.preprocess_msg(last_task.type, msg) # raise other replyerrors
             
-            if task_type in [LeaveTaskType.APPROVE, LeaveTaskType.REJECT, LeaveTaskType.CANCEL]:
+                if task_type in [LeaveTaskType.APPROVE, LeaveTaskType.REJECT, LeaveTaskType.CANCEL]:
 
-                payload = self.look_for_records(task_type)
-                self.logger.info(f"Payload: {payload}")
-            
-                if not payload and msg_sid:
-                    error_map = {
-                        LeaveTaskType.CANCEL: LeaveErrorMessage.NO_DATES_TO_CANCEL,
-                        LeaveTaskType.APPROVE: LeaveErrorMessage.NO_DATES_TO_APPROVE, # this should work because daemon approve will set last task to approve as well
-                        LeaveTaskType.REJECT: LeaveErrorMessage.NO_DATES_TO_REJECT
-                    }
-                    err_message = OutgoingMessageData(
-                        body=error_map[task_type],
-                        user_id=msg.user_id,
-                        job_no=self.job_no
-                    )
-                    raise ReplyError(err_message, LeaveError.DATES_NOT_FOUND)
+                    task_payload = self.look_for_records(task_type)
+                    self.logger.info(f"Payload: {task_payload}")
+                
+                    if not task_payload: # Raise Error if User Task, Return if Daemon Task
+                        error_map = {
+                            LeaveTaskType.CANCEL: LeaveErrorMessage.NO_DATES_TO_CANCEL,
+                            LeaveTaskType.APPROVE: LeaveErrorMessage.NO_DATES_TO_APPROVE, # this should work because daemon approve will set last task to approve as well
+                            LeaveTaskType.REJECT: LeaveErrorMessage.NO_DATES_TO_REJECT
+                        }
+                        err_message = OutgoingMessageData(
+                            body=error_map[task_type],
+                            user_id=msg.user_id,
+                            job_no=self.job_no
+                        )
+                        raise ReplyError(err_message, LeaveError.DATES_NOT_FOUND)
                 else:
-                    return True # dont hold up the scheduler and release the job no
-            else:
-                payload = msg.body
+                    task_payload = msg.body
                 
             from models.jobs.leave.tasks import ExtractDates, RequestConfirmation, RequestAuthorisation, ApproveLeave, RejectLeave, CancelLeave
                     
@@ -133,10 +133,10 @@ class JobLeave(Job):
 
             task_classes = tasks_map.get(task_type)
             for task_class in task_classes:
-                task = task_class(self.job_no, payload, user_id)
+                task = task_class(self.job_no, task_payload, user_id)
                 task.run()
 
-            if user_id and not is_user_status_exists(user_id): 
+            if not user_id or is_user_status_exists(user_id): 
                 return True
             
             return False
@@ -150,7 +150,7 @@ class JobLeave(Job):
                 message = OutgoingMessageData(
                     user_id=msg.user_id,
                     job_no=self.job_no,
-                    body=e.message or "Unknown Error: No users to forward.",
+                    body=e.message or "We could not find any staff in the database related to you; please inform ICT/HR.",
                 )
                 raise ReplyError(message, LeaveError.NO_USERS_TO_NOTIFY)
             else:
@@ -166,7 +166,7 @@ class JobLeave(Job):
         status_map = {
             LeaveTaskType.CANCEL: [LeaveStatus.APPROVED, LeaveStatus.PENDING],
             LeaveTaskType.APPROVE: [LeaveStatus.PENDING],
-            LeaveTaskType.REJECT: [LeaveStatus.APPROVED, LeaveStatus.PENDING]
+            LeaveTaskType.REJECT: [LeaveStatus.PENDING]
         }
 
         statuses = status_map.get(task_type)
@@ -262,7 +262,7 @@ class JobLeave(Job):
                 job_no=self.job_no
             )
             raise ReplyError(message)
-        elif selection == AuthorizedDecision.APPROVE:
+        elif selection in AuthorizedDecision.values():
             message = OutgoingMessageData(
                 body=LeaveErrorMessage.LEAVE_APPROVED,
                 user_id=user_id,
@@ -271,8 +271,7 @@ class JobLeave(Job):
             raise ReplyError(message)
 
         action_map = {
-            AuthorizedDecision.REJECT: LeaveTaskType.REJECT,
-            Decision.CANCEL: LeaveTaskType.CANCEL, # TODO check for last confirm message? # TODO start cancel process while pending validation
+            Decision.CANCEL: LeaveTaskType.CANCEL,
         }
     
         return action_map.get(selection)
@@ -317,7 +316,7 @@ class JobLeave(Job):
 
         return message_map.get(status, ErrorMessage.UNKNOWN_ERROR)
     
-    def handle_error(self, error: LeaveError, err_message: OutgoingMessageData):
+    def handle_error(self, err_message: OutgoingMessageData, error):
 
         self.error = error
         Session().commit()

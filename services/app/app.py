@@ -31,7 +31,7 @@ from models.messages.MessageUnknown import MessageUnknown
 from models.messages.SentMessageStatus import SentMessageStatus
 
 from models.jobs.base.Job import Job
-from models.jobs.base.constants import JobType, ErrorMessage, UserState, MessageType
+from models.jobs.base.constants import JobType, ErrorMessage, UserState, MessageType, MESSAGING_SERVICE_SID, OutgoingMessageData
 from models.jobs.base.utilities import set_user_state, check_user_state, current_sg_time
 
 from models.jobs.daemon.constants import DaemonTaskType
@@ -63,7 +63,7 @@ def setup_azure():
 
     try:
         job_no = Job.create_job(JobType.DAEMON)
-        # tasks_to_run = [DaemonTaskType.ACQUIRE_TOKEN]
+        # tasks_to_run = [DaemonTaskType.ACQUIRE_TOKEN, DaemonTaskType.SYNC_USERS]
         tasks_to_run = [DaemonTaskType.ACQUIRE_TOKEN, DaemonTaskType.SYNC_USERS, DaemonTaskType.SYNC_LEAVES]
         job_scheduler.add_to_queue(item_id=job_no, payload=tasks_to_run)
         session.commit()
@@ -78,6 +78,17 @@ def setup_es():
     # create_new_index()
     # loop_files()
     pass
+
+from datetime import timedelta, datetime
+
+# report_time = current_sg_time() + timedelta(minutes=1)
+# logging.info(f"Reminder Time: {report_time.hour}:{report_time.minute}")
+
+# reminder_time = current_sg_time() + timedelta(minutes=2)
+# logging.info(f"Reminder Time: {reminder_time.hour}:{reminder_time.minute}")
+
+# approval_time = current_sg_time() + timedelta(minutes=3)
+# logging.info(f"Approval Time: {approval_time.hour}:{approval_time.minute}")
 
 @scheduler.task('cron', id='health_check', minute='*/15')
 def execute():
@@ -94,15 +105,15 @@ def execute():
         tasks_to_run.append(DaemonTaskType.SYNC_LEAVES)
         tasks_to_run.append(DaemonTaskType.SYNC_USERS) # this should be more regular than acquire
 
-        if minute % 30 == 0:
-            tasks_to_run.append(DaemonTaskType.ACQUIRE_TOKEN)
+    if minute % 30 == 0:
+        tasks_to_run.append(DaemonTaskType.ACQUIRE_TOKEN)
     
     if cur_datetime.weekday() not in [5, 6]:
         if minute == 0 and cur_datetime.hour == 9: # bool
             tasks_to_run.append(DaemonTaskType.SEND_REPORT)
-        if minute == 0 and cur_datetime.hour == 17:
+            tasks_to_run.append(DaemonTaskType.CLEAN_TASKS)
             tasks_to_run.append(DaemonTaskType.SEND_REMINDER)
-        if minute == 0 and cur_datetime.hour == 8:
+        if minute == 0 and cur_datetime.hour == 17:
             tasks_to_run.append(DaemonTaskType.AUTO_APPROVE)
 
     if len(tasks_to_run) == 0:
@@ -117,23 +128,25 @@ def execute():
 @app.route('/chatbot/enqueue_message', methods=['POST'])
 def enqueue_message():
     session = Session()
+    user = message = None
     try:
         # for key in request.values:
         #     logging.info(f"{key}: {request.values[key]}")
         # logging.info("end message")
 
         from_no = request.form.get("From")
+        logging.info(f"From no: {from_no}")
         body = request.form.get('Body')
         sid = request.form.get('MessageSid')
-
+        
         if check_user_state(from_no, UserState.BLOCKED):
             return
         
         # set user_id
         user = User.get_user(from_no)
         if not user:
-            set_user_state(from_no, UserState.BLOCKED) # TODO TIMEOUT
-            incoming_msg = MessageUnknown(sid=sid, user_no=from_no, body=body)
+            set_user_state(from_no, UserState.BLOCKED, timeout=3600)
+            incoming_msg = MessageUnknown(user_no=from_no, sid=sid, msg_type=MessageType.RECEIVED, body=body)
             session.add(incoming_msg)
             session.commit()
             raise UserNotFoundError(user_no=from_no)
@@ -176,12 +189,14 @@ def enqueue_message():
         e.execute()
 
     except Exception:
-        twilio.messages.create(
-            to=from_no,
-            from_=os.getenv('TWILIO_NO'),
-            body="Really sorry, you caught error that we did find during development, please let us know!"
-        )
-        logging.error(traceback.format_exc())
+        if user:
+            err_msg = OutgoingMessageData(
+                user_id=user.id,
+                msg_type=MessageType.SENT,
+                job_no=message.job_no if hasattr(message, 'job_no') else None,
+                content_sid=os.getenv('UNKNWON_ERROR_SID')
+            )
+            MessageKnown.send_msg(err_msg)
     finally:
         logging.info("Message Enqueued, ready to accept new HTTP Requests")
         session.close()

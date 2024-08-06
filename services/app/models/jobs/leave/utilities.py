@@ -8,7 +8,7 @@ from models.users import User
 from models.jobs.base.constants import AuthorizedDecision
 from models.jobs.base.utilities import print_all_dates, current_sg_time, get_latest_date_past_hour, join_with_commas_and
 
-from models.jobs.leave.constants import LeaveIssue, Patterns
+from models.jobs.leave.constants import Patterns, Time
 
 def set_dates_str(dates, mark_late=False):
     logging.info(f"Dates to format: {dates}")
@@ -66,11 +66,10 @@ def get_authorisation_reminder_cv(relation, alias, leave_type, dates, deadline, 
     return {
         '1': relation.alias,
         '2': f"acknowledge {alias}'s {leave_type.lower()}",
-        '4': set_dates_str(dates, mark_late),
-        '5': "acknowledged",
-        '6': deadline,
-        '7': AuthorizedDecision.APPROVE,
-        '8': AuthorizedDecision.REJECT,
+        '3': set_dates_str(dates, mark_late),
+        '4': f"acknowledged {deadline} at {Time.AUTO_APPROVAL}",
+        '5': AuthorizedDecision.APPROVE,
+        '6': AuthorizedDecision.REJECT,
     }
 
 @User.loop_users

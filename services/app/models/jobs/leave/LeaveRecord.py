@@ -43,8 +43,10 @@ class LeaveRecord(db.Model):
 
         session = Session()
         query = session.query(
+            cls.id,
             cls.date,
-            func.concat(User.name, ' (', JobLeave.leave_type, ')').label('name'),
+            User.name,
+            JobLeave.leave_type,
             User.dept,
             cls.job_no
         ).join(
@@ -66,6 +68,9 @@ class LeaveRecord(db.Model):
 
         # Execute the query
         all_records_today = query.all()
+
+        cls.logger.info("All records today: ")
+        cls.logger.info(all_records_today)
 
         return all_records_today
 

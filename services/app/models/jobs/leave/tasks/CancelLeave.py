@@ -80,4 +80,4 @@ class CancelLeave(TaskLeave):
                 dates=self.affected_dates, # Don't need to mark late
             )
 
-            return MessageKnown.construct_forward_metadata(os.getenv("LEAVE_NOTIFY_CANCEL_SID"), cv_list, users_list)
+            return MessageKnown.construct_forward_metadata(sid=os.getenv("LEAVE_NOTIFY_CANCEL_SID"), cv_list=cv_list, users_list=users_list)

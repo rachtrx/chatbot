@@ -68,7 +68,7 @@ class User(db.Model):
         
     def get_ro(self):
         self.logger.info(f"RO: {self.reporting_officer}")
-        return {self.reporting_officer} if self.reporting_officer else set()
+        return {self.reporting_officer} if self.reporting_officer and self.reporting_officer.is_active else set()
 
     @classmethod
     def get_dept_admins_for_dept(cls, dept): # CLASS METHOD

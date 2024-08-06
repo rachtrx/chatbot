@@ -16,10 +16,12 @@ class Constants:
 # JOB STATUSES
 ##################################
 
+class Error:
+    UNKNOWN = 'UNKNOWN'
+
 class ErrorMessage:
     TWILIO_ERROR = "There was an issue with the Whatsapp API provider."
     TWILIO_EMPTY_VARIABLES = "There was an issue creating the message."
-    USER_NOT_FOUND = "I'm sorry, your contact is not in our database. Please check with HR and try again in an hour."
     PENDING_DECISION = "Please reply to the previous message first, thank you!"
     DOUBLE_MESSAGE = "The previous job has not completed or there was an error completing it. If the problem persists, please try again in 2 minutes, thank you!"
     UNKNOWN_ERROR = "Something went wrong, please send the message again"

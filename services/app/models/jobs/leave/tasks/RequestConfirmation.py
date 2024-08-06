@@ -5,7 +5,7 @@ from datetime import datetime
 from models.exceptions import ReplyError
 
 from models.jobs.base.constants import MessageType, OutgoingMessageData, UserState, Decision, ErrorMessage
-from models.jobs.base.utilities import set_user_state, combine_with_key_increment, get_latest_date_past_hour
+from models.jobs.base.utilities import set_user_state, combine_with_key_increment
 
 from models.jobs.leave.Task import TaskLeave
 from models.jobs.leave.constants import LeaveType, Patterns, LeaveTaskType, LeaveError

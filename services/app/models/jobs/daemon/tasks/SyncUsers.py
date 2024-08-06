@@ -6,7 +6,7 @@ import shortuuid
 from extensions import Session
 
 from models.users import User
-from models.exceptions import AzureSyncError
+from models.exceptions import AzureSyncError, DaemonTaskError
 
 from models.jobs.base.utilities import join_with_commas_and
 
@@ -25,27 +25,22 @@ class SyncUsers(TaskDaemon):
     }
 
     def execute(self):
-        self.header = generate_header()
         self.failed_users = []
         self.affected_users = []
-
         try:
+            self.header = generate_header()
             self.update_user_database()
-            self.body = DaemonMessage.SYNC_COMPLETED
         except AzureSyncError as e:
             self.logger.error(e)
-            self.body = DaemonMessage.AZURE_CONN_FAILED
-            raise
+            raise DaemonTaskError(DaemonMessage.AZURE_CONN_FAILED)
+        except Exception:
+            err_body = DaemonMessage.UNKNOWN_ERROR
+            if len(self.failed_users) > 0:
+                err_body += ". Failed: " + [join_with_commas_and(self.failed_users)]
+            if len(self.affected_users) > 0:
+                err_body += ". Affected: " + [join_with_commas_and(self.affected_users)]
+            raise DaemonTaskError(err_body)
         
-    def get_err_body(self) -> str:
-        
-        body = DaemonMessage.SYNC_FAILED
-        if len(self.failed_users) > 0:
-            body += ". Failed: " + [join_with_commas_and(self.failed_users)]
-        if len(self.affected_users) > 0:
-            body += ". Affected: " + [join_with_commas_and(self.affected_users)]
-        return body
-
     def get_az_table_data(self):
 
         '''Returns a 2D list containing the user details within the inner array'''

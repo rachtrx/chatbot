@@ -15,13 +15,16 @@ from extensions import Session, redis_client
 
 singapore_tz = ZoneInfo('Asia/Singapore')
 
-def set_user_state(user_id, state, timeout=30):
+def set_user_state(user_id, state, timeout=60):
     """Set the user as active with a specified timeout."""
     redis_client.setex(f"user:{user_id}:status", timeout, state)
 
 def check_user_state(user_id, state):
     """Check if the user is currently marked as active."""
-    return redis_client.exists(f"user:{user_id}:status") == state
+    current_state = redis_client.get(f"user:{user_id}:status")
+    if current_state is not None:
+        current_state = current_state.decode('utf-8')
+    return current_state == state
 
 def is_user_status_exists(user_id):
     """Check if the user's status has been deleted."""
@@ -63,30 +66,66 @@ def convert_utc_to_sg_tz(utc_timestamp, dt_type=None):
         return singapore_time
     
 
-def current_sg_time(day_offset = 0): # removed hour_offset
-
-    dt = datetime.now(singapore_tz)
-    if day_offset:
-        dt = dt + timedelta(days=day_offset)
-    return dt
+def next_weekday(dt):
+    """
+    Returns the next weekday (Monday to Friday) from the given datetime.
     
-def get_latest_date_past_hour(hour=9, day_offset=0):
+    Parameters:
+    dt (datetime): The starting datetime.
+    
+    Returns:
+    datetime: The next weekday datetime.
+    """
+    next_day = dt + timedelta(days=1)
+    while next_day.weekday() >= 5:  # If it's Saturday (5) or Sunday (6), skip to the next day
+        next_day += timedelta(days=1)
+    return next_day
 
-    present_day = current_sg_time(day_offset)
+def current_sg_time(weekday_offset=0):
+    """
+    Returns the current time in Singapore, adjusted by a specified number of weekdays.
+    
+    Parameters:
+    weekday_offset (int): The number of weekdays to offset. Default is 0.
+    
+    Returns:
+    datetime: The adjusted datetime object.
+    """
+    dt = datetime.now(singapore_tz)
+    
+    for _ in range(weekday_offset):
+        dt = next_weekday(dt)
+    
+    return dt
 
+def get_latest_date_past_hour(hour=9, weekday_offset=0):
+    """
+    Returns the latest date after a specified hour on the current or next weekday.
+    
+    Parameters:
+    hour (int): The hour to compare against. Default is 9.
+    weekday_offset (int): The number of weekdays to offset. Default is 0.
+    
+    Returns:
+    date: The latest date after the specified hour on the current or next weekday.
+    """
+    present_day = current_sg_time(weekday_offset)
     logging.info(f"present_day: {present_day}")
 
     if present_day.hour >= hour:
-        next_day = present_day + timedelta(days=1)
+        next_day = next_weekday(present_day)
         return next_day.date()
     else:
         return present_day.date()
     
-def get_previous_weekday(date):
-    previous_day = date - timedelta(days=1)
-    while previous_day.weekday() > 4:  # Mon-Fri are 0-4
-        previous_day -= timedelta(days=1)
-    return previous_day
+def get_next_formatted_weekday(date):
+    next_day = date + timedelta(days=1)
+    day_name = 'Tomorrow'
+    if next_day.weekday() > 4:  # If the next day is a weekend
+        while next_day.weekday() > 4:  # Mon-Fri are 0-4
+            next_day += timedelta(days=1)
+            day_name = f"on {next_day.strftime('%A')}"
+    return f"{day_name}, {next_day.strftime('%d/%m/%Y')}"
 
 def join_with_commas_and(lst):
     if not lst:

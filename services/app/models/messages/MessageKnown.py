@@ -6,7 +6,7 @@ from twilio.base.exceptions import TwilioRestException
 
 from extensions import db, Session, twilio
 
-from models.jobs.base.constants import ErrorMessage, MessageOrigin, MessageType, JobType, OutgoingMessageData, \
+from models.jobs.base.constants import Error, ErrorMessage, MessageOrigin, MessageType, JobType, OutgoingMessageData, \
     MESSAGING_SERVICE_SID, TWILIO_NO
 from models.jobs.base.utilities import current_sg_time
 
@@ -30,14 +30,15 @@ class MessageKnown(Message):
     user_id = db.Column(db.ForeignKey("users.id"), nullable=False)
     user = db.relationship('User', backref='messages', lazy='select')
 
+    seq_no = db.Column(db.Integer(), nullable=False)
+
     __mapper_args__ = {
         "polymorphic_identity": MessageOrigin.KNOWN,
     }
 
     def __init__(self, sid, msg_type, body, user_id, job_no=None, seq_no=None):
         self.logger.info(f"current time: {current_sg_time()}")
-        super().__init__(sid, body)
-        self.msg_type = msg_type
+        super().__init__(sid, msg_type, body)
         self.user_id = user_id
         self.job_no = job_no
         if seq_no is not None:
@@ -110,7 +111,7 @@ class MessageKnown(Message):
         if int(os.getenv('LIVE')) or int(to_user.number) in json.loads(os.getenv('ACTIVE_NUMBERS')):
             cls.logger.info("Current number in active numbers")
             to_no = to_user.sg_number
-            cls.logger.info('Sending to User')
+            cls.logger.info('Sending to Actual User')
         else:
             to_no = os.getenv('DEV_NO')
             cls.logger.info('Sending to Dev')
@@ -165,7 +166,7 @@ class MessageKnown(Message):
                 user_id=message.user_id, 
                 job_no=message.job_no
             )
-            raise ReplyError(message, error=LeaveError.UNKNOWN)
+            raise ReplyError(message, error=Error.UNKNOWN)
 
     @classmethod
     def forward_template_msges(cls, job_no, sid_list, cv_list, users_list, user_id_to_update=None, callback=None, message_context=None):
@@ -220,15 +221,18 @@ class MessageKnown(Message):
                 callback(forward_callback)
             session.expunge(forward_callback)
 
-    def construct_forward_metadata(sid, cv_list, users_list):
+    @classmethod
+    def construct_forward_metadata(cls, sid, cv_list, users_list):
 
         if isinstance(sid, list):
             sid_list = sid
         else:
             sid_list = [sid] * len(cv_list)
 
-        return {
+        forward_metadata = {
             'sid_list': sid_list,
             'cv_list': cv_list,
             'users_list': users_list
         }
+        cls.logger.info(forward_metadata)
+        return forward_metadata

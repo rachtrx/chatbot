@@ -20,14 +20,14 @@ class Message(db.Model):
     timestamp = db.Column(db.DateTime(timezone=True), nullable=False)
     type = db.Column(db.String(10), nullable=False)
     msg_type = db.Column(db.String(10), nullable=False)
-    seq_no = db.Column(db.Integer(), nullable=False)
 
     __mapper_args__ = {
         "polymorphic_identity": MessageOrigin.NONE,
         "polymorphic_on": type
     }
     
-    def __init__(self, sid, body):
+    def __init__(self, sid, msg_type, body):
         self.sid = sid
+        self.msg_type = msg_type
         self.body = body
         self.timestamp = current_sg_time()

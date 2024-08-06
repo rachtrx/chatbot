@@ -22,7 +22,6 @@ def upgrade() -> None:
         sa.Column('sid', sa.String(length=64), nullable=False),
         sa.Column('body', sa.Text(), nullable=True),
         sa.Column('timestamp', sa.DateTime(timezone=True), nullable=False),
-        sa.Column('seq_no', sa.Integer(), nullable=False),
         sa.Column('type', sa.String(length=10), nullable=False),
         sa.Column('msg_type', sa.String(length=10), nullable=False),
         sa.PrimaryKeyConstraint('sid')
@@ -61,16 +60,6 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(['sid'], ['new_message.sid'], ),
         sa.PrimaryKeyConstraint('sid')
     )
-    op.create_table('forward_callback',
-        sa.Column('job_no', sa.String(length=32), nullable=False),
-        sa.Column('seq_no', sa.Integer(), nullable=False),
-        sa.Column('user_id', sa.String(length=32), nullable=False),
-        sa.Column('update_count', sa.Integer(), nullable=False),
-        sa.Column('message_context', sa.String(length=64), nullable=False),
-        sa.ForeignKeyConstraint(['job_no'], ['new_job.job_no'], ),
-        sa.ForeignKeyConstraint(['user_id'], ['new_users.id'], ),
-        sa.PrimaryKeyConstraint('job_no', 'seq_no')
-    )
     op.create_table('job_daemon',
         sa.Column('job_no', sa.String(length=32), nullable=False),
         sa.ForeignKeyConstraint(['job_no'], ['new_job.job_no'], ),
@@ -80,10 +69,21 @@ def upgrade() -> None:
         sa.Column('sid', sa.String(), nullable=False),
         sa.Column('job_no', sa.String(), nullable=True),
         sa.Column('user_id', sa.String(length=32), nullable=True),
+        sa.Column('seq_no', sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(['job_no'], ['new_job.job_no'], ),
         sa.ForeignKeyConstraint(['sid'], ['new_message.sid'], ),
         sa.ForeignKeyConstraint(['user_id'], ['new_users.id'], ),
         sa.PrimaryKeyConstraint('sid')
+    )
+    op.create_table('forward_callback',
+        sa.Column('job_no', sa.String(length=32), nullable=False),
+        sa.Column('seq_no', sa.Integer(), nullable=False),
+        sa.Column('user_id', sa.String(length=32), nullable=False),
+        sa.Column('update_count', sa.Integer(), nullable=False),
+        sa.Column('message_context', sa.String(length=64), nullable=False),
+        sa.ForeignKeyConstraint(['job_no'], ['new_job.job_no'], ),
+        sa.ForeignKeyConstraint(['user_id'], ['new_users.id'], ),
+        sa.PrimaryKeyConstraint('job_no', 'seq_no')
     )
     op.create_table('new_job_leave',
         sa.Column('job_no', sa.String(length=32), nullable=False),

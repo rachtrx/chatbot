@@ -169,12 +169,12 @@ class LeaveErrorMessage:
     CONFIRMING_CANCELLED_MSG = "Leave has already been cancelled!"
     ALL_OVERLAPPING = "You are already on leave for all dates."
     SOME_OVERLAPPING = "You are already on leave or pending acknowledgement for all dates."
-    NO_DATES_TO_APPROVE = "No dates were found past 9am today that are still pending approval."
+    NO_DATES_TO_APPROVE = "No dates were found past 9am today that are still pending acknowledgement."
     NO_DATES_TO_CANCEL = "No dates were found past 9am today that are still active."
     NO_DATES_TO_REJECT = "No dates were found past 9am today that are still active."
     AUTHORISING_CANCELLED_MSG = "Leave has already been cancelled!"
     LEAVE_CANCELLED = "Leave has already been cancelled!"
-    LEAVE_APPROVED = "Leave has already been approved!"
+    LEAVE_APPROVED = "Leave has already been acknowledged!"
     LEAVE_REJECTED = "Leave has already been rejected!"
     REQUEST_EXPIRED = "This request has expired."
     NO_USERS_TO_NOTIFY = "No staff found to forward message to. Please contact the school HR."
@@ -202,6 +202,7 @@ class LeaveTaskType:
     APPROVE = 'APPROVE'
     REJECT = 'REJECT'
     CANCEL = 'CANCEL'
+    
 
 class LeaveStatus:
     PENDING = "PENDING"
@@ -210,5 +211,5 @@ class LeaveStatus:
     REJECTED = "REJECTED"
     ERROR = "ERROR"
 
-
-
+class Time:
+    AUTO_APPROVAL = '5PM'

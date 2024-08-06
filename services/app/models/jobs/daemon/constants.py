@@ -29,9 +29,9 @@ class DaemonTaskType:
     SEND_REPORT = 'SEND_REPORT'
     SYNC_LEAVES = 'SYNC_LEAVES'
     SYNC_USERS = 'SYNC_USERS'
-    SEND_HEALTH = 'SEND_HEALTH'
     SEND_REMINDER = 'SEND_REMINDER'
     AUTO_APPROVE = 'AUTO_APPROVE'
+    CLEAN_TASKS = 'CLEAN_TASKS'
 
 class DaemonMessage:
     TOKEN_ACQUIRED = "Access token retrieved."
@@ -44,3 +44,7 @@ class DaemonMessage:
     NOTHING_TO_SYNC = "Nothing to sync."
     SYNC_FAILED = "Sync failed."
     REPORT_FAILED = "Report failed to send."
+    NOTHING_TO_APPROVE = "No records found to approve"
+    APPROVALS_RAN = "Approvals Ran"
+    UNKNOWN_ERROR = "Unknown Error"
+    

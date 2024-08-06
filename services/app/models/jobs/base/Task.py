@@ -1,3 +1,4 @@
+import traceback
 import shortuuid
 from concurrent.futures import ThreadPoolExecutor
 
@@ -99,6 +100,7 @@ class Task(db.Model):
             self.logger.info(self.background_tasks)
             self.run_background_tasks()
         except Exception as e:
+            self.logger.error(traceback.format_exc())
             if self.status != Status.COMPLETED:
                 self.status = Status.FAILED
                 session.commit()

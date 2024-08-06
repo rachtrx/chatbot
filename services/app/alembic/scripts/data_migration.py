@@ -207,20 +207,20 @@ for record in records:
     # status can be 102, 200 or 402
     try:
         cur.execute(
-            "INSERT INTO new_message (sid, body, timestamp, type, msg_type, seq_no) VALUES (%s, %s, %s, %s, %s, %s)",
-            (record.sid, record.body, record.timestamp, 'KNOWN', msg_type_map.get(record.type), record.seq_no) # TODO
+            "INSERT INTO new_message (sid, body, timestamp, type, msg_type) VALUES (%s, %s, %s, %s, %s)",
+            (record.sid, record.body, record.timestamp, 'KNOWN', msg_type_map.get(record.type)) # TODO
         )
         if not record.type == 'message_forward':
             cur.execute(
-                "INSERT INTO message_known (sid, job_no, user_id) VALUES (%s, %s, %s)",
-                (record.sid, record.job_no, record.id)
+                "INSERT INTO message_known (sid, job_no, user_id, seq_no) VALUES (%s, %s, %s, %s)",
+                (record.sid, record.job_no, record.id, record.seq_no)
             )
         else:
             cur.execute("SELECT new_users.id FROM new_users JOIN message_forward ON message_forward.to_name = new_users.name WHERE message_forward.sid = %s", (record.sid, ))
             user_id = cur.fetchone()
             cur.execute(
-                "INSERT INTO message_known (sid, job_no, user_id) VALUES (%s, %s, %s)",
-                (record.sid, record.job_no, user_id)
+                "INSERT INTO message_known (sid, job_no, user_id, seq_no) VALUES (%s, %s, %s, %s)",
+                (record.sid, record.job_no, user_id, record.seq_no)
             )
         if record.type == 'message_sent' or record.type == 'message_forward':
             cur.execute("SELECT message_sent.status FROM message_sent WHERE message_sent.sid = %s", (record.sid, ))
@@ -257,20 +257,20 @@ for record in records:
             cur_seq_no += 1
 
             cur.execute(
-                "INSERT INTO new_message (sid, body, timestamp, type, msg_type, seq_no) VALUES (%s, %s, %s, %s, %s, %s)",
-                (message.sid, message.body, message.timestamp, 'KNOWN', msg_type_map.get(message.type), cur_seq_no) # TODO
+                "INSERT INTO new_message (sid, body, timestamp, type, msg_type) VALUES (%s, %s, %s, %s, %s)",
+                (message.sid, message.body, message.timestamp, 'KNOWN', msg_type_map.get(message.type)) # TODO
             )
             if not message.type == 'message_forward':
                 cur.execute(
-                    "INSERT INTO message_known (sid, job_no, user_id) VALUES (%s, %s, %s)",
-                    (message.sid, record.initial_job_no, message.id)
+                    "INSERT INTO message_known (sid, job_no, user_id, seq_no) VALUES (%s, %s, %s, %s)",
+                    (message.sid, record.initial_job_no, message.id, cur_seq_no)
                 )
             else:
                 cur.execute("SELECT new_users.id FROM new_users JOIN message_forward ON message_forward.to_name = new_users.name WHERE message_forward.sid = %s", (message.sid, ))
                 user_id = cur.fetchone()
                 cur.execute(
-                    "INSERT INTO message_known (sid, job_no, user_id) VALUES (%s, %s, %s)",
-                    (message.sid, record.initial_job_no, user_id)
+                    "INSERT INTO message_known (sid, job_no, user_id, seq_no) VALUES (%s, %s, %s, %s)",
+                    (message.sid, record.initial_job_no, user_id, cur_seq_no)
                 )
             if message.type == 'message_sent' or message.type == 'message_forward':
                 cur.execute("SELECT message_sent.status FROM message_sent WHERE message_sent.sid = %s", (message.sid, ))
@@ -318,8 +318,8 @@ for record in records:
     try:
         
         cur.execute(
-            "INSERT INTO new_message (sid, body, timestamp, type, msg_type, seq_no) VALUES (%s, %s, %s, %s, %s, %s)",
-            (record.sid, record.body, record.timestamp, 'UNKNOWN', msg_type_map.get(record.type), record.seq_no)
+            "INSERT INTO new_message (sid, body, timestamp, type, msg_type) VALUES (%s, %s, %s, %s, %s)",
+            (record.sid, record.body, record.timestamp, 'UNKNOWN', msg_type_map.get(record.type))
         )
         idx = record.from_no.find('+')
         if idx != -1:

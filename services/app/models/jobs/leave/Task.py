@@ -32,11 +32,14 @@ class TaskLeave(Task):
             self.dates_to_approve = set(self.dates_to_update)
             self.dates_to_authorise = set()
         else:
-            self.dates_to_approve = {date for date in self.dates_to_update if date < get_latest_date_past_hour(day_offset=3)} # approve dates within 3 days
+            self.dates_to_approve = {date for date in self.dates_to_update if date < get_latest_date_past_hour(weekday_offset=2)} # approve dates within 3 days
             self.dates_to_authorise = set(self.dates_to_update) - self.dates_to_approve
 
         self.dates_to_approve = list(self.dates_to_approve)
         self.dates_to_authorise = list(self.dates_to_authorise)
+
+        self.logger.info(f"Dates to Approve: {self.dates_to_approve}")
+        self.logger.info(f"Dates to Authorise: {self.dates_to_authorise}")
 
         if len(self.ro_set) == 0 and len(self.dates_to_approve) == 0:
             message = OutgoingMessageData(

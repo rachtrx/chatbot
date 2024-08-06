@@ -8,6 +8,8 @@ from datetime import datetime
 import json
 import logging
 
+from models.exceptions import DaemonTaskError
+
 from models.jobs.base.utilities import current_sg_time
 
 from models.jobs.daemon.Task import TaskDaemon
@@ -30,9 +32,6 @@ class AcquireToken(TaskDaemon):
         'site_id': os.getenv('SITE_ID'),
     }
 
-    def get_err_body(self) -> str:
-        return DaemonMessage.TOKEN_NOT_ACQUIRED
-
     def execute(self):
 
         msal_instance = msal.ConfidentialClientApplication(self.config['client_id'], authority=self.config['authority'], client_credential=self.config['client_secret'])
@@ -46,24 +45,19 @@ class AcquireToken(TaskDaemon):
 
             access_token = 'Bearer ' + token['access_token']
 
-            self.logger.info(token['access_token'])
+            # self.logger.info(token['access_token'])
 
         except Exception as e:
-            self.body = DaemonMessage.SECRET_EXPIRED
-            raise
+            raise DaemonTaskError(DaemonMessage.SECRET_EXPIRED)
 
         try:
             with open(os.getenv('TOKEN_PATH'), 'w') as file:
                 file.write(access_token)
         
             self.update_table_urls()
-            self.body = DaemonMessage.TOKEN_ACQUIRED
         except Exception as e:
-            logging.error(traceback.format_exc())
-            self.body = DaemonMessage.TABLE_URL_CHANGED
-            raise
-
-        return
+            self.logger.error(traceback.format_exc())
+            raise DaemonTaskError(DaemonMessage.TABLE_URL_CHANGED)
 
     def update_table_urls(self): # TO PLACE IN AZURE?
         

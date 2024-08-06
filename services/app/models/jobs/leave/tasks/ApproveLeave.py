@@ -21,14 +21,13 @@ class ApproveLeave(TaskLeave):
     def execute(self):
 
         self.affected_dates = LeaveRecord.update_leaves(self.payload, LeaveStatus.APPROVED)
-        reply_body = f"Leave on {print_all_dates(self.affected_dates)} has been acknowledged, notifying {self.job.primary_user.alias}"
 
         forward_metadata = None
         try:
             forward_metadata = self.get_approval_forward_cv()
-            others_body = ". Other staff will be notified."
+            others_body = ". Other staff will be notified"
         except NoRelationsError:
-            others_body = ". No other staff were found to notify."
+            others_body = ". No other staff were found to notify"
             
         follow_up_message = OutgoingMessageData(
             msg_type=MessageType.FORWARD,
@@ -38,11 +37,15 @@ class ApproveLeave(TaskLeave):
             content_variables={
                 '1': self.job_no,
                 '2': self.job.primary_user.alias,
-                '3': self.user.alias,
-                '4': 'acknowledged',
-                '5': print_all_dates(self.affected_dates) + others_body, # TODO ADD REPLY BODY??
+                '3': print_all_dates(self.affected_dates), # TODO ADD REPLY BODY??
+                '4': 'acknowledged'
             }
         )
+
+        if self.user_id:
+            follow_up_message.content_variables['4'] += f" by {self.user.alias}" + others_body
+        else:
+            follow_up_message.content_variables['4'] += f" automatically" + others_body
 
         MessageKnown.send_msg(message=follow_up_message)
 
@@ -54,31 +57,31 @@ class ApproveLeave(TaskLeave):
                 message_context="your leave",
                 **forward_metadata
             )
-
-        reply_message = OutgoingMessageData( 
-            user_id=self.user.id,
-            job_no=self.job_no, 
-            body=reply_body + others_body
-        )
-
-        MessageKnown.send_msg(message=reply_message)
+        
+        if self.user_id: # REPLY USER IF NOT AUTO APPROVE
+            reply_body = f"Leave on {print_all_dates(self.affected_dates)} has been acknowledged, notifying {self.job.primary_user.alias}"
+            reply_message = OutgoingMessageData( 
+                user_id=self.user.id,
+                job_no=self.job_no, 
+                body=reply_body + others_body
+            )
+            MessageKnown.send_msg(message=reply_message)
 
         clear_user_processing_state(self.user_id)
         return
 
     def get_approval_forward_cv(self):
 
-        users_list = self.job.primary_user.get_relations(ignore_users=[self.user])
+        users_list = self.job.primary_user.get_relations(ignore_users=[self.user] if self.user_id else [])
         alias = self.job.primary_user.alias
-        approver_alias = self.user.alias
         
         cv_list = get_approve_leave_cv( # LOOP USERS
             users_list, 
             alias=alias,
             leave_type=self.job.leave_type,
             dates=self.affected_dates,
-            approver_alias=approver_alias
+            approver_alias=self.user.alias if self.user_id else None
         )
 
-        return MessageKnown.construct_forward_metadata(os.getenv("LEAVE_NOTIFY_APPROVE_SID"), cv_list, users_list)
+        return MessageKnown.construct_forward_metadata(sid=os.getenv("LEAVE_NOTIFY_APPROVE_SID"), cv_list=cv_list, users_list=users_list)
 

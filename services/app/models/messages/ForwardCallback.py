@@ -22,7 +22,7 @@ class ForwardCallback(db.Model):
     logger.propagate = False
 
     job_no = db.Column(db.String(32), db.ForeignKey('job.job_no'), primary_key=True, nullable=False)
-    seq_no = db.Column(db.Integer, primary_key=True, nullable=False)
+    seq_no = db.Column(db.Integer, primary_key=True, nullable=False) # no need fk here i think...
 
     job = db.relationship('Job', backref='forward_callbacks', lazy='select')
 

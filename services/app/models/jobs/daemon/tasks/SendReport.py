@@ -3,7 +3,7 @@ import traceback
 import pandas as pd
 
 from models.users import User
-from models.exceptions import AzureSyncError
+from models.exceptions import AzureSyncError, DaemonTaskError
 
 from models.jobs.base.utilities import current_sg_time
 
@@ -18,7 +18,7 @@ class SendReport(TaskDaemon):
 
     name = "Morning Report"
 
-    dept_order = ('Corporate', 'ICT', 'AP', 'Voc Ed', 'AM Session', 'PM Session') # Relief?
+    dept_order = ('Corporate', 'ICT', 'AP', 'Voc Ed', 'AM', 'PM') # Relief?
 
     __mapper_args__ = {
         "polymorphic_identity": DaemonTaskType.SEND_REPORT
@@ -31,14 +31,28 @@ class SendReport(TaskDaemon):
         self.date_today = cur_datetime.strftime("%d/%m/%Y")
 
         self.global_cv = {}
-        self.dept_cv_dict = {dept: {} for dept in self.dept_order}
 
         try:
+
             global_admins = User.get_global_admins()
+            if len(global_admins) == 0:
+                return # TODO, inform primary user?
 
             today_date = current_sg_time().date()
 
-            all_records_today = LeaveRecord.get_all_leaves(today_date, today_date)
+            leave_records = LeaveRecord.get_all_leaves(today_date, today_date)
+
+            self.logger.info(f'leave records today: {leave_records}')
+
+            all_records_today = [
+                {
+                    "date": record.date,
+                    "name": f"{record.name} ({record.leave_type})",
+                    "dept": record.dept
+                }
+                for record in leave_records
+            ]
+
             if len(all_records_today) == 0:
                 MessageKnown.forward_template_msges(
                     job_no=self.job_no,
@@ -52,15 +66,16 @@ class SendReport(TaskDaemon):
                     )
                 )
             else:
-                self.all_records_today_df = pd.DataFrame(data = all_records_today, columns=["date", "name", "dept", "job_no"])
+                self.all_records_today_df = pd.DataFrame(data = all_records_today, columns=["date", "name", "dept"])
                 #groupby
                 leave_today_by_dept = self.all_records_today_df.groupby("dept").agg(total_by_dept = ("name", "count"), names = ("name", lambda x: ', '.join(x)))
                 # convert to a dictionary where the dept is the key
                 self.dept_aggs = leave_today_by_dept.apply(lambda x: [x.total_by_dept, x.names], axis=1).to_dict()
 
                 # generate all cvs, even if all present, in order to generate all present messages for HODs as well
-                self.setup_cv()
+                self.send_to_hods()
 
+                
                 MessageKnown.forward_template_msges(
                     job_no=self.job_no,
                     **MessageKnown.construct_forward_metadata(
@@ -73,75 +88,62 @@ class SendReport(TaskDaemon):
                         users_list=global_admins
                     )
                 )
-            
-                # send to HODs
-                for dept in self.dept_cv_dict.keys():
-
-                    self.logger.info(f"Preparing to send msg for department: {dept}")
-                    
-                    dept_admins = User.get_dept_admins_for_dept(dept)
-
-                    if dept not in self.dept_aggs:
-                        MessageKnown.forward_template_msges(
-                            job_no=self.job_no,
-                            **MessageKnown.construct_forward_metadata(
-                                sid=os.getenv("SEND_MESSAGE_TO_HODS_ALL_PRESENT_SID"), 
-                                cv_list=[{
-                                    '1': dept_admin.alias,
-                                    '2': self.date_today_full
-                                } for dept_admin in dept_admins], 
-                                users_list=dept_admins
-                            )
-                        )
-                    else:
-                        MessageKnown.forward_template_msges(
-                            job_no=self.job_no,
-                            **MessageKnown.construct_forward_metadata(
-                                sid=os.getenv("SEND_MESSAGE_TO_HODS_SID"), 
-                                cv_list=[{
-                                    **self.dept_cv_dict[dept],
-                                    '1': dept_admin.alias,
-                                    '2': self.date_today_full
-                                } for dept_admin in dept_admins], 
-                                users_list=dept_admins
-                            )
-                        )
-            self.body = DaemonMessage.REPORT_SENT
+                        
         except AzureSyncError as e:
             self.logger.error(e)
-            self.body = DaemonMessage.AZURE_CONN_FAILED
-            raise
-
-    def get_err_body(self) -> str:
-        return DaemonMessage.REPORT_FAILED
+            raise DaemonTaskError(DaemonMessage.AZURE_CONN_FAILED)
     
-    def setup_cv(self):
+    def send_to_hods(self):
 
         total = 0
-        count = 3
 
-        for dept in self.dept_order:
+        for i, dept in enumerate(self.dept_order, 3):
+
+            dept_admins = User.get_dept_admins_for_dept(dept)
 
             if dept in self.dept_aggs:
-                # update the global 
-                self.global_cv[str(count)] = self.dept_aggs[dept][1]  # names
-                self.global_cv[str(count + 1)] = str(self.dept_aggs[dept][0]) # number of names
-                total += self.dept_aggs[dept][0]
 
-                # update the dept
-                self.dept_cv_dict[dept]['3'] = dept
-                self.dept_cv_dict[dept]['4'] = self.dept_aggs[dept][1]
-            else:
-                # update the global
-                self.global_cv[str(count)] = "NIL"
-                self.global_cv[str(count + 1)] = '0' # number of names
-
-                # update the dept
-                self.dept_cv_dict[dept]['3'] = dept
+                name_list = self.dept_aggs[dept][1]  # names
+                dept_total = self.dept_aggs[dept][0] # number of names
                 
-            # update global counter
-            count += 2
+                # update the global 
+                self.global_cv[str(i)] = f" ({str(dept_total)}): {name_list}"
+                total += dept_total
 
-        self.global_cv['21'] = str(total)
+                if len(dept_admins) == 0:
+                    continue
+
+                MessageKnown.forward_template_msges(
+                    job_no=self.job_no,
+                    **MessageKnown.construct_forward_metadata(
+                        sid=os.getenv("SEND_MESSAGE_TO_HODS_SID"), 
+                        cv_list=[{
+                            '1': dept_admin.alias,
+                            '2': dept,
+                            '3': self.date_today_full,
+                            '4': name_list,
+                        } for dept_admin in dept_admins], 
+                        users_list=dept_admins
+                    )
+                )
+            else:
+                self.global_cv[str(i)] = f" (0): NIL" # for global
+
+                if len(dept_admins) == 0:
+                    continue
+
+                MessageKnown.forward_template_msges(
+                    job_no=self.job_no,
+                    **MessageKnown.construct_forward_metadata(
+                        sid=os.getenv("SEND_MESSAGE_TO_HODS_ALL_PRESENT_SID"), 
+                        cv_list=[{
+                            '1': dept_admin.alias,
+                            '2': self.date_today_full
+                        } for dept_admin in dept_admins], 
+                        users_list=dept_admins
+                    )
+                )
+
+        self.global_cv['9'] = str(total)
 
         return

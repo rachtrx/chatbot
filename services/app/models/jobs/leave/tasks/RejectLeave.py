@@ -82,4 +82,4 @@ class RejectLeave(TaskLeave):
             alias=alias,
         )
     
-        return MessageKnown.construct_forward_metadata(os.getenv("LEAVE_NOTIFY_REJECT_SID"), cv_list, users_list)
+        return MessageKnown.construct_forward_metadata(sid=os.getenv("LEAVE_NOTIFY_REJECT_SID"), cv_list=cv_list, users_list=users_list)
