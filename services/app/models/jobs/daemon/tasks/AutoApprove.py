@@ -51,7 +51,7 @@ class AutoApprove(TaskDaemon):
 
                 leave_records = [record for record in pending_leave_records if record.job_no == pending_job_no]
                 if len(leave_records) == 0:
-                    self.logger.info("No records pending Approvals")
+                    self.logger.info(f"No records pending Approvals for {pending_job_no}")
                     continue
 
                 if not pending_job or pending_job.error:

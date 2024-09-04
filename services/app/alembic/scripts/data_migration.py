@@ -34,16 +34,24 @@ for record in records:
     if record.reporting_officer_name:
         cur.execute(
             "SELECT new_users.id FROM new_users WHERE new_users.name = %s",
+            (record.name,)
+        )
+        id_result = cur.fetchone()
+        cur.execute(
+            "SELECT new_users.id FROM new_users WHERE new_users.name = %s",
             (record.reporting_officer_name,)
         )
         ro_id_result = cur.fetchone()
-        if ro_id_result:
+        if id_result and ro_id_result:
+            user_id = id_result.id
             ro_id = ro_id_result.id  # Assuming the fetched result is a NamedTuple and id is the column name
             try:
+                identifier = shortuuid.ShortUUID().random(length=8).upper()
                 cur.execute(
-                    "UPDATE new_users SET reporting_officer_id = %s WHERE name = %s",
-                    (ro_id, record.name)
+                    "INSERT INTO lookups (id, user_id, lookup_id, is_reporting_officer) VALUES (%s, %s, %s, %s)",
+                    (identifier, user_id, ro_id, True)
                 )
+                # print(user_id, ro_id)
             except Exception as e:
                 print(e)
 

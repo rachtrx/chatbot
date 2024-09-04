@@ -219,7 +219,7 @@ class ExtractDates(TaskLeave):
 
         all_dates_set = {d for d in set(daterange()) if np.is_busday(d.strftime('%Y-%m-%d'))}
         if weekday_count(all_dates_set) == 0:
-            body = f"Hi {self.user.alias}, no weekdays were detected in your request."
+            body = f"Hi {self.user.alias}, the leave system currently doesn't accept leave requests for weekends."
             message = OutgoingMessageData(
                 body=body, 
                 job_no=self.job_no,

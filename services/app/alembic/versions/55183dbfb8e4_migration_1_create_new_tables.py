@@ -33,12 +33,20 @@ def upgrade() -> None:
         sa.Column('number', sa.Integer(), nullable=False),
         sa.Column('dept', sa.String(length=64), nullable=True),
         sa.Column('is_active', sa.Boolean(), nullable=False),
-        sa.Column('reporting_officer_id', sa.String(length=80), nullable=True),
         sa.Column('is_global_admin', sa.Boolean(), nullable=False),
         sa.Column('is_dept_admin', sa.Boolean(), nullable=False),
-        sa.ForeignKeyConstraint(['reporting_officer_id'], ['new_users.id'], ondelete='SET NULL'),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('name', 'number', name='_name_number_uc')
+    )
+    op.create_table('lookups',
+        sa.Column('id', sa.String(length=32), nullable=False),
+        sa.Column('user_id', sa.String(length=80), nullable=False),
+        sa.Column('lookup_id', sa.String(length=80), nullable=False),
+        sa.Column('is_reporting_officer', sa.Boolean(), nullable=False),
+        sa.ForeignKeyConstraint(['user_id'], ['new_users.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['lookup_id'], ['new_users.id'], ondelete='CASCADE'),
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('user_id', 'lookup_id', name='_user_lookup_uc')
     )
     op.create_table('message_unknown',
         sa.Column('sid', sa.String(length=64), nullable=False),
@@ -138,6 +146,7 @@ def downgrade() -> None:
     op.drop_table('sent_message_status')
     op.drop_table('new_job')
     op.drop_table('message_unknown')
+    op.drop_table('lookups')
     op.drop_table('new_users')
     op.drop_table('new_message')
 

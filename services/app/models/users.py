@@ -22,16 +22,23 @@ class User(db.Model):
     number = db.Column(db.Integer(), nullable=False)
     dept = db.Column(db.String(64), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
-
-    # Self-referential relationships
-    reporting_officer_id = db.Column(db.String(80), db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
-    reporting_officer = db.relationship('User', remote_side=[id], post_update=True,
-                                     backref=db.backref('reportees'), foreign_keys=[reporting_officer_id])
     
     is_global_admin = db.Column(db.Boolean, default=False, nullable=False)
     is_dept_admin = db.Column(db.Boolean, default=False, nullable=False)
 
     __table_args__ = (UniqueConstraint('name', 'number', name='_name_number_uc'),)
+
+    @property
+    def reporting_officer(self):
+        if not getattr(self, '_reporting_officer', None):
+            ro = next((lookup.lookup_user for lookup in self.lookups if lookup.is_reporting_officer), None)
+            self.logger.info(ro)
+            return ro
+        return self._reporting_officer
+    
+    @reporting_officer.setter
+    def reporting_officer(self, value):
+        self._reporting_officer = value
 
     @property
     def sg_number(self):
@@ -69,6 +76,12 @@ class User(db.Model):
     def get_ro(self):
         self.logger.info(f"RO: {self.reporting_officer}")
         return {self.reporting_officer} if self.reporting_officer and self.reporting_officer.is_active else set()
+    
+    def get_lookups(self):
+        if self.lookups and all(lookup.lookup_user.is_active for lookup in self.lookups):
+            return {lookup.lookup_user for lookup in self.lookups}
+        else:
+            return set()
 
     @classmethod
     def get_dept_admins_for_dept(cls, dept): # CLASS METHOD
@@ -103,7 +116,7 @@ class User(db.Model):
 
     def get_relations(self, ignore_users: list[User] = [], allow_none=False):
         # Using list unpacking to handle both list and empty list cases
-        relations = self.get_ro() | self.get_dept_admins() | self.get_global_admins()
+        relations = self.get_lookups() | self.get_dept_admins() | self.get_global_admins()
         # if int(os.getenv('LIVE', 0)):  # Default to 0 if 'LIVE' is not set
         # # Create a set of IDs to ignore
         ignore_ids = {self.id}

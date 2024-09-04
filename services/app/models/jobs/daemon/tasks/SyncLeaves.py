@@ -220,7 +220,8 @@ class SyncLeaves(TaskDaemon):
             
     def get_forward_metadata(self):
         session = Session()
-        cv_list = users_list = []
+        cv_list = []
+        users_list = []
 
         for action, all_action_records in self.records.items(): # add and del dicts
             for status, records in all_action_records.items():

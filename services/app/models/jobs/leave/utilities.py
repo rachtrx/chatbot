@@ -139,10 +139,14 @@ def replace_with_full_month(match):
 def named_month_extraction(message):
     '''Check for month pattern ie. 11 November or November 11'''
     user_str = re.sub(Patterns.MONTHS_LOOSE, replace_with_full_month, message, flags=re.IGNORECASE)
+
+    logging.info(f'User string in named month extraction: {user_str}')
     
     def get_dates(start_date_pattern, end_date_pattern):
         start_match_dates = start_date_pattern.search(user_str)
         end_match_dates = end_date_pattern.search(user_str)
+        logging.info(f"Start dates: {start_match_dates}")
+        logging.info(f"End dates: {end_match_dates}")
         start_date = end_date = None
         if start_match_dates: 
             start_date = generate_date_obj(start_match_dates, "%d %B %Y")

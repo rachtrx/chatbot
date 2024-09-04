@@ -92,7 +92,7 @@ class JobDaemon(Job):
                         cv[str(i)] = "Process not ran before"
                     # Condition to check if there is a task and to update the status conditionally
                     else:
-                        last_run_time = convert_utc_to_sg_tz(latest_task.created_at, '%d%m%Y %H:%M')
+                        last_run_time = convert_utc_to_sg_tz(latest_task.created_at, '%d %b %y %H:%M')
                         if latest_task.status == Status.COMPLETED:
                             latest_successful_task = latest_task
                             last_success_run_time = last_run_time
@@ -100,7 +100,7 @@ class JobDaemon(Job):
                         else:
                             latest_successful_task = TaskDaemon.get_latest_completed_task(task_type=task_type)
                             if latest_successful_task:
-                                last_success_run_time = convert_utc_to_sg_tz(latest_successful_task.created_at, '%d%m%Y %H:%M')
+                                last_success_run_time = convert_utc_to_sg_tz(latest_successful_task.created_at, '%d %b %y %H:%M')
                             else:
                                 last_success_run_time = "All runs unsuccessful"
 

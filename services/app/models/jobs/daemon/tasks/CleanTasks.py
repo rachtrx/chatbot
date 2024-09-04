@@ -79,6 +79,10 @@ class CleanTasks(TaskDaemon):
                 )
             ).all()
         
+        # why [id[0] for id in job_nos]?
+        # results = session.query(TaskDaemon).all() returns a list of TaskDaemon objects
+        # session.query(TaskDaemon.job_no).all() returns a list of tuples
+        
         # Delete the jobs based on the fetched IDs
         if job_nos:
             session.query(TaskDaemon).filter(TaskDaemon.job_no.in_([id[0] for id in job_nos])).delete(synchronize_session=False) # This setting tells SQLAlchemy to perform the delete operation directly in the database and not to bother updating the state of the session. This is faster and less resource-intensive if you know you won’t be using the session further or if you handle session consistency manually.

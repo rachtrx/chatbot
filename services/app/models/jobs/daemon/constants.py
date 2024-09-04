@@ -11,7 +11,8 @@ class Link:
 
     DRIVE_URL = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/"
 
-    USERS_TABLE_URL = f"{DRIVE_URL}{USERS_FILE_ID}/workbook/worksheets/MainTable/tables/MainTable/rows"
+    USERS_TABLE_URL = f"{DRIVE_URL}{USERS_FILE_ID}/workbook/worksheets/users/tables/UsersTable/rows"
+    LOOKUP_TABLE_URL = f"{DRIVE_URL}{USERS_FILE_ID}/workbook/worksheets/lookups/tables/LookupsTable/rows"
     LEAVE_FILES_URL = f'{DRIVE_URL}{LEAVE_FOLDER_ID}/children'
 
 class AccessLevel(Enum):

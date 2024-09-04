@@ -6,6 +6,7 @@ import shortuuid
 from extensions import Session
 
 from models.users import User
+from models.lookups import Lookup
 from models.exceptions import AzureSyncError, DaemonTaskError
 
 from models.jobs.base.utilities import join_with_commas_and
@@ -41,11 +42,11 @@ class SyncUsers(TaskDaemon):
                 err_body += ". Affected: " + [join_with_commas_and(self.affected_users)]
             raise DaemonTaskError(err_body)
         
-    def get_az_table_data(self):
+    def get_az_table_data(self, url):
 
         '''Returns a 2D list containing the user details within the inner array'''
 
-        response = requests.get(url=Link.USERS_TABLE_URL, headers=self.header)
+        response = requests.get(url=url, headers=self.header)
 
         try:
             data = [tuple(info) for object_info in response.json()['value'] for info in object_info['values']]
@@ -69,15 +70,16 @@ class SyncUsers(TaskDaemon):
         session = Session()
 
         # SECTION AZURE SIDE
-        az_table_data = self.get_az_table_data()
+        az_users_table_data = self.get_az_table_data(Link.USERS_TABLE_URL)
 
-        az_df = pd.DataFrame(
-            data=az_table_data, 
-            columns=["name", "alias", "number", "dept", "reporting_officer_name", "access"],
+        az_users_df = pd.DataFrame(
+            data=az_users_table_data, 
+            columns=["name", "alias", "number", "dept", "reporting_officer", "appointment", "access"],
             dtype='string'
         )
 
-        az_df = self.clean_df(az_df)
+        az_users_df = self.clean_df(az_users_df)
+        az_users_df = az_users_df.drop(columns=['appointment'])
 
         # Set data types
         data_types = {
@@ -85,37 +87,41 @@ class SyncUsers(TaskDaemon):
             'alias': 'str',
             'number': 'int',
             'dept': 'str',
-            'reporting_officer_name': 'str',
+            'reporting_officer': 'str',
+            'lookup': 'str',
             'access': 'str',
         }
 
-        for column, dtype in data_types.items():
-            az_df[column] = az_df[column].astype(dtype)
+        for column in az_users_df.columns:
+            dtype = data_types.get(column)
+            if not dtype:
+                raise DaemonTaskError(f'{column} data type not found')
+            az_users_df[column] = az_users_df[column].astype(dtype)
 
         try:
-            az_df['number'] = az_df["number"].astype(int)
+            az_users_df['number'] = az_users_df["number"].astype(int)
         except:
-            az_df['temp_number'] = pd.to_numeric(az_df['number'], errors='coerce')
-            problematic_rows = az_df[az_df['temp_number'].isna()]
+            az_users_df['temp_number'] = pd.to_numeric(az_users_df['number'], errors='coerce')
+            problematic_rows = az_users_df[az_users_df['temp_number'].isna()]
             self.failed_users.extend(join_with_commas_and(problematic_rows['name'].tolist()))
             raise Exception
 
-        az_df['is_global_admin'] = (az_df['access'] == 'GLOBAL')
-        az_df['is_dept_admin'] = (az_df['access'] == 'DEPT')
-        # az_df['is_global_admin'] = az_df['is_global_admin'].astype('bool')
-        # az_df['is_dept_admin'] = az_df['is_dept_admin'].astype('bool')
-        az_df['is_active'] = True
+        az_users_df['is_global_admin'] = (az_users_df['access'] == 'GLOBAL')
+        az_users_df['is_dept_admin'] = (az_users_df['access'] == 'DEPT')
+        # az_users_df['is_global_admin'] = az_users_df['is_global_admin'].astype('bool')
+        # az_users_df['is_dept_admin'] = az_users_df['is_dept_admin'].astype('bool')
+        az_users_df['is_active'] = True
 
-        az_users = az_df[USER_COLS].copy() # need az_df for reporting officer later
+        az_users = az_users_df[USER_COLS].copy() # need az_df for reporting officer later
         
 
         db_df = pd.read_sql(session.query(User).statement, session.bind)
         db_users = db_df[[*USER_COLS, 'id']].copy()
 
-        # self.logger.info(f"azure users: {az_users}")
-        # self.logger.info(f"db_users users: {db_users}")
-        # self.logger.info(f"az_users columns: {az_users.columns}")
-        # self.logger.info(f"db_users columns: {db_users.columns}")
+        self.logger.info(f"azure users: {az_users}")
+        self.logger.info(f"db_users users: {db_users}")
+        self.logger.info(f"az_users columns: {az_users.columns}")
+        self.logger.info(f"db_users columns: {db_users.columns}")
 
         self.logger.info("checking for exact match")
 
@@ -159,9 +165,11 @@ class SyncUsers(TaskDaemon):
             self.logger.info(f"Old user IDs: {old_user_ids}")
 
             session.bulk_update_mappings(User, [
-                {'id': user_id, 'is_active': False, 'reporting_officer_id': None }
+                {'id': user_id, 'is_active': False }
                 for user_id in old_user_ids.values
             ])
+
+            session.query(Lookup).filter(Lookup.user_id.in_(old_user_ids.values)).delete(synchronize_session=False)
 
             session.bulk_update_mappings(User, [
                 {'id': user_id, 'alias': alias, 'dept': dept, 'is_global_admin': is_global_admin, 'is_dept_admin': is_dept_admin, 'is_active': True }
@@ -176,55 +184,87 @@ class SyncUsers(TaskDaemon):
             session.commit()
 
         # map the Reporting Officers
-        az_ro_lookup = az_df[['name', 'reporting_officer_name']].copy()
-        db_ro_lookup = pd.read_sql(session.query(User.name, User.id, User.reporting_officer_id).filter(User.is_active == True).statement, session.bind)
+        az_lookup_table_data = self.get_az_table_data(Link.LOOKUP_TABLE_URL)
 
-        name_to_id_map = dict(zip(db_ro_lookup['name'], db_ro_lookup['id']))
-        az_ro_lookup['reporting_officer_id'] = az_ro_lookup['reporting_officer_name'].map(name_to_id_map)
-        az_ro_lookup['id'] = az_ro_lookup['name'].map(name_to_id_map)
+        az_ro_df = az_users_df.loc[
+            (~az_users_df['reporting_officer'].isnull()) & (az_users_df['reporting_officer'] != ''),
+            ['name', 'reporting_officer']
+        ].rename(columns={'reporting_officer': 'lookup'})
 
-        az_ro_lookup = az_ro_lookup[['id', 'reporting_officer_id']]
-        db_ro_lookup = db_ro_lookup[['id', 'reporting_officer_id']]
+        self.logger.info(f"ro lookups: {az_ro_df}")
 
-        az_ro_lookup = az_ro_lookup.where(pd.notna(az_ro_lookup), None) # Replace NaN values with None
-        db_ro_lookup = db_ro_lookup.where(pd.notna(db_ro_lookup), None)
+        az_non_ro_lookup_df = pd.DataFrame(
+            data=az_lookup_table_data, 
+            columns=["name", "lookup"],
+            dtype='string'
+        )
 
-        # self.logger.info(f"az_ro_lookup: {az_ro_lookup}")
-        # self.logger.info(f"db_ro_lookup: {db_ro_lookup}")
+        self.logger.info(f"non ro lookups: {az_non_ro_lookup_df}")
+
+        az_lookup_df = pd.merge(
+            az_ro_df,
+            az_non_ro_lookup_df,
+            how='outer',
+            indicator=True
+        )
+
+        self.logger.info(f"merged lookups: {az_lookup_df}")
+
+        az_lookup_df['is_reporting_officer'] = az_lookup_df['_merge'].map({
+            'both': True,
+            'left_only': True,
+            'right_only': False
+        })
+        az_lookup_df.drop(columns=['_merge'], inplace=True)
+
+        db_mapping_df = pd.read_sql(session.query(User.name, User.id).filter(User.is_active == True).statement, session.bind)
+        name_to_id_map = dict(zip(db_mapping_df['name'], db_mapping_df['id']))
+        az_lookup_df['lookup_id'] = az_lookup_df['lookup'].map(name_to_id_map)
+        az_lookup_df['user_id'] = az_lookup_df['name'].map(name_to_id_map)
+        
+        db_lookup_df = pd.read_sql(session.query(Lookup.id, Lookup.user_id, Lookup.lookup_id, Lookup.is_reporting_officer).statement, session.bind)
+
+        az_lookup_df = az_lookup_df[['user_id', 'lookup_id', 'is_reporting_officer']]
+        db_lookup_df = db_lookup_df[['id', 'user_id', 'lookup_id', 'is_reporting_officer']]
+
+        az_lookup_df = az_lookup_df.dropna(subset=['user_id', 'lookup_id'])
+        az_lookup_df = az_lookup_df.where(pd.notna(az_lookup_df), None) # Replace NaN values with None
+        db_lookup_df = db_lookup_df.where(pd.notna(db_lookup_df), None)
+
+        self.logger.info(f"az_lookup_df: {az_lookup_df}")
+        self.logger.info(f"db_lookup_df: {db_lookup_df}")
         self.logger.info("Checking exact match for RO")
 
         # SECTION check for exact match
-        if not self.check_for_exact_match(az_ro_lookup, db_ro_lookup):
+        if not self.check_for_exact_match(az_lookup_df, db_lookup_df.drop(columns=['id'])):
 
             self.logger.info("No exact match for RO")
 
             merged_lookups = pd.merge(
-                az_ro_lookup, 
-                db_ro_lookup,
-                how="outer", 
+                az_lookup_df, 
+                db_lookup_df,
+                on=['user_id', 'lookup_id', 'is_reporting_officer'],
+                how="outer",
                 indicator=True,
             )
 
             self.logger.info(f"Lookups: {merged_lookups}")
 
-            old_lookup_user_ids = merged_lookups.loc[merged_lookups['_merge'] == 'right_only', 'id']
-            new_lookups = merged_lookups.loc[merged_lookups['_merge'] == 'left_only']
+            old_lookup_records = merged_lookups.loc[merged_lookups['_merge'] == 'right_only', 'id']
+            new_lookups = merged_lookups.loc[merged_lookups['_merge'] == 'left_only'].drop(columns=['id', '_merge'])
 
             new_lookup_tuples = [tuple(new_lookup) for new_lookup in new_lookups.values]
 
             self.logger.info(f"New lookups: {new_lookup_tuples}")
-            self.logger.info(f"DB lookups: {old_lookup_user_ids}")
+            self.logger.info(f"Old lookups: {old_lookup_records}")
 
-            session.bulk_update_mappings(User, [
-                {'id': user_id, 'reporting_officer_id': None }
-                for user_id in old_lookup_user_ids
+            session.query(Lookup).filter(Lookup.id.in_(old_lookup_records.values)).delete(synchronize_session=False)
+
+            session.bulk_insert_mappings(Lookup, [
+                {'id': shortuuid.ShortUUID().random(length=8).upper(), 'user_id': user_id, 'lookup_id': lookup_id, 'is_reporting_officer': is_reporting_officer }
+                for user_id, lookup_id, is_reporting_officer in new_lookup_tuples
             ])
 
-            session.bulk_update_mappings(User, [
-                {'id': user_id, 'reporting_officer_id': reporting_officer_id }
-                for user_id, reporting_officer_id, _ in new_lookup_tuples
-            ])
-            
             session.commit()
 
             self.logger.info("Updated RO")

@@ -63,8 +63,8 @@ def setup_azure():
 
     try:
         job_no = Job.create_job(JobType.DAEMON)
-        # tasks_to_run = [DaemonTaskType.ACQUIRE_TOKEN, DaemonTaskType.SYNC_USERS]
-        tasks_to_run = [DaemonTaskType.ACQUIRE_TOKEN, DaemonTaskType.SYNC_USERS, DaemonTaskType.SYNC_LEAVES]
+        tasks_to_run = [DaemonTaskType.ACQUIRE_TOKEN, DaemonTaskType.SYNC_USERS]
+        # tasks_to_run = [DaemonTaskType.ACQUIRE_TOKEN, DaemonTaskType.SYNC_USERS, DaemonTaskType.SYNC_LEAVES]
         job_scheduler.add_to_queue(item_id=job_no, payload=tasks_to_run)
         session.commit()
         logging.info("Added daemon job")

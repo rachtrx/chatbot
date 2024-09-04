@@ -50,11 +50,11 @@ class Patterns:
     MONTH_FIRST_PATTERN = MONTH_PATTERN + r'\s*' + DATE_PATTERN
 
     START_DATE_PATTERN = re.compile(
-        r'(' + START_PREFIXES + ')\s(' + DATE_FIRST_PATTERN + r')',
+        r'(' + START_PREFIXES + ')\s*(' + DATE_FIRST_PATTERN + r')',
         re.IGNORECASE
     )
     END_DATE_PATTERN = re.compile(
-        r'(' + END_PREFIXES + ')\s(' + DATE_FIRST_PATTERN + r')',
+        r'(' + END_PREFIXES + ')\s*(' + DATE_FIRST_PATTERN + r')',
         re.IGNORECASE
     )
 
