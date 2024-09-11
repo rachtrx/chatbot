@@ -36,6 +36,8 @@ from models.jobs.base.utilities import set_user_state, check_user_state, current
 
 from models.jobs.daemon.constants import DaemonTaskType
 
+from models.jobs.leave.constants import AM_HOUR, PM_HOUR
+
 # from es.manage import loop_through_files, create_index
 
 # logger = logging.getLogger('sqlalchemy.engine.Engine')
@@ -63,7 +65,7 @@ def setup_azure():
 
     try:
         job_no = Job.create_job(JobType.DAEMON)
-        tasks_to_run = [DaemonTaskType.ACQUIRE_TOKEN, DaemonTaskType.SYNC_USERS]
+        tasks_to_run = [DaemonTaskType.ACQUIRE_TOKEN, DaemonTaskType.SYNC_USERS, DaemonTaskType.SEND_PM_REPORT]
         # tasks_to_run = [DaemonTaskType.ACQUIRE_TOKEN, DaemonTaskType.SYNC_USERS, DaemonTaskType.SYNC_LEAVES]
         job_scheduler.add_to_queue(item_id=job_no, payload=tasks_to_run)
         session.commit()
@@ -109,12 +111,13 @@ def execute():
         tasks_to_run.append(DaemonTaskType.ACQUIRE_TOKEN)
     
     if cur_datetime.weekday() not in [5, 6]:
-        if minute == 0 and cur_datetime.hour == 9: # bool
-            tasks_to_run.append(DaemonTaskType.SEND_REPORT)
+        if minute == 0 and cur_datetime.hour == AM_HOUR: # bool
+            tasks_to_run.append(DaemonTaskType.SEND_AM_REPORT)
             tasks_to_run.append(DaemonTaskType.CLEAN_TASKS)
-            tasks_to_run.append(DaemonTaskType.SEND_REMINDER)
-        if minute == 0 and cur_datetime.hour == 17:
-            tasks_to_run.append(DaemonTaskType.AUTO_APPROVE)
+
+    if cur_datetime.weekday() not in [4, 5]:
+        if minute == 0 and cur_datetime.hour == PM_HOUR:
+            tasks_to_run.append(DaemonTaskType.SEND_PM_REPORT)
 
     if len(tasks_to_run) == 0:
         return
@@ -130,9 +133,9 @@ def enqueue_message():
     session = Session()
     user = message = None
     try:
-        # for key in request.values:
-        #     logging.info(f"{key}: {request.values[key]}")
-        # logging.info("end message")
+        for key in request.values:
+            logging.info(f"{key}: {request.values[key]}")
+        logging.info("end message")
 
         from_no = request.form.get("From")
         logging.info(f"From no: {from_no}")
@@ -199,7 +202,7 @@ def enqueue_message():
             MessageKnown.send_msg(err_msg)
     finally:
         logging.info("Message Enqueued, ready to accept new HTTP Requests")
-        session.close()
+        Session.remove()
         return Response(status=200)
 
 @app.route("/chatbot/message_callback", methods=['POST'])
@@ -235,7 +238,7 @@ def sms_reply_callback():
         logging.error(traceback.format_exc())
 
     finally:
-        session.close()
+        Session.remove()
         return Response(status=200)
 
 logging.info("Setting up Azure")

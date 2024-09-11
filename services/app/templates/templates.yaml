@@ -1,0 +1,529 @@
+# after creating the templates, submit to whatsapp for approval through twilio. if there are errors, contact support to request for an appeal. whatsapp has strict guidelines that certain templates in here may violate (mostly due to too many variables). However, I managed to appeal for a number of them.
+
+templates:
+
+  # - friendly_name: "select_leave_type_1"
+  #   language: "en"
+  #   types:
+  #     twilio/list-picker:
+  #       body: "Leave Types (A-I)"
+  #       button: "Select"
+  #       items:
+  #         - item: "Adoption"
+  #           id: "LT_1"
+  #         - item: "Annual"
+  #           id: "LT_2"
+  #         - item: "Birthday/Wedding"
+  #           id: "LT_3"
+  #         - item: "Childcare"
+  #           id: "LT_4"
+  #         - item: "Childcare w MC"
+  #           id: "LT_5"
+  #         - item: "Compassionate"
+  #           id: "LT_6"
+  #         - item: "Convocation"
+  #           description: "of Staff and Family Members"
+  #           id: "LT_7"
+  #         - item: "Examination"
+  #           id: "LT_8"
+  #         - item: "Hospitalisation"
+  #           id: "LT_9"
+  #         - item: "Infant Care"
+  #           id: "LT_10"
+
+  # - friendly_name: "select_leave_type_2"
+  #   language: "en"
+  #   types:
+  #     twilio/list-picker:
+  #       body: "Leave Types (M-P)"
+  #       button: "Select"
+  #       items:
+  #         - item: "Marriage"
+  #           id: "LT_11"
+  #         - item: "Marriage (Family)"
+  #           id: "LT_12"
+  #         - item: "Maternity"
+  #           description: "Leaveiversary"
+  #           id: "LT_13"
+  #         - item: "NS Leave"
+  #           id: "LT_14"
+  #         - item: "No Pay Leave (NPL)"
+  #           id: "LT_15"
+  #         - item: "NS Camp Visitation"
+  #           id: "LT_16"
+  #         - item: "Off-in-lieu"
+  #           id: "LT_17"
+  #         - item: "On Course"
+  #           id: "LT_18"
+  #         - item: "Parent Care"
+  #           id: "LT_19"
+  #         - item: "Paternity"
+  #           id: "LT_20"
+
+  # - friendly_name: "select_leave_type_3"
+  #   language: "en"
+  #   types:
+  #     twilio/list-picker:
+  #       body: "Leave Types (P-W)"
+  #       button: "Select"
+  #       items:
+  #         - item: "Prof. Dev. Leave (PDL)"
+  #           id: "LT_21"
+  #         - item: "HDB Purchase"
+  #           id: "LT_22"
+  #         - item: "Representational"
+  #           id: "LT_23"
+  #         - item: "Overseas Leave"
+  #           id: "LT_24"
+  #         - item: "Shared Parental Leave"
+  #           id: "LT_25"
+  #         - item: "Sick Leave"
+  #           id: "LT_26"
+  #         - item: "Special Leave"
+  #           id: "LT_27"
+  #         - item: "Time-off Application"
+  #           id: "LT_28"
+  #         - item: "Urgent Private Leave"
+  #           id: "LT_29"
+  #         - item: "Work From Home"
+  #           id: "LT_30"
+          
+
+#   - friendly_name: "leave_confirmation_check"
+#       language: "en"
+#       variables:
+#         "1": "Test_Ref"
+#         "2": "Test_User"
+#         "3": "Test_Type"
+#         "4": "Test_Duration"
+#         "5": "Test_Dates"
+#         "6": "CONFIRM"
+#         "7": "CANCEL"
+#       types:
+#         twilio/quick-reply:
+#           body: "Ref: {{1}}\n\nHi {{2}}, Kindly Confirm the details of your {{3}} leave:\n\nDate(s): {{4}}.\nDuration: {{5}} days\n\nOtherwise, if there are errors, please Cancel and resend the message.\n\nYou can also Cancel the leave after it is confirmed if you are returning to school early. Thank you!"
+#           actions:
+#             - title: "Confirm"
+#               id: "{{6}}"
+#             - title: "Cancel"
+#               id: "{{7}}"
+
+#   - friendly_name: "leave_confirmation_check_1_issue"
+#       language: "en"
+#       variables:
+#         "1": "Test_Ref"
+#         "2": "Test_User"
+#         "3": "Test_Issue"
+#         "4": "Test_Type"
+#         "5": "Test_Duration"
+#         "6": "Test_Dates"
+#         "7": "CONFIRM"
+#         "8": "CANCEL"
+#       types:
+#         twilio/text:
+#           body: "Ref: {{1}}\n\nHi {{2}},  here is some information to take note:\n- {{3}}.\n\nPlease Confirm the details of your {{4}} leave.\n\nDate(s): {{5}}.\nDuration: {{6}} day(s).\n\nOtherwise, if there are errors, please Cancel and resend the message.\n\nYou can also Cancel the leave after it is confirmed if you are returning to school early. Thank you!"
+#           actions:
+#             - title: "Confirm"
+#               id: "{{7}}"
+#             - title: "Cancel"
+#               id: "{{8}}"
+
+#   - friendly_name: "leave_confirmation_check_2_issues"
+#       language: "en"
+#       variables:
+#         "1": "Test_Ref"
+#         "2": "Test_User"
+#         "3": "Test_Issue_1"
+#         "4": "Test_Issue_2"
+#         "5": "Test_Type"
+#         "6": "Test_Duration"
+#         "7": "Test_Dates"
+#         "8": "CONFIRM"
+#         "9": "CANCEL"
+#       types:
+#         twilio/text:
+#           body: "Ref: {{1}}\n\nHi {{2}},  here is some information to take note:\n- {{3}}.\n- {{4}}.\n\nPlease Confirm the details of your {{5}} leave.\n\nDate(s): {{6}}.\nDuration: {{7}} day(s).\n\nOtherwise, if there are errors, please Cancel and resend the message.\n\nYou can also Cancel the leave after it is confirmed if you are returning to school early. Thank you!"
+#           actions:
+#             - title: "Confirm"
+#               id: "{{8}}"
+#             - title: "Cancel"
+#               id: "{{9}}"
+
+#   - friendly_name: "leave_confirmation_check_3_issues"
+#       language: "en"
+#       variables:
+#         "1": "Test_Ref"
+#         "2": "Test_User"
+#         "3": "Test_Issue_1"
+#         "4": "Test_Issue_2"
+#         "5": "Test_Issue_3"
+#         "6": "Test_Type"
+#         "7": "Test_Duration"
+#         "8": "Test_Dates"
+#         "9": "CONFIRM"
+#         "10": "CANCEL"
+#       types:
+#         twilio/text:
+#           body: "Ref: {{1}}\n\nHi {{2}},  here is some information to take note:\n- {{3}}.\n- {{4}}.\n- {{5}}.\n\nPlease Confirm the details of your {{6}} leave.\n\nDate(s): {{7}}.\nDuration: {{8}} day(s).\n\nOtherwise, if there are errors, please Cancel and resend the message.\n\nYou can also Cancel the leave after it is confirmed if you are returning to school early. Thank you!"
+#           actions:
+#             - title: "Confirm"
+#               id: "{{9}}"
+#             - title: "Cancel"
+#               id: "{{10}}"
+
+#   - friendly_name: "leave_follow_up_confirm"
+#     language: "en"
+#     variables:
+#       "1": "Test_Ref"
+#       "2": "Test_Dates"
+#     types:
+#       twilio/text:
+#         body: "Ref No: {{1}}\n\nLeave on {{2}} has been successfully confirmed."
+
+#   - friendly_name: "leave_notify_confirm"
+#     language: "en"
+#     variables:
+#       "1": "Test_User"
+#       "2": "Test_User"
+#       "3": "Test_Type"
+#       "4": "Test_Duration"
+#       "5": "Test_Dates"
+#     types:
+#       twilio/text:
+#         body: "Hi {{1}}! This is to inform you that {{2}} will be on {{3}} leave for {{4}} on {{5}}."
+
+#   - friendly_name: "leave_follow_up_cancel"
+#     language: "en"
+#     variables:
+#       "1": "Test_Ref"
+#       "2": "Test_Dates"
+#     types:
+#       twilio/text:
+#         body: "Ref No: {{1}}\n\nLeave on {{2}} has been successfully cancelled."
+
+  
+#   - friendly_name: "leave_notify_cancel"
+#     language: "en"
+#     variables:
+#       "1": "Test_User"
+#       "2": "Test_User"
+#       "3": "Test_Type"
+#       "4": "Test_Dates"
+#     types:
+#       twilio/text:
+#         body: "Hi {{1}}, {{2}} has cancelled their {{3}} on {{4}}."
+
+#   - friendly_name: "send_message_to_leaders"
+#     language: "en"
+#     variables:
+#       "1": "Test_User"
+#       "2": "Test_Date"
+#       "3": "Test_Users"
+#       "4": "Test_Users"
+#       "5": "Test_Users"
+#       "6": "Test_Users"
+#       "7": "Test_Users"
+#       "8": "Test_Users"
+#       "9": "Test_Users"
+#       "10": "Test_Users"
+#     types:
+#       twilio/text:
+#         body: "Good Morning {{1}}, the following staff are on leave today ({{2}}) for each department:\n\n*Corporate*{{3}}.\n\n*ICT*{{4}}.\n\n*AP*{{5}}.\n\n*Voc Ed*{{6}}.\n\n*AM Teachers*{{7}}.\n\n*PM Teachers*{{8}}.\n\n*Grand Total: {{9}}.*\n\nHave a great day ahead!"
+
+
+  # - friendly_name: "send_message_to_leaders_all_present"
+  #   language: "en"
+  #   variables:
+  #     "1": "Test_User"
+  #     "2": "Test_Date"
+  #     "3": "No other errors detected"
+  #   types:
+  #     twilio/text:
+  #       body: "Good Morning {{1}}, all staff are present today, {{2}}.\n\n{{3}}. Thank you and have a nice day!"
+
+
+  # - friendly_name: "send_message_to_hods"
+  #   language: "en"
+  #   variables:
+  #     "1": "Test_Ref"
+  #     "2": "Test_User"
+  #     "3": "Test_User"
+  #     "4": "Test_Dates"
+  #     "5": "No other errors detected"
+  #   types:
+  #     twilio/text:
+  #       body: "Good {{1}}, the following staff from the {{2}} department are on leave {{3}}: {{4}}.\n\n{{5}}. Thank you and have a great day ahead!"
+
+  # - friendly_name: "send_message_to_hods_all_present"
+  #   language: "en"
+  #   variables:
+  #     "1": "Test_User"
+  #     "2": "Test_Dept"
+  #     "3": "Test_Date"
+  #     "4": "No other errors detected"
+  #   types:
+  #     twilio/text:
+  #       body: "Good {{1}}, all staff from {{2}} present in school {{3}}.\n\n{{4}}. Thank you and have a great day ahead!"
+
+#   - friendly_name: "forward_messages_callback"
+#     language: "en"
+#     variables:
+#       "1": "Test_Jobtype"
+#       "2": "Test_Success"
+#       "3": "Test_Failed"
+#       "4": "Test_Unknown"
+#     types:
+#       twilio/text:
+#         body: "The following personnel have been notified about {{1}}.\n\nSuccess: {{2}}.\nFailed: {{3}}.\nUnknown: {{4}}."
+
+#   - friendly_name: "sharepoint_mc_sync_notify"
+#     language: "en"
+#     variables:
+#       "1": "Test_Action"
+#       "2": "Test_Outcome"
+#       "3": "Test_Dates"
+#     types:
+#       twilio/text:
+#         body: "{{1}} of the following dates on Sharepoint was {{2}}: {{3}}."
+
+  
+  # - friendly_name: "send_system_status"
+  #   language: "en"
+  #   variables:
+  #     "1": "Test_Times"
+  #     "2": "Test_Times"
+  #     "3": "Test_Times"
+  #     "4": "Test_Times"
+  #     "5": "Test_Times"
+  #     "6": "Test_Times"
+  #   types:
+  #     twilio/text:
+  #       body: "System statuses (Last Successful Run / Last Run):\n\nUpdated MSAL Token: {{1}}.\n\nSharepoint Sync Users: {{2}}.\n\nSharepoint Sync MC Records: {{3}}.\n\nSent Morning Report: {{4}}.\n\nSent Evening Report: {{5}}.\n\nClean System Tasks: {{6}}"
+
+#   - friendly_name: "send_system_health_error"
+#     language: "en"
+#     variables:
+#       "1": "Test_Task"
+#       "2": "Test_Info"
+#       "3": "Test_User"
+#       "4": "Test_Dates"
+#     types:
+#       twilio/text:
+#         body: "System Error:\n\nFailed Task: {{1}}.\nAdditional Info: {{2}}."
+
+#   - friendly_name: "user_not_found_error"
+#     language: "en"
+#     types:
+#       twilio/text:
+#         body: "I'm sorry, your contact is not in our database. Please check with ICT/HR and try again in an hour."
+
+#   - friendly_name: "unknown_error"
+#     language: "en"
+#     types:
+#       twilio/text:
+#         body: "Really sorry, you caught error that we did find during development, please let us know!"
+
+  # SECTION ACKNOWLEDGEMENT/APPROVAL period (scraped by school leaders)
+
+  # - friendly_name: "authorisation_reply_all_approved"
+  #   language: "en"
+  #   variables:
+  #     "1": "Test_Ref"
+  #     "2": "Test_Dates"
+  #     "3": "Test_Decision"
+  #   types:
+  #     twilio/text:
+  #       body: "Ref No: {{1}}\n\nLeave on {{2}} has been {{3}}.\n\nYou may submit the request to Tigernix."
+
+  # - friendly_name: "authorisation_reply_partial"
+  #   language: "en"
+  #   variables:
+  #     "1": "Test_Ref"
+  #     "2": "Test_Dates"
+  #     "3": "Test_Decision"
+  #     "4": "Test_Dates"
+  #     "5": "Test_Decision"
+  #   types:
+  #     twilio/text:
+  #       body: "Ref No: {{1}}\n\nLeave on {{2}} has been {{3}}.\nLeave on {{4}} is currently pending {{5}}."
+  
+  # - friendly_name: "authorisation_reply_all_pending"
+  #   language: "en"
+  #   variables:
+  #     "1": "Test_Ref"
+  #     "2": "Test_Dates"
+  #     "3": "Test_Decision"
+  #   types:
+  #     twilio/text:
+  #       body: "Ref No: {{1}}\n\nLeave on {{2}} is currently pending {{3}}."
+
+  # - friendly_name: "leave_notify_approve"
+  #   language: "en"
+  #   variables:
+  #     "1": "Test_User"
+  #     "2": "Test_User"
+  #     "3": "Test_Type"
+  #     "4": "Test_Duration"
+  #     "5": "Test_Dates"
+  #     "6": "Test_User"
+  #   types:
+  #     twilio/text:
+  #       body: "Hi {{1}}, {{2}} will be on {{3}} leave for {{4}} on {{5}}.\n\nApproved by: {{6}}."
+
+  # - friendly_name: "leave_notify_reject"
+  #   language: "en"
+  #   variables:
+  #     "1": "Test_User"
+  #     "2": "Test_User"
+  #     "3": "Test_Dates"
+  #     "4": "Test_User"
+  #   types:
+  #     twilio/text:
+  #       body: "Hi {{1}}, {{2}} has rejected the leave application on {{3}} by {{4}}."
+
+  # - friendly_name: "leave_authorisation_reminder"
+  # language: "en"
+  # variables:
+  #   "1": "Test_User"
+  #   "2": "Test_Decision"
+  #   "3": "Test_Dates"
+  #   "4": "Test_Decision"
+  #   "5": "ACKNOWLEDGE"
+  #   "6": "REJECT"
+  # types:
+  #   twilio/quick-reply:
+  #     body: "Hi {{1}}, this is a reminder to {{2}} leave request on {{3}}, otherwise it will be automatically {{4}}. Thank you!"
+  #     actions:
+  #       - title: "Acknowledge"
+  #         id: "{{5}}"
+  #       - title: "Reject"
+  #         id: "{{6}}"
+          
+  # - friendly_name: "send_auto_approve_status"
+  #   language: "en"
+  #   variables:
+  #     "1": "Test_User"
+  #     "2": "Test_Count"
+  #     "3": "Test_Count"
+  #     "4": "Test_Count"
+  #   types:
+  #     twilio/text:
+  #       body: "Hi {{1}}, {{2}} leave records were detected for Auto Approval.\n\n{{3}} were successful.\n{{4}} were unsuccessful."
+
+  # - friendly_name: "leave_follow_up_approved"
+  #   language: "en"
+  #   variables:
+  #     "1": "Test_Ref"
+  #     "2": "Test_User"
+  #     "3": "Test_Dates"
+  #     "4": "Test_Action"
+  #   types:
+  #     twilio/text:
+  #       body: "Ref No: {{1}}\n\nHi {{2}}, your leave on {{3}} has been {{4}}. You may apply for leave on Tigernix."
+
+  # - friendly_name: "leave_follow_up_rejected"
+  #   language: "en"
+  #   variables:
+  #     "1": "Test_Ref"
+  #     "2": "Test_User"
+  #     "3": "Test_User"
+  #     "4": "Test_Dates"
+  #   types:
+  #     twilio/text:
+  #       body: " Ref No: {{1}}\n\nHi {{2}}, {{3}} has rejected your leave on {{4}}. Please contact them and resubmit when it is resolved. Thank you."
+
+
+  # - friendly_name: "leave_reminder_failed"
+  #   language: "en"
+  #   variables:
+  #     "1": "Test_Ref"
+  #     "2": "Test_Decision"
+  #     "3": "Test_Decision"
+  #     "4": "Test_Date"
+  #   types:
+  #     twilio/text:
+  #       body: "Ref: {{1}}\n\nA leave {{2}} reminder to your RO has failed because they were missing from the database. Please inform school HR/ICT, thank you!\n\nYou can wait for the approval or Cancel the leave. Otherwise, it will be automatically {{3}} at {{4}}."
+
+  # - friendly_name: "leave_authorisation_request"
+  #   language: "en"
+  #   variables:
+  #     "1": "Test_User_1"
+  #     "2": "Test_User_2"
+  #     "3": "Test_Type"
+  #     "4": "Test_Dates"
+  #     "5": "Test_Duration"
+  #     "6": "Test_Users"
+  #     "7": "ACKNOWLEDGE"
+  #     "8": "REJECT"
+  #   types:
+  #     twilio/quick-reply:
+  #       body: "Hi {{1}}, {{2}} is requesting {{3}} leave on the following dates: {{4}} ({{5}}).\n\nBy approving, the following users will be notified: {{6}}.\n\nOtherwise, Please reject the request. Thank you!"
+  #       actions:
+  #       - title: "Acknowledge"
+  #         id: "{{7}}"
+  #       - title: "Reject"
+  #         id: "{{8}}"
+
+  # - friendly_name: "leave_authorisation_request_late"
+  #   language: "en"
+  #   variables:
+  #     "1": "Test_User_1"
+  #     "2": "Test_User_2"
+  #     "3": "Test_Type"
+  #     "4": "Test_Dates"
+  #     "5": "Test_Duration"
+  #     "6": "Test_Dates"
+  #     "7": "Test_Dates"
+  #     "8": "Test_Users"
+  #     "9": "ACKNOWLEDGE"
+  #     "10": "REJECT"
+  #   types:
+  #     twilio/quick-reply:
+  #       body: "Hi {{1}}, {{2}} will be on {{3}} leave on {{4}} ({{5}}),\n\nPlease approve the request for the remaining dates: {{6}} ({{7}}).\n\nBy approving, the following users will be notified: {{8}}.\nOtherwise, Please reject the request. Thank you!"
+  #       actions:
+  #       - title: "Acknowledge"
+  #         id: "{{9}}"
+  #       - title: "Reject"
+  #         id: "{{10}}"
+
+  # - friendly_name: "select_leave_type"
+  #   language: "en"
+  #   types:
+  #     twilio/list-picker:
+  #       body: "Leave Type could not be detected. Please select one of the options from this list, thank you!"
+  #       button: "Select Leave Type"
+  #       items:
+  #         - item: "Medical"
+  #           id: "1"
+  #         - item: "Childcare"
+  #           id: "2"
+  #         - item: "Parentcare"
+  #           id: "3"
+  #         - item: "Hospitalisation"
+  #           id: "4"
+  #         - item: "Compassionate"
+  #           id: "5"
+  #         - item: "Maternity"
+  #           id: "6"
+  #         - item: "Paternity"
+  #           id: "7"
+  #         - item: "Birthday"
+  #           id: "8"
+  #         - item: "Wedding"
+  #           id: "9"
+  #         - item: "Others (Annual)"
+  #           id: "10"
+
+  # - friendly_name: "send_system_status"
+  #     language: "en"
+  #     variables:
+  #       "1": "Test_Times"
+  #       "2": "Test_Times"
+  #       "3": "Test_Times"
+  #       "4": "Test_Times"
+  #       "5": "Test_Times"
+  #       "6": "Test_Times"
+  #       "7": "Test_Times"
+  #     types:
+  #       twilio/text:
+  #         body: "System statuses (Last Successful Run / Last Run):\n\nUpdated MSAL Token: {{1}}.\n\nSharepoint Sync Users: {{2}}.\n\nSharepoint Sync MC Records: {{3}}.\n\nSent Morning Report: {{4}}.\n\nSent Reminders: {{5}}.\n\nAuto Approvals: {{6}}.\n\nClean System Tasks: {{7}}"

@@ -5,10 +5,9 @@ from datetime import datetime, timedelta, date
 
 from models.users import User
 
-from models.jobs.base.constants import AuthorizedDecision
-from models.jobs.base.utilities import print_all_dates, current_sg_time, get_latest_date_past_hour, join_with_commas_and
+from models.jobs.base.utilities import print_all_dates, current_sg_time, get_latest_date_past_hour
 
-from models.jobs.leave.constants import Patterns, Time
+from models.jobs.leave.constants import Patterns, AM_HOUR, LeaveType
 
 def set_dates_str(dates, mark_late=False):
     logging.info(f"Dates to format: {dates}")
@@ -18,7 +17,7 @@ def set_dates_str(dates, mark_late=False):
         cur_date = current_sg_time().date()
         cur_date_str = cur_date.strftime('%d/%m/%Y')
 
-        if get_latest_date_past_hour() > cur_date:
+        if get_latest_date_past_hour(AM_HOUR) > cur_date:
             dates_str = re.sub(cur_date_str, cur_date_str + ' (*LATE*)', dates_str)
 
     return dates_str
@@ -26,90 +25,27 @@ def set_dates_str(dates, mark_late=False):
 def weekday_count(dates):
     return sum(np.is_busday(d.strftime('%Y-%m-%d')) for d in dates)
 
-@User.loop_users # just need to pass in the user when calling get_approve_leave_cv
-def get_approve_leave_cv(relation, alias, leave_type, dates, mark_late=False, approver_alias=None):
-    '''LEAVE_NOTIFY_APPROVE_SID; The decorator is for SENDING MESSAGES TO ALL RELATIONS OF ONE PERSON'''
+@User.loop_users # just need to pass in the user when calling get_confirm_leave_cv
+def get_confirm_leave_cv(relation, alias, leave_type, dates, mark_late=False):
+    '''LEAVE_NOTIFY_CONFIRM_SID; The decorator is for SENDING MESSAGES TO ALL RELATIONS OF ONE PERSON'''
 
     duration = str(len(dates))
 
     return {
         '1': relation.alias,
         '2': alias,
-        '3': leave_type.lower(),
+        '3': LeaveType.convert_attr_to_text(leave_type),
         '4': f"{duration} {'weekday' if duration == 1 else 'weekdays'}",
-        '5': set_dates_str(dates, mark_late),
-        '6': approver_alias if approver_alias else 'Automatic'
+        '5': set_dates_str(dates, mark_late)
     }
 
-@User.loop_users # just need to pass in the user when calling get_approve_leave_cv
-def get_cancel_leave_cv(relation, alias, is_approved, dates):
+@User.loop_users # just need to pass in the user when calling get_confirm_leave_cv
+def get_cancel_leave_cv(relation, alias, dates):
     return {
         '1': relation.alias,
         '2': alias,
-        '3': 'leave' if is_approved else 'leave request',
+        '3': 'leave',
         '4': set_dates_str(dates)
-    }
-
-@User.loop_users # just need to pass in the user when calling get_approve_leave_cv
-def get_reject_leave_cv(relation, approver_alias, dates, alias):
-
-    return {
-        '1': relation.alias,
-        '2': approver_alias,
-        '3': set_dates_str(dates),
-        '4': alias
-    }
-
-@User.loop_users
-def get_authorisation_reminder_cv(relation, alias, leave_type, dates, deadline, mark_late=False):
-
-    return {
-        '1': relation.alias,
-        '2': f"acknowledge {alias}'s {leave_type.lower()}",
-        '3': set_dates_str(dates, mark_late),
-        '4': f"acknowledged {deadline} at {Time.AUTO_APPROVAL}",
-        '5': AuthorizedDecision.APPROVE,
-        '6': AuthorizedDecision.REJECT,
-    }
-
-@User.loop_users
-def get_authorisation_cv(relation, alias, leave_type, dates, relation_aliases, mark_late=False):
-    local_relation_aliases = relation_aliases.copy()
-    local_relation_aliases.remove(relation.alias)
-
-    duration = str(len(dates))
-
-    return {
-        '1': relation.alias,
-        '2': alias,
-        '3': leave_type.lower(),
-        '4': set_dates_str(dates, mark_late),
-        '5': f"{duration} {'weekday' if duration == 1 else 'weekdays'}",
-        '6': join_with_commas_and(local_relation_aliases) if len(local_relation_aliases) > 0 else "NIL",
-        '7': AuthorizedDecision.APPROVE,
-        '8': AuthorizedDecision.REJECT,
-    }
-
-
-@User.loop_users
-def get_authorisation_late_cv(relation, alias, leave_type, dates_approved, dates_to_authorise, relation_aliases, mark_late=False):
-    local_relation_aliases = relation_aliases.copy()
-    local_relation_aliases.remove(relation.alias)
-
-    duration_approved = str(len(dates_approved))
-    duration_to_authorise = str(len(dates_to_authorise))
-    
-    return {
-        '1': relation.alias,
-        '2': alias,
-        '3': leave_type.lower(),
-        '4': set_dates_str(dates_approved, mark_late),
-        '5': f"{duration_approved} {'weekday' if duration_approved == 1 else 'weekdays'}",
-        '6': set_dates_str(dates_to_authorise, mark_late),
-        '7': f"{str(duration_to_authorise)} {'day' if duration_to_authorise == 1 else 'days'}",
-        '8': join_with_commas_and(local_relation_aliases) if len(local_relation_aliases) > 0 else "NIL",
-        '9': AuthorizedDecision.APPROVE,
-        '10': AuthorizedDecision.REJECT,
     }
 
 ##################

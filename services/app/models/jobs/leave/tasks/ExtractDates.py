@@ -11,7 +11,7 @@ from models.jobs.base.constants import OutgoingMessageData
 from models.jobs.base.utilities import current_sg_time, print_all_dates, join_with_commas_and
 
 from models.jobs.leave.Task import TaskLeave
-from models.jobs.leave.constants import LeaveIssue, LeaveError, LeaveErrorMessage, LeaveTaskType, LeaveStatus
+from models.jobs.leave.constants import LeaveIssue, LeaveError, LeaveErrorMessage, LeaveTaskType, AM_HOUR
 from models.jobs.leave.utilities import duration_extraction, calc_start_end_date, named_month_extraction, named_ddmm_extraction, named_day_extraction, weekday_count
 from models.jobs.leave.LeaveRecord import LeaveRecord
 
@@ -246,13 +246,9 @@ class ExtractDates(TaskLeave):
             self.logger.info("duplicates but can be fixed")
             self.validation_errors.add(LeaveIssue.OVERLAP + print_all_dates(duplicate_dates))
         elif len(duplicate_dates) != 0:
-            if all(duplicate_record.leave_status == LeaveStatus.APPROVED for duplicate_record in duplicate_records):
-                err = LeaveErrorMessage.ALL_OVERLAPPING
-            else:
-                err = LeaveErrorMessage.SOME_OVERLAPPING
             self.logger.info("duplicates cannot be fixed")
             message = OutgoingMessageData(
-                body=err, 
+                body=LeaveErrorMessage.ALL_OVERLAPPING, 
                 job_no=self.job_no,
                 user_id=self.user_id,
             )
@@ -265,10 +261,9 @@ class ExtractDates(TaskLeave):
     
     def check_for_late(self):
         # the start date is now at least today, but we need to inform the user if it is already past 9am
-        if current_sg_time().date() in self.dates_to_update and current_sg_time().hour > 9:
+        # self.logger.info(f"Checking for late: {current_sg_time().date()}, {current_sg_time().hour}")
+        if current_sg_time().date() in self.dates_to_update and current_sg_time().hour >= AM_HOUR:
             self.validation_errors.add(LeaveIssue.LATE)
-
-    
 
 if __name__ == "__main__":
     sentence = input("Input a sentence")

@@ -93,7 +93,7 @@ for record in records:
             last_date = cur.fetchone()
             if last_date is None:
                 continue
-            task_type = 'CANCEL' if last_date.is_cancelled else 'CONFIRM' # NOT APPROVE
+            task_type = 'CANCEL' if last_date.is_cancelled else 'CONFIRM' # NOT
             new_id = shortuuid.ShortUUID().random(length=8).upper()
             cur.execute(
                 "INSERT INTO task_leave (id, type, job_no, created_at, status, user_id) VALUES (%s, %s, %s, %s, %s, %s)",
@@ -117,7 +117,7 @@ task_type_map = {
     'job_acq_token': 'ACQUIRE_TOKEN',
     'job_sync_users': 'SYNC_USERS',
     'job_sync_records': 'SYNC_LEAVES',
-    'job_am_report': 'SEND_REPORT'
+    'job_am_report': 'SEND_AM_REPORT'
 }
 
 current_job_no = None
@@ -306,7 +306,7 @@ for record in records:
     try:
         cur.execute(
             "INSERT INTO new_leave_records (id, job_no, date, sync_status, leave_status) VALUES (%s, %s, %s, %s, %s)",
-            (record.id, record.job_no, record.date, 'FAILED' if record.sync_status == 402 else 'COMPLETED', 'CANCELLED' if record.is_cancelled else 'APPROVED') 
+            (record.id, record.job_no, record.date, 'FAILED' if record.sync_status == 402 else 'COMPLETED', 'CANCELLED' if record.is_cancelled else 'CONFIRMED') 
         )
     except Exception as e:
         print(e)

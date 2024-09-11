@@ -8,7 +8,7 @@ from models.jobs.base.constants import Status
 from models.jobs.base.utilities import get_latest_date_past_hour, current_sg_time
 
 from models.jobs.leave.Job import JobLeave
-from models.jobs.leave.constants import LeaveStatus
+from models.jobs.leave.constants import LeaveStatus, AM_HOUR
 
 class LeaveRecord(db.Model):
 
@@ -34,7 +34,7 @@ class LeaveRecord(db.Model):
         self.leave_status = leave_status
 
     @classmethod
-    def get_all_leaves(cls, start_date=None, end_date=None, status=LeaveStatus.APPROVED):
+    def get_all_leaves(cls, start_date=None, end_date=None, status=LeaveStatus.CONFIRMED):
 
         from models.users import User
 
@@ -83,19 +83,18 @@ class LeaveRecord(db.Model):
             JobLeave.primary_user_id == leave_task.user_id,
             cls.date >= leave_task.start_date,
             cls.date <= leave_task.end_date,
-            cls.leave_status.in_([LeaveStatus.PENDING, LeaveStatus.APPROVED])
+            cls.leave_status == LeaveStatus.CONFIRMED,
         ).all()
 
         return duplicate_records
 
     @classmethod
-    def add_leaves(cls, job_no, dates, leave_status=LeaveStatus.PENDING): # RequestAuthorisation
+    def add_leaves(cls, job_no, dates, leave_status=LeaveStatus.CONFIRMED): # RequestAuthorisation
         session = Session()
         new_records = []
         for date in dates:
             new_record = cls(job_no=job_no, date=date, leave_status=leave_status)
-            if leave_status != LeaveStatus.PENDING:
-                new_record.sync_status = Status.PENDING
+            new_record.sync_status = Status.PENDING
             session.add(new_record)
             new_records.append(new_record)
         session.commit()
@@ -118,13 +117,13 @@ class LeaveRecord(db.Model):
         return dates
 
     @classmethod
-    def get_records(cls, job_no, statuses, past_9am=True):
+    def get_records(cls, job_no, statuses, past_hour=AM_HOUR):
         session = Session()
         query = session.query(cls).filter(cls.job_no == job_no)
 
-        # filter records based on 'past_9am'
-        if past_9am:
-            query = query.filter(cls.date >= get_latest_date_past_hour())
+        # filter records based on 'past_hour'
+        if past_hour:
+            query = query.filter(cls.date >= get_latest_date_past_hour(past_hour))
 
         # Conditionally filter records based on 'status'
         if statuses:

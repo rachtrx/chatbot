@@ -98,12 +98,12 @@ def current_sg_time(weekday_offset=0):
     
     return dt
 
-def get_latest_date_past_hour(hour=9, weekday_offset=0):
+def get_latest_date_past_hour(hour, weekday_offset=0):
     """
     Returns the latest date after a specified hour on the current or next weekday.
     
     Parameters:
-    hour (int): The hour to compare against. Default is 9.
+    hour (int): The hour to compare against.
     weekday_offset (int): The number of weekdays to offset. Default is 0.
     
     Returns:
@@ -239,6 +239,6 @@ def run_new_context(func):
                 raise
             finally:
                 logging.info(f" Closing session in new context: {id(session)}")
-                session.close()
+                Session.remove()
                 return result
     return wrapper

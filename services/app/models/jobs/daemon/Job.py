@@ -11,7 +11,7 @@ from models.jobs.base.constants import JobType, Status, ErrorMessage, MessageTyp
 from models.jobs.base.utilities import convert_utc_to_sg_tz
 
 from models.jobs.daemon.Task import TaskDaemon
-from models.jobs.daemon.tasks import AcquireToken, SyncUsers, SyncLeaves, SendReport, SendReminder, AutoApprove, CleanTasks
+from models.jobs.daemon.tasks import AcquireToken, SyncUsers, SyncLeaves, SendAMReport, SendPMReport, CleanTasks
 from models.jobs.daemon.constants import DaemonTaskType, DaemonMessage
 
 from models.messages.MessageKnown import MessageKnown
@@ -61,9 +61,8 @@ class JobDaemon(Job):
             DaemonTaskType.ACQUIRE_TOKEN: AcquireToken,
             DaemonTaskType.SYNC_USERS: SyncUsers,
             DaemonTaskType.SYNC_LEAVES: SyncLeaves,
-            DaemonTaskType.SEND_REPORT: SendReport,
-            DaemonTaskType.SEND_REMINDER: SendReminder,
-            DaemonTaskType.AUTO_APPROVE: AutoApprove,
+            DaemonTaskType.SEND_AM_REPORT: SendAMReport,
+            DaemonTaskType.SEND_PM_REPORT: SendPMReport,
             DaemonTaskType.CLEAN_TASKS: CleanTasks
         } # IMPT to add more, need to update content template builder in Twilio, or can use 
 
@@ -71,7 +70,7 @@ class JobDaemon(Job):
 
         self.logger.info(f"Tasks to run: {len(tasks_to_run)}")
 
-        is_daily_update = DaemonTaskType.SEND_REPORT in tasks_to_run
+        is_daily_update = DaemonTaskType.SEND_AM_REPORT in tasks_to_run
         
         for task_type in tasks_to_run:
             self.run_task(task_type=task_type) # error is handled each time
@@ -127,10 +126,10 @@ class JobDaemon(Job):
         task_class = self.tasks_map.get(task_type)
         # TODO catch errors?
         self.logger.info(f"Task Class: {task_class.__name__.lower()}")
-        latest_task = task_class(self.job_no)
+        task = task_class(self.job_no, user_id=self.primary_user_id)
         try:
             self.logger.info(f"Running latest task")
-            latest_task.run()
+            task.run()
         except Exception as e:
             err_info = e.message if isinstance(e, DaemonTaskError) else DaemonMessage.UNKNOWN_ERROR
             err_msg = OutgoingMessageData(
@@ -139,7 +138,7 @@ class JobDaemon(Job):
                 job_no=self.job_no,
                 content_sid=os.getenv('SEND_SYSTEM_HEALTH_ERROR_SID'),
                 content_variables={
-                    '1': latest_task.name,
+                    '1': task.name,
                     '2': err_info,
                 }
             )

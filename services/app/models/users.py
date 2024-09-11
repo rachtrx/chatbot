@@ -84,17 +84,18 @@ class User(db.Model):
             return set()
 
     @classmethod
-    def get_dept_admins_for_dept(cls, dept): # CLASS METHOD
+    def get_dept_admins(cls, dept): # CLASS METHOD
         session = Session()
         query = session.query(cls).filter(
-            User.is_dept_admin == True,
-            User.dept == dept,
-            cls.is_active == True,
+            cls.is_dept_admin == True,
+            cls.is_active == True
         )
+        if dept is not None:
+            query = query.filter(cls.dept == dept)
         dept_admins = query.all()
         return set(dept_admins) if dept_admins else set()
     
-    def get_dept_admins(self): # INSTANCE METHOD
+    def get_user_dept_admins(self): # INSTANCE METHOD
         session = Session()
         query = session.query(User).filter(
             User.is_dept_admin == True,
@@ -116,7 +117,7 @@ class User(db.Model):
 
     def get_relations(self, ignore_users: list[User] = [], allow_none=False):
         # Using list unpacking to handle both list and empty list cases
-        relations = self.get_lookups() | self.get_dept_admins() | self.get_global_admins()
+        relations = self.get_lookups() | self.get_user_dept_admins() | self.get_global_admins()
         # if int(os.getenv('LIVE', 0)):  # Default to 0 if 'LIVE' is not set
         # # Create a set of IDs to ignore
         ignore_ids = {self.id}

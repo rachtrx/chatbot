@@ -8,7 +8,7 @@ from extensions import Session, db
 from models.jobs.daemon.Task import TaskDaemon
 
 from models.messages.MessageKnown import MessageKnown
-from models.jobs.daemon.tasks import SendReport
+from models.jobs.daemon.tasks import SendAMReport, SendPMReport
 
 from models.jobs.daemon.constants import DaemonTaskType, DaemonMessage
 
@@ -24,7 +24,8 @@ class CleanTasks(TaskDaemon):
 
         # Subqueries for checking references
         message_subquery = session.query(MessageKnown.job_no).filter(MessageKnown.job_no == TaskDaemon.job_no).subquery()
-        report_subquery = session.query(SendReport.job_no).filter(SendReport.job_no == TaskDaemon.job_no).subquery()
+        am_report_subquery = session.query(SendAMReport.job_no).filter(SendAMReport.job_no == TaskDaemon.job_no).subquery()
+        pm_report_subquery = session.query(SendPMReport.job_no).filter(SendPMReport.job_no == TaskDaemon.job_no).subquery()
 
         # Define queries to capture row numbers first
         recent_tasks_with_row_numbers = select(
@@ -75,7 +76,8 @@ class CleanTasks(TaskDaemon):
                     TaskDaemon.created_at < threshold,
                     not_(exists().where(message_subquery.c.job_no == TaskDaemon.job_no)),  # No reference in Message
                     not_(exists().where(combined_query.c.job_no == TaskDaemon.job_no)),
-                    not_(exists().where(report_subquery.c.job_no == TaskDaemon.job_no))  # No reference in SendReport
+                    not_(exists().where(am_report_subquery.c.job_no == TaskDaemon.job_no)),
+                    not_(exists().where(pm_report_subquery.c.job_no == TaskDaemon.job_no))
                 )
             ).all()
         

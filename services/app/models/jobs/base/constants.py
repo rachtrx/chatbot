@@ -21,7 +21,7 @@ class Error:
 
 class ErrorMessage:
     TWILIO_ERROR = "There was an issue with the Whatsapp API provider."
-    TWILIO_EMPTY_VARIABLES = "There was an issue creating the message."
+    TEMPLATE_ERROR = "There was an issue with the message template creation."
     PENDING_DECISION = "Please reply to the previous message first, thank you!"
     DOUBLE_MESSAGE = "The previous job has not completed or there was an error completing it. If the problem persists, please try again in 2 minutes, thank you!"
     UNKNOWN_ERROR = "Something went wrong, please send the message again"
@@ -90,7 +90,3 @@ class OutgoingMessageData:
 class Decision(Constants):
     CONFIRM = "CONFIRM"
     CANCEL = "CANCEL"
-
-class AuthorizedDecision(Constants):
-    APPROVE = "ACKNOWLEDGE"
-    REJECT = "REJECT"

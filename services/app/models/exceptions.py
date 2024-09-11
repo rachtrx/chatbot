@@ -30,6 +30,11 @@ class DaemonTaskError(Exception):
         super().__init__(message)
         self.message = message
 
+class ContentVariablesError(Exception):
+    def __init__(self, message=None):
+        super().__init__(message)
+        self.message = message
+
 class UserNotFoundError(Exception):
     def __init__(self, user_no):
         self.user_no = user_no

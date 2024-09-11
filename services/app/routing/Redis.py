@@ -32,7 +32,7 @@ class RedisCache:
     def update(self, value):
         redis_client.set(self.key, value)
     
-    def set(self, value, ex=120):
+    def set(self, value, ex=60):
         """Set or delete a value in Redis based on its content."""
         if value is None:
             redis_client.delete(self.key)

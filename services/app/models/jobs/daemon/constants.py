@@ -27,11 +27,10 @@ class Update(Enum):
 class DaemonTaskType:
     NONE = 'NONE'
     ACQUIRE_TOKEN = 'ACQUIRE_TOKEN'
-    SEND_REPORT = 'SEND_REPORT'
+    SEND_AM_REPORT = 'SEND_AM_REPORT'
+    SEND_PM_REPORT = 'SEND_PM_REPORT'
     SYNC_LEAVES = 'SYNC_LEAVES'
     SYNC_USERS = 'SYNC_USERS'
-    SEND_REMINDER = 'SEND_REMINDER'
-    AUTO_APPROVE = 'AUTO_APPROVE'
     CLEAN_TASKS = 'CLEAN_TASKS'
 
 class DaemonMessage:
@@ -45,7 +44,5 @@ class DaemonMessage:
     NOTHING_TO_SYNC = "Nothing to sync."
     SYNC_FAILED = "Sync failed."
     REPORT_FAILED = "Report failed to send."
-    NOTHING_TO_APPROVE = "No records found to approve"
-    APPROVALS_RAN = "Approvals Ran"
     UNKNOWN_ERROR = "Unknown Error"
     

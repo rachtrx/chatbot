@@ -100,7 +100,7 @@ class MessageKnown(Message):
     @classmethod
     def send_msg(cls, message: OutgoingMessageData, seq_no=None):
 
-        from models.exceptions import ReplyError
+        from models.exceptions import ReplyError, ContentVariablesError
         from models.users import User
 
         to_user = Session().query(User).get(message.user_id)
@@ -128,8 +128,8 @@ class MessageKnown(Message):
                 )
             else:
                 if message.content_variables:
-                    if not all(isinstance(value, str) for value in message.content_variables.values()):
-                        raise Exception
+                    if not all(isinstance(value, str) for value in message.content_variables.values()): 
+                        raise ContentVariablesError(ErrorMessage.TEMPLATE_ERROR)
                     message.content_variables = json.dumps(message.content_variables)
 
                 cls.logger.info(f"Message SID: {message.content_sid}")
@@ -172,7 +172,7 @@ class MessageKnown(Message):
     def forward_template_msges(cls, job_no, sid_list, cv_list, users_list, user_id_to_update=None, callback=None, message_context=None):
         '''Ensure the callback accepts 1 forward_callback object as the arg'''
 
-        from models.exceptions import ReplyError
+        from models.exceptions import ReplyError, ContentVariablesError
         
         if len(users_list) == 0:
             message = OutgoingMessageData(
@@ -198,6 +198,8 @@ class MessageKnown(Message):
                     message=message, seq_no=seq_no
                 )
                 successful_aliases.append(to_user.alias)
+            except ContentVariablesError:
+                raise
             except Exception:
                 cls.logger.error(traceback.format_exc()) # TODO? 
                 continue

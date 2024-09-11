@@ -69,7 +69,7 @@ class BaseScheduler:
                     break
         finally:
             logging.info(f"Closing session in worker: {id(session)}")
-            session.close()
+            Session.remove()
             self.cleanup_worker(item_id)
             self.worker_semaphore.release()  # Release the permit when the worker finishes
 

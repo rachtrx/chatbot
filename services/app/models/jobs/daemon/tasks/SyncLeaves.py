@@ -113,9 +113,18 @@ class SyncLeaves(TaskDaemon):
             if len(conn_err_months_update) > 0:
                 err_msg += " Records in " + join_with_commas_and(list(conn_err_months_update)) + "failed to update. "
         if len(self.missing_job_user_ids) > 0:
+            session = Session()
             self.logger.info(f"Missing Job User IDs dict: {self.missing_job_user_ids}")
-            err_msg += "Unmatched records were found in Azure:" + \
-                '; '.join(f"{name}: {print_all_dates(date_list)}" for name, date_list in self.missing_job_user_ids.items())
+            err_msg += "Unmatched records were Deleted from Azure: "
+            
+            user_info_list = []
+            for user_id, date_list in self.missing_job_user_ids.items():
+                user = session.get(User, user_id)  # Retrieve the User object by ID
+                if user:
+                    user_info_list.append(f"{user.name} ({print_all_dates(date_list)})")
+                else:
+                    user_info_list.append(f"Unknown/Missing IDs: ({print_all_dates(date_list)})")
+            err_msg += '; '.join(user_info_list)
 
         if err_msg:
             raise DaemonTaskError(err_msg.strip())
@@ -133,7 +142,7 @@ class SyncLeaves(TaskDaemon):
             return
         
         # FIND ANY UNUPDATED RECORDS
-        completed_ids = combined_df.loc[((combined_df._merge == "both") & (combined_df.leave_status == LeaveStatus.APPROVED)) & (~(combined_df.sync_status == Status.COMPLETED)), "record_id"]            
+        completed_ids = combined_df.loc[((combined_df._merge == "both") & (combined_df.leave_status == LeaveStatus.CONFIRMED)) & (~(combined_df.sync_status == Status.COMPLETED)), "record_id"]            
         if not completed_ids.empty:
             self.session.bulk_update_mappings(LeaveRecord, [
                 {'id': completed_id, 'sync_status': Status.COMPLETED }
@@ -141,10 +150,10 @@ class SyncLeaves(TaskDaemon):
             ])
 
         # both but cancelled or az only (no record ever made in local db) means have to del from Sharepoint
-        combined_df.loc[((combined_df._merge == "both") & (~(combined_df.leave_status == LeaveStatus.APPROVED)) | (combined_df._merge == "az_only")), "action"] = Update.DEL
+        combined_df.loc[((combined_df._merge == "both") & (~(combined_df.leave_status == LeaveStatus.CONFIRMED)) | (combined_df._merge == "az_only")), "action"] = Update.DEL
         # PASS: both and not cancelled means updated on both sides
         # db only and not cancelled means need to add to Sharepoint
-        combined_df.loc[((combined_df._merge == "db_only") & (combined_df.leave_status == LeaveStatus.APPROVED)), "action"] = Update.ADD
+        combined_df.loc[((combined_df._merge == "db_only") & (combined_df.leave_status == LeaveStatus.CONFIRMED)), "action"] = Update.ADD
         # PASS: right only and cancelled means updated on both sides
         dates_to_del = combined_df.loc[combined_df.action == Update.DEL].copy()
         dates_to_update = combined_df.loc[combined_df.action == Update.ADD].copy()
@@ -209,13 +218,15 @@ class SyncLeaves(TaskDaemon):
         if any(len(users_dict) > 0 for statuses in self.records.values() for users_dict in statuses.values()):
             self.logger.info("sending messages")
             self.logger.info(f"records of new leaves: {self.records}")
-        
+
+            
             MessageKnown.forward_template_msges(
                 self.job.job_no,
-                callback=self.forwards_callback,
-                user_id_to_update=self.job.primary_user.id,
-                message_context='their updating of leaves',
                 **self.get_forward_metadata()
+                # IMPORTANT: Uncomment the next lines to inform actual users about Sharepoint updates. Also need to uncomment the line in get_forward_metadata() (see below). It is currently only sending to the main user.
+                # callback=self.forwards_callback,
+                # user_id_to_update=self.job.primary_user.id,
+                # message_context='their updating of leaves',
             )
             
     def get_forward_metadata(self):
@@ -240,7 +251,9 @@ class SyncLeaves(TaskDaemon):
                     }
 
                     cv_list.append(cv)
-                    users_list.append(user)
+                    # IMPORTANT: Uncomment this to send to actual user instead of Main Number
+                    # users_list.append(user)
+                    users_list.append(self.user)
 
         return MessageKnown.construct_forward_metadata(os.getenv('SHAREPOINT_LEAVE_SYNC_NOTIFY_SID'), cv_list, users_list)
 
@@ -297,7 +310,7 @@ class SyncLeaves(TaskDaemon):
         ).join(
             User, JobLeave.primary_user_id == User.id
         ).filter(
-            LeaveRecord.leave_status != LeaveStatus.PENDING, # need cancelled and rejected ones
+            LeaveRecord.leave_status != LeaveStatus.ERROR, # need cancelled and rejected ones
             extract('month', LeaveRecord.date) == mm,
             extract('year', LeaveRecord.date) == yy,
             extract('dow', LeaveRecord.date).in_([0, 1, 2, 3, 4]),
@@ -339,6 +352,10 @@ class SyncLeaves(TaskDaemon):
         cls.logger.info(row)
         cls.logger.info(list(type(obj) for obj in row))
         date_str = f"'{row['date'].strftime('%d/%m/%Y')}"
+
+        leave_type = LeaveType.get_by_attr(row['leave_type'])
+        row['leave_type'] = leave_type.name if leave_type else row['leave_type']
+
         return [date_str] + [str(row[col]) for col in ['name', 'dept', 'leave_type', 'user_id', 'record_id']]
 
     def get_all_mmyy_in_db(self):

@@ -9,3 +9,4 @@ schema1.sql
 excel_files/
 token.txt
 __pycache__/
+tests/

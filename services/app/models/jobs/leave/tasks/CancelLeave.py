@@ -2,7 +2,7 @@ import os
 
 from models.exceptions import ReplyError, NoRelationsError
 
-from models.jobs.base.constants import OutgoingMessageData, Status
+from models.jobs.base.constants import OutgoingMessageData, MessageType
 from models.jobs.base.utilities import print_all_dates, clear_user_processing_state
 
 from models.jobs.leave.Task import TaskLeave
@@ -21,48 +21,10 @@ class CancelLeave(TaskLeave):
     def execute(self):
         # get records past 9am
         self.affected_dates = LeaveRecord.update_leaves(self.payload, LeaveStatus.CANCELLED)
-        self.status = Status.COMPLETED
-
-        reply_body = f"Leave on {print_all_dates(self.affected_dates)} have been cancelled."
+        # self.status = Status.COMPLETED # forgotten why this is here
 
         forward_metadata = None
-        try:
-            forward_metadata = self.get_cancel_forward_cv()
-            reply_body += " Other staff will be notified."
-        except NoRelationsError:
-            reply_body += " No other staff were found to notify."
-
-        if forward_metadata:
-            MessageKnown.forward_template_msges(
-                self.job.job_no,
-                callback=self.forwards_callback,
-                user_id_to_update=self.job.primary_user.id,
-                message_context="your leave cancellation",
-                **forward_metadata
-            )
-
-        reply_message = OutgoingMessageData( 
-            user_id=self.user_id, 
-            job_no=self.job_no, 
-            body=reply_body
-        )
-
-        MessageKnown.send_msg(message=reply_message)
-            
-        clear_user_processing_state(self.user_id)
-
-        return
-
-    def get_cancel_forward_cv(self):
-        # FORWARD MESSAGES
-        is_approved = users_list = None
-
-        if any(record.leave_status == LeaveStatus.APPROVED for record in self.payload):
-            is_approved = True
-            users_list = self.job.primary_user.get_relations(allow_null=True) # NoRelationsError raised in here.
-        else:
-            is_approved = False
-            users_list = self.job.primary_user.get_ro()
+        users_list = self.job.primary_user.get_relations(allow_none=True)
         
         if len(users_list) == 0:
             message = OutgoingMessageData(
@@ -76,8 +38,32 @@ class CancelLeave(TaskLeave):
             cv_list = get_cancel_leave_cv( # LOOP USERS
                 users_list,
                 alias=self.user.alias, 
-                is_approved=is_approved, 
                 dates=self.affected_dates, # Don't need to mark late
             )
 
-            return MessageKnown.construct_forward_metadata(sid=os.getenv("LEAVE_NOTIFY_CANCEL_SID"), cv_list=cv_list, users_list=users_list)
+            forward_metadata = MessageKnown.construct_forward_metadata(sid=os.getenv("LEAVE_NOTIFY_CANCEL_SID"), cv_list=cv_list, users_list=users_list)
+
+            MessageKnown.forward_template_msges(
+                self.job.job_no,
+                callback=self.forwards_callback,
+                user_id_to_update=self.job.primary_user_id,
+                message_context="your leave cancellation",
+                **forward_metadata
+            )
+
+        reply_message = OutgoingMessageData(
+            msg_type=MessageType.SENT, 
+            user_id=self.job.primary_user_id,
+            job_no=self.job_no
+        )
+        reply_message.content_sid = os.getenv('LEAVE_FOLLOW_UP_CANCEL_SID')
+        reply_message.content_variables = {
+            '1': self.job_no,
+            '2': print_all_dates(self.affected_dates),
+        }
+
+        MessageKnown.send_msg(message=reply_message)
+            
+        clear_user_processing_state(self.user_id)
+
+        return
