@@ -1,0 +1,9 @@
+**/*.ipynb
+**/*.log
+**/*.env
+**/*.env.db
+**/*.env.dev
+
+excel_files/
+token.txt
+__pycache__/
